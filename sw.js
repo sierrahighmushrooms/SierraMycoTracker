@@ -2,7 +2,7 @@
 // Provides offline capability by precaching the app shell and runtime-caching
 // static assets (CSS, JS, and CDN libraries).
 
-const CACHE_NAME = 'sierra-myco-lab-v1';
+const CACHE_NAME = 'sierra-myco-lab-v2';
 const APP_SHELL = [
   './',
   './index.html',
