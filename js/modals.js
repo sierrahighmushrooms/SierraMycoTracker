@@ -1058,6 +1058,16 @@ export function updateSelectedCount() {
   if (printBtn) {
     printBtn.innerText = `🖨️ Print Selected Labels (${checkedCount})`;
   }
+  // Update bulk delete button: show only when at least 1 item is selected
+  const deleteBtn = document.getElementById('bulk-delete-btn');
+  if (deleteBtn) {
+    deleteBtn.innerText = `🗑️ Delete (${checkedCount})`;
+    if (checkedCount > 0) {
+      deleteBtn.classList.remove('hidden');
+    } else {
+      deleteBtn.classList.add('hidden');
+    }
+  }
   const selectAll = document.getElementById('select-all-checkbox');
   if (selectAll) {
     selectAll.checked = checkboxes.length > 0 && checkedCount === checkboxes.length;
@@ -1073,6 +1083,49 @@ export function printSelectedLabels() {
   }
   const itemsToPrint = db.items.filter(i => checkedIds.includes(i.id));
   printBulkLabels(itemsToPrint);
+}
+
+// Bulk delete selected items with confirmation and Supabase sync.
+// 1. Collects selected item IDs from checked checkboxes.
+// 2. Shows confirmation dialog with count.
+// 3. Deletes from Supabase if configured.
+// 4. Removes from local state and clears selection.
+// 5. Shows success notification with count.
+export async function deleteSelectedItems() {
+  const checkboxes = document.querySelectorAll('.item-checkbox');
+  const selectedIds = Array.from(checkboxes)
+    .filter(cb => cb.checked)
+    .map(cb => cb.getAttribute('data-id'));
+
+  if (!selectedIds.length) {
+    showToast('No items selected for deletion.', 'warning');
+    return;
+  }
+
+  // Show confirmation dialog
+  const confirmed = confirm(`Are you sure you want to delete ${selectedIds.length} selected item${selectedIds.length !== 1 ? 's' : ''}? This cannot be undone.`);
+  if (!confirmed) return;
+
+  // Delete from Supabase if configured
+  if (isSupabaseConfigured()) {
+    const result = await deleteItemsFromCloud(selectedIds);
+    if (!result.success && result.error) {
+      console.error('Bulk Delete Error:', result.error);
+      showToast(`Failed to delete items from cloud: ${result.error.message}`, 'error', 8000);
+      return;
+    }
+  }
+
+  // Remove deleted items from local state
+  db.items = db.items.filter(i => !selectedIds.includes(i.id));
+  saveItems();
+
+  // Clear the select-all checkbox
+  const selectAll = document.getElementById('select-all-checkbox');
+  if (selectAll) selectAll.checked = false;
+
+  // Show success notification
+  showToast(`Successfully deleted ${selectedIds.length} item${selectedIds.length !== 1 ? 's' : ''}.`, 'success');
 }
 
 // --- Item Modal Stage Form Submit ---

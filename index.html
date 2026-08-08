@@ -527,9 +527,14 @@
             <input type="checkbox" id="select-all-checkbox" onchange="toggleSelectAll(this)" class="rounded text-emerald-600 focus:ring-emerald-500 bg-slate-900 border-slate-700">
             <span>Select All Shown</span>
           </label>
-          <button id="print-selected-btn" onclick="printSelectedLabels()" class="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold px-3 py-1.5 rounded transition">
-            🖨️ Print Selected Labels (0)
-          </button>
+          <div class="flex items-center gap-2">
+            <button id="bulk-delete-btn" onclick="deleteSelectedItems()" class="hidden bg-red-600 hover:bg-red-500 text-white text-xs font-bold px-3 py-1.5 rounded transition">
+              🗑️ Delete (0)
+            </button>
+            <button id="print-selected-btn" onclick="printSelectedLabels()" class="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold px-3 py-1.5 rounded transition">
+              🖨️ Print Selected Labels (0)
+            </button>
+          </div>
         </div>
 
         <div id="items-grid" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>

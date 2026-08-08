@@ -58,6 +58,7 @@ import {
   toggleSelectAll,
   updateSelectedCount,
   printSelectedLabels,
+  deleteSelectedItems,
   getBatchItems,
   initStageFormListener,
   toggleAIDrawer,
@@ -805,6 +806,7 @@ Object.assign(window, {
   toggleSelectAll,
   updateSelectedCount,
   printSelectedLabels,
+  deleteSelectedItems,
   getBatchItems,
   // AI Assistant Drawer
   toggleAIDrawer,
