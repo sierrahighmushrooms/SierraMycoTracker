@@ -2,7 +2,7 @@
 // Imports all modules, wires up global event listeners, exposes the functions
 // referenced by inline onclick handlers, and initializes the UI.
 
-import { db, saveItems, setRefreshCallback, getCustomContainers, addCustomContainer, initCloudSync, setSyncStatusCallback, isSupabaseConfigured, getSession, onAuthStateChange } from './db.js';
+import { db, saveItems, setRefreshCallback, getCustomContainers, addCustomContainer, initCloudSync, setSyncStatusCallback, isSupabaseConfigured, getSession, onAuthStateChange, isContainerLimitError } from './db.js';
 import {
   generateId,
   formatMMDDYY,
@@ -82,7 +82,13 @@ import {
   handleAuthGoogle,
   handleAuthLogout,
   updateAuthModalUI,
-  updateCloudSyncBadge
+  updateCloudSyncBadge,
+  updateContainerUsageUI,
+  openUpgradeModal,
+  closeUpgradeModal,
+  selectUpgradePlan,
+  showToast,
+  handleContainerLimitError
 } from './modals.js';
 import { startScanner, stopScanner, startG2GCameraScan, stopG2GCameraScan } from './camera.js';
 import { STAGES, CONTAINER_STAGES } from './config.js';
@@ -724,6 +730,12 @@ Object.assign(window, {
   handleAuthSubmit,
   handleAuthGoogle,
   handleAuthLogout,
+  // Subscription / Container Limits
+  updateContainerUsageUI,
+  openUpgradeModal,
+  closeUpgradeModal,
+  selectUpgradePlan,
+  showToast,
   // camera.js
   startScanner,
   stopScanner,
@@ -735,6 +747,7 @@ Object.assign(window, {
 setRefreshCallback(() => {
   render();
   updateDashboard();
+  updateContainerUsageUI();
 });
 
 // --- Initialize stage form listener (modal) ---
@@ -796,8 +809,16 @@ if ('serviceWorker' in navigator) {
   });
 }
 
+// --- Listen for container limit errors from cloud sync ---
+window.addEventListener('container-limit-error', (event) => {
+  const { error } = event.detail || {};
+  handleContainerLimitError(error);
+  updateContainerUsageUI();
+});
+
 // --- Initialize application ---
 updateDashboard();
 initInoculationsForm();
 updateBatchCodeAuto();
 render();
+updateContainerUsageUI();

@@ -125,8 +125,19 @@ export function saveItems() {
 function scheduleCloudPush() {
   if (!supabaseClient || pendingCloudIds.size === 0) return;
   clearTimeout(pushTimer);
-  pushTimer = setTimeout(() => {
-    pushLocalChangesToCloud().catch(err => console.warn('Background cloud push failed:', err));
+  pushTimer = setTimeout(async () => {
+    try {
+      const result = await pushLocalChangesToCloud();
+      // If a container limit error occurred, notify the UI layer
+      if (result && result.limitError) {
+        // Dispatch a custom event that the UI layer can listen for
+        window.dispatchEvent(new CustomEvent('container-limit-error', { 
+          detail: { error: result.error } 
+        }));
+      }
+    } catch (err) {
+      console.warn('Background cloud push failed:', err);
+    }
   }, 1500);
 }
 
@@ -161,28 +172,35 @@ function itemTimestamp(item) {
 }
 
 // Push locally created/updated items to Supabase (requires an active session).
+// Returns { success: boolean, limitError?: boolean } to indicate sync status.
 export async function pushLocalChangesToCloud() {
-  if (!supabaseClient || pendingCloudIds.size === 0) return false;
+  if (!supabaseClient || pendingCloudIds.size === 0) return { success: false };
   const { data: { user } } = await supabaseClient.auth.getUser();
-  if (!user) return false;
+  if (!user) return { success: false };
 
   const itemsToPush = db.items.filter(i => pendingCloudIds.has(i.id));
   if (!itemsToPush.length) {
     pendingCloudIds.clear();
-    return false;
+    return { success: false };
   }
 
   const rows = itemsToPush.map(item => serializeItemForCloud(item, user.id));
   const { error } = await supabaseClient.from('items').upsert(rows);
   if (error) {
     console.warn('Supabase upsert failed:', error.message);
-    return false;
+    // Check if this is a container limit error from the trigger
+    if (isContainerLimitError(error)) {
+      lastSyncInfo = { synced: false, at: null, user, limitError: true, error };
+      notifySyncStatus();
+      return { success: false, limitError: true, error };
+    }
+    return { success: false, error };
   }
 
   itemsToPush.forEach(i => pendingCloudIds.delete(i.id));
   lastSyncInfo = { synced: true, at: new Date().toISOString(), user };
   notifySyncStatus();
-  return true;
+  return { success: true };
 }
 
 // Hybrid sync entry point — run on app load and after auth state changes.
@@ -387,4 +405,98 @@ export async function syncFeedbackWithCloud() {
   // if (!SUPABASE.url || !SUPABASE.anonKey) return;
   // ... sync logic here
   return Promise.resolve(true);
+}
+
+// --- Subscription Tier & Container Limit Helpers ---
+
+// Tier limits for local/offline checks (mirrors database subscription_tiers table)
+export const TIER_LIMITS = {
+  free: 15,
+  grower: 100,
+  commercial: 999999
+};
+
+// Stages that are considered inactive (terminal states)
+export const INACTIVE_STAGES = ['Archived', 'Spent', 'Contaminated'];
+
+// Check if a stage is considered active
+export function isActiveStage(stage) {
+  return !INACTIVE_STAGES.includes(stage);
+}
+
+// Get local active container count (for offline/guest mode)
+export function getLocalActiveContainerCount() {
+  return db.items.filter(item => isActiveStage(item.stage || 'Preparation')).length;
+}
+
+// Fetch container usage from Supabase RPC
+// Returns: { active_count, max_limit, can_create, tier } or null if unavailable
+export async function getContainerUsage() {
+  if (!supabaseClient) return null;
+  
+  try {
+    const { data: { user } } = await supabaseClient.auth.getUser();
+    if (!user) return null;
+    
+    const { data, error } = await supabaseClient.rpc('get_container_usage', {
+      user_uuid: user.id
+    });
+    
+    if (error) {
+      console.warn('Failed to fetch container usage:', error.message);
+      return null;
+    }
+    
+    // RPC returns an array, get first row
+    if (data && data.length > 0) {
+      return data[0];
+    }
+    return null;
+  } catch (err) {
+    console.warn('Error fetching container usage:', err);
+    return null;
+  }
+}
+
+// Get user's subscription tier from Supabase profile
+export async function getSubscriptionTier() {
+  if (!supabaseClient) return 'free';
+  
+  try {
+    const { data: { user } } = await supabaseClient.auth.getUser();
+    if (!user) return 'free';
+    
+    const { data, error } = await supabaseClient
+      .from('profiles')
+      .select('subscription_tier')
+      .eq('id', user.id)
+      .single();
+    
+    if (error || !data) return 'free';
+    return data.subscription_tier || 'free';
+  } catch (err) {
+    console.warn('Error fetching subscription tier:', err);
+    return 'free';
+  }
+}
+
+// Check if user can create more containers (local check for immediate feedback)
+export function canCreateContainerLocal() {
+  const activeCount = getLocalActiveContainerCount();
+  // For local/offline mode, we use free tier limit as default
+  // The actual enforcement happens server-side via the trigger
+  return {
+    canCreate: true, // Always allow locally, server will enforce
+    activeCount,
+    limit: TIER_LIMITS.free
+  };
+}
+
+// Check if an error is a container limit error
+export function isContainerLimitError(error) {
+  if (!error) return false;
+  const message = error.message || '';
+  return message.includes('Active container limit reached') ||
+         message.includes('container limit') ||
+         message.includes('Upgrade to add more containers');
 }

@@ -13,7 +13,12 @@ import {
   signInWithGoogle,
   signOutUser,
   syncItemsWithCloud,
-  getSyncStatus
+  getSyncStatus,
+  getContainerUsage,
+  getLocalActiveContainerCount,
+  TIER_LIMITS,
+  INACTIVE_STAGES,
+  isContainerLimitError
 } from './db.js';
 import { callGeminiAPI, extractActiveBatchContext, saveChatMessage, loadChatHistory, hasApiKey, getStoredApiKey, saveApiKey, clearApiKey, processAIResponseActions } from './ai.js';
 import {
@@ -1644,4 +1649,247 @@ export function updateCloudSyncBadge(status) {
     badge.classList.add('hidden');
     badge.classList.remove('inline-flex');
   }
+}
+
+// --- Container Usage & Subscription Tier UI ---
+
+// Cached usage data for the current session
+let cachedUsage = null;
+
+// Update the container usage progress bar in the dashboard
+export async function updateContainerUsageUI() {
+  const usageContainer = document.getElementById('container-usage-widget');
+  if (!usageContainer) return;
+
+  // Try to get usage from Supabase RPC first
+  let usage = await getContainerUsage();
+  
+  // Fallback to local count if RPC unavailable (offline/guest mode)
+  if (!usage) {
+    const localCount = getLocalActiveContainerCount();
+    usage = {
+      active_count: localCount,
+      max_limit: TIER_LIMITS.free,
+      can_create: localCount < TIER_LIMITS.free,
+      tier: 'free'
+    };
+  }
+  
+  cachedUsage = usage;
+  
+  // Calculate percentage
+  const percentage = Math.min(100, Math.round((usage.active_count / usage.max_limit) * 100));
+  
+  // Determine color based on usage level
+  let barColor = 'bg-emerald-500';
+  let textColor = 'text-emerald-400';
+  if (percentage >= 90) {
+    barColor = 'bg-red-500';
+    textColor = 'text-red-400';
+  } else if (percentage >= 70) {
+    barColor = 'bg-amber-500';
+    textColor = 'text-amber-400';
+  }
+  
+  // Format the limit display (show ∞ for commercial tier)
+  const limitDisplay = usage.max_limit >= 999999 ? '∞' : usage.max_limit;
+  
+  // Tier display names
+  const tierNames = { free: 'Free', grower: 'Grower', commercial: 'Commercial' };
+  const tierDisplay = tierNames[usage.tier] || 'Free';
+  
+  usageContainer.innerHTML = `
+    <div class="bg-slate-800 border border-slate-700 rounded-xl p-4 space-y-3">
+      <div class="flex justify-between items-center">
+        <span class="text-xs font-semibold text-slate-400 uppercase tracking-wide">Active Containers</span>
+        <span class="text-[10px] px-2 py-0.5 rounded-full bg-slate-700 text-slate-300 border border-slate-600">${tierDisplay} Plan</span>
+      </div>
+      <div class="flex items-end justify-between">
+        <span class="text-2xl font-bold ${textColor}">${usage.active_count} <span class="text-sm font-normal text-slate-500">/ ${limitDisplay}</span></span>
+        <span class="text-xs text-slate-500">${percentage}% used</span>
+      </div>
+      <div class="w-full bg-slate-700 rounded-full h-2 overflow-hidden">
+        <div class="${barColor} h-2 rounded-full transition-all duration-500" style="width: ${percentage}%"></div>
+      </div>
+      ${!usage.can_create ? `
+        <button onclick="openUpgradeModal()" class="w-full bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white text-xs font-bold py-2 px-3 rounded-lg transition flex items-center justify-center gap-1">
+          ⚡ Limit Reached — Upgrade Plan
+        </button>
+      ` : usage.active_count >= usage.max_limit * 0.8 ? `
+        <button onclick="openUpgradeModal()" class="w-full bg-slate-700 hover:bg-slate-600 text-slate-300 text-xs font-semibold py-2 px-3 rounded-lg transition">
+          View Upgrade Options
+        </button>
+      ` : ''}
+    </div>
+  `;
+  
+  // Update the "Add Container" button state
+  updateAddContainerButtonState(usage.can_create);
+  
+  return usage;
+}
+
+// Enable/disable the Add Container buttons based on usage
+export function updateAddContainerButtonState(canCreate) {
+  const addButtons = document.querySelectorAll('[data-add-container-btn]');
+  addButtons.forEach(btn => {
+    if (!canCreate) {
+      btn.disabled = true;
+      btn.classList.add('opacity-50', 'cursor-not-allowed');
+      btn.title = 'Container limit reached. Upgrade your plan to add more.';
+    } else {
+      btn.disabled = false;
+      btn.classList.remove('opacity-50', 'cursor-not-allowed');
+      btn.title = '';
+    }
+  });
+}
+
+// Show a toast notification
+export function showToast(message, type = 'info', duration = 5000) {
+  // Remove existing toasts
+  const existingToast = document.getElementById('app-toast');
+  if (existingToast) existingToast.remove();
+  
+  const colors = {
+    info: 'bg-slate-800 border-slate-600 text-slate-200',
+    success: 'bg-emerald-900/90 border-emerald-600 text-emerald-100',
+    error: 'bg-red-900/90 border-red-600 text-red-100',
+    warning: 'bg-amber-900/90 border-amber-600 text-amber-100'
+  };
+  
+  const icons = {
+    info: 'ℹ️',
+    success: '✅',
+    error: '⚠️',
+    warning: '⚠️'
+  };
+  
+  const toast = document.createElement('div');
+  toast.id = 'app-toast';
+  toast.className = `fixed bottom-4 right-4 z-[100] ${colors[type]} border rounded-xl px-4 py-3 shadow-2xl flex items-center gap-3 max-w-sm animate-slide-up`;
+  toast.innerHTML = `
+    <span class="text-lg">${icons[type]}</span>
+    <span class="text-sm font-medium">${message}</span>
+    <button onclick="this.parentElement.remove()" class="ml-2 text-slate-400 hover:text-white font-bold">✕</button>
+  `;
+  
+  document.body.appendChild(toast);
+  
+  // Auto-remove after duration
+  setTimeout(() => {
+    if (toast.parentElement) {
+      toast.classList.add('animate-fade-out');
+      setTimeout(() => toast.remove(), 300);
+    }
+  }, duration);
+}
+
+// Open the upgrade plan modal
+export function openUpgradeModal() {
+  // Remove existing modal if present
+  closeUpgradeModal();
+  
+  const currentTier = cachedUsage?.tier || 'free';
+  const activeCount = cachedUsage?.active_count || getLocalActiveContainerCount();
+  
+  const modalHtml = `
+    <div id="upgrade-modal" class="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-[95]">
+      <div class="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl">
+        <div class="p-6 space-y-6">
+          <div class="flex justify-between items-start">
+            <div>
+              <h2 class="text-xl font-bold text-white">Upgrade Your Plan 🚀</h2>
+              <p class="text-sm text-slate-400 mt-1">You're currently using <strong class="text-amber-400">${activeCount}</strong> active containers on the <strong class="capitalize">${currentTier}</strong> plan.</p>
+            </div>
+            <button onclick="closeUpgradeModal()" class="text-slate-400 hover:text-white font-bold text-xl">✕</button>
+          </div>
+          
+          <div class="grid md:grid-cols-3 gap-4">
+            <!-- Free Tier -->
+            <div class="bg-slate-800 border ${currentTier === 'free' ? 'border-emerald-500 ring-2 ring-emerald-500/30' : 'border-slate-700'} rounded-xl p-5 space-y-3">
+              <div class="text-center">
+                <h3 class="font-bold text-white text-lg">Free</h3>
+                <div class="text-3xl font-bold text-white mt-2">$0<span class="text-sm font-normal text-slate-400">/mo</span></div>
+              </div>
+              <ul class="text-xs text-slate-300 space-y-2">
+                <li class="flex items-center gap-2"><span class="text-emerald-400">✓</span> 15 active containers</li>
+                <li class="flex items-center gap-2"><span class="text-emerald-400">✓</span> Cloud sync</li>
+                <li class="flex items-center gap-2"><span class="text-emerald-400">✓</span> QR label printing</li>
+                <li class="flex items-center gap-2"><span class="text-slate-500">✕</span> <span class="text-slate-500">Priority support</span></li>
+              </ul>
+              ${currentTier === 'free' 
+                ? '<div class="text-center text-xs font-bold text-emerald-400 py-2 bg-emerald-900/30 rounded-lg">Current Plan</div>'
+                : '<div class="text-center text-xs text-slate-500 py-2">—</div>'}
+            </div>
+            
+            <!-- Grower Tier -->
+            <div class="bg-gradient-to-b from-slate-800 to-slate-900 border ${currentTier === 'grower' ? 'border-emerald-500 ring-2 ring-emerald-500/30' : 'border-amber-500/50'} rounded-xl p-5 space-y-3 relative">
+              <div class="absolute -top-3 left-1/2 -translate-x-1/2 bg-amber-500 text-black text-[10px] font-bold px-3 py-1 rounded-full">POPULAR</div>
+              <div class="text-center">
+                <h3 class="font-bold text-white text-lg">Grower</h3>
+                <div class="text-3xl font-bold text-amber-400 mt-2">$9<span class="text-sm font-normal text-slate-400">/mo</span></div>
+              </div>
+              <ul class="text-xs text-slate-300 space-y-2">
+                <li class="flex items-center gap-2"><span class="text-emerald-400">✓</span> <strong>100</strong> active containers</li>
+                <li class="flex items-center gap-2"><span class="text-emerald-400">✓</span> Cloud sync</li>
+                <li class="flex items-center gap-2"><span class="text-emerald-400">✓</span> QR label printing</li>
+                <li class="flex items-center gap-2"><span class="text-emerald-400">✓</span> Priority support</li>
+              </ul>
+              ${currentTier === 'grower'
+                ? '<div class="text-center text-xs font-bold text-emerald-400 py-2 bg-emerald-900/30 rounded-lg">Current Plan</div>'
+                : '<button onclick="selectUpgradePlan(\'grower\')" class="w-full bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold py-2.5 rounded-lg transition">Upgrade to Grower</button>'}
+            </div>
+            
+            <!-- Commercial Tier -->
+            <div class="bg-slate-800 border ${currentTier === 'commercial' ? 'border-emerald-500 ring-2 ring-emerald-500/30' : 'border-slate-700'} rounded-xl p-5 space-y-3">
+              <div class="text-center">
+                <h3 class="font-bold text-white text-lg">Commercial</h3>
+                <div class="text-3xl font-bold text-white mt-2">$29<span class="text-sm font-normal text-slate-400">/mo</span></div>
+              </div>
+              <ul class="text-xs text-slate-300 space-y-2">
+                <li class="flex items-center gap-2"><span class="text-emerald-400">✓</span> <strong>Unlimited</strong> containers</li>
+                <li class="flex items-center gap-2"><span class="text-emerald-400">✓</span> Cloud sync</li>
+                <li class="flex items-center gap-2"><span class="text-emerald-400">✓</span> QR label printing</li>
+                <li class="flex items-center gap-2"><span class="text-emerald-400">✓</span> Priority support</li>
+              </ul>
+              ${currentTier === 'commercial'
+                ? '<div class="text-center text-xs font-bold text-emerald-400 py-2 bg-emerald-900/30 rounded-lg">Current Plan</div>'
+                : '<button onclick="selectUpgradePlan(\'commercial\')" class="w-full bg-slate-700 hover:bg-slate-600 text-white text-xs font-bold py-2.5 rounded-lg transition">Upgrade to Commercial</button>'}
+            </div>
+          </div>
+          
+          <div class="text-center text-xs text-slate-500">
+            <p>💡 <strong>Tip:</strong> Archived, Spent, and Contaminated containers don't count toward your limit.</p>
+            <p class="mt-1">Contact <a href="mailto:support@sierramycolab.com" class="text-emerald-400 underline">support@sierramycolab.com</a> to upgrade or manage your subscription.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+  
+  document.body.insertAdjacentHTML('beforeend', modalHtml);
+}
+
+// Close the upgrade modal
+export function closeUpgradeModal() {
+  const modal = document.getElementById('upgrade-modal');
+  if (modal) modal.remove();
+}
+
+// Handle plan selection (placeholder for payment integration)
+export function selectUpgradePlan(plan) {
+  // TODO: Integrate with payment provider (Stripe, etc.)
+  showToast(`To upgrade to the ${plan.charAt(0).toUpperCase() + plan.slice(1)} plan, please contact support@sierramycolab.com`, 'info', 8000);
+  closeUpgradeModal();
+}
+
+// Handle container limit errors from database operations
+export function handleContainerLimitError(error) {
+  if (isContainerLimitError(error)) {
+    showToast('Active container limit reached for your current plan.', 'error', 6000);
+    openUpgradeModal();
+    return true;
+  }
+  return false;
 }
