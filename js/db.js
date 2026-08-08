@@ -203,7 +203,197 @@ export async function pushLocalChangesToCloud() {
   return { success: true };
 }
 
+// UUID validation regex - standard UUID format (v1-v5)
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+// Check if an ID is a valid UUID. Invalid string IDs like "MY-Z9UGC" 
+// should be deleted so Supabase can auto-generate proper UUIDs.
+function isValidUuid(id) {
+  return typeof id === 'string' && UUID_REGEX.test(id);
+}
+
+// Transform a legacy JSON item into a valid Supabase `items` record.
+// - Assigns user_id from the authenticated user.
+// - Stores the original custom ID (e.g., "MY-Z9UGC") in item_code if batch_code is empty.
+// - Deletes invalid string IDs so Supabase auto-generates proper UUIDs.
+// - Maps field names to match the Supabase schema: label->name, medium->medium_type.
+// - Ensures JSON arrays (history, yields) are passed properly.
+function transformLegacyItemForSupabase(item, userId) {
+  if (!item || typeof item !== 'object') return null;
+
+  const originalId = item.id || null;
+  const batchCode = item.pcBatch || item.batch_code || null;
+
+  // Determine if the original ID is valid. Invalid string IDs (like "MY-Z9UGC")
+  // are deleted so Supabase can auto-generate a proper database UUID.
+  // Valid UUIDs are preserved to maintain referential integrity.
+  const hasValidUuid = isValidUuid(originalId);
+
+  // Build the sanitized record with Supabase schema field names.
+  const record = {
+    user_id: userId,
+    // Map legacy field names to Supabase schema: label -> name
+    name: item.label || item.name || '',
+    // Map legacy field names to Supabase schema: medium -> medium_type
+    medium_type: item.medium || item.medium_type || '',
+    strain: item.strain || null,
+    stage: item.stage || 'Preparation',
+    // Store original custom ID in item_code if batch_code is empty
+    batch_code: batchCode,
+    item_code: (!batchCode && originalId) ? originalId : (item.item_code || null),
+    parent_item_id: item.parentItemId || item.parent_item_id || null,
+    container_type: item.containerType || item.container_type || null,
+    container_weight: item.containerWeight || item.container_weight || null,
+    volume_ml: item.volumeMl !== undefined ? item.volumeMl : (item.volume_ml !== undefined ? item.volume_ml : null),
+    color: item.color || null,
+    contam_type: item.contamType || item.contam_type || null,
+    contam_vector: item.contamVector || item.contam_vector || null,
+    total_yield: item.totalYield !== undefined ? item.totalYield : (item.total_yield !== undefined ? item.total_yield : 0),
+    break_and_shake: item.breakAndShake || item.break_and_shake || null,
+    generation: item.generation || null,
+    created_at: item.createdAt || item.created_at || new Date().toISOString(),
+    updated_at: item.updated_at || new Date().toISOString(),
+    // JSON arrays - Supabase jsonb columns accept these directly
+    history: Array.isArray(item.history) ? item.history : [],
+    yields: Array.isArray(item.yields) ? item.yields : [],
+    flush_yields: Array.isArray(item.flushYields) ? item.flushYields : (Array.isArray(item.flush_yields) ? item.flush_yields : []),
+    lifecycle_history: Array.isArray(item.lifecycleHistory) ? item.lifecycleHistory : (Array.isArray(item.lifecycle_history) ? item.lifecycle_history : []),
+    environment_history: Array.isArray(item.environmentHistory) ? item.environmentHistory : (Array.isArray(item.environment_history) ? item.environment_history : [])
+  };
+
+  // Only include the id field if it's a valid UUID. Invalid string IDs
+  // (like "MY-Z9UGC") are deleted so Supabase can auto-generate valid UUIDs.
+  if (hasValidUuid) {
+    record.id = originalId;
+  }
+  // If hasValidUuid is false, the id key is intentionally omitted so
+  // Supabase auto-generates a proper database UUID for the primary key.
+
+  return record;
+}
+
+// Batch-upload items to the Supabase `items` table under the currently
+// authenticated user (used by the JSON backup import/restore flow).
+// 1) Fetches the current user via supabase.auth.getUser().
+// 2) Transforms each legacy item to match the Supabase schema:
+//    - Maps `label` -> `name`
+//    - Maps `medium` -> `medium_type`
+//    - Deletes invalid string IDs (like "MY-Z9UGC") so Supabase auto-generates UUIDs
+//    - Attaches `user_id` from the active session
+// 3) Stores original custom IDs in item_code for reference.
+// 4) Performs a batched `supabase.from('items').insert(...)`.
+// 5) Exposes full Supabase error details for debugging.
+// Returns { success: boolean, user?, error?, limitError?, insertedCount? }.
+export async function uploadItemsToCloud(items) {
+  if (!supabaseClient) {
+    return { success: false, error: new Error('Supabase is not configured.') };
+  }
+
+  // 1) Fetch the logged-in user's UUID from the active session.
+  const { data: { user }, error: userError } = await supabaseClient.auth.getUser();
+  if (userError || !user) {
+    return { success: false, error: new Error('You must be signed in to sync your backup to the cloud.') };
+  }
+
+  if (!Array.isArray(items) || items.length === 0) {
+    return { success: true, user, insertedCount: 0 };
+  }
+
+  // 2) Clean & map each item in the items array to a valid Supabase record.
+  //    - Maps label -> name, medium -> medium_type
+  //    - Deletes invalid string IDs so Supabase can auto-generate valid UUIDs
+  //    - Attaches user_id from the active session
+  const formattedItems = items
+    .map(item => transformLegacyItemForSupabase(item, user.id))
+    .filter(item => item != null);
+
+  if (!formattedItems.length) {
+    return { success: false, error: new Error('No valid items found in the backup.') };
+  }
+
+  // 3) Execute the insert in chunks to stay under PostgREST payload limits.
+  //    const { data, error } = await supabase.from('items').insert(formattedItems);
+  const CHUNK_SIZE = 500;
+  let totalInserted = 0;
+
+  for (let i = 0; i < formattedItems.length; i += CHUNK_SIZE) {
+    const chunk = formattedItems.slice(i, i + CHUNK_SIZE);
+    const { data, error } = await supabaseClient.from('items').insert(chunk);
+    
+    if (error) {
+      // Expose full Supabase error details for debugging
+      console.error('Supabase backup insert failed:', {
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+        code: error.code
+      });
+      return { 
+        success: false, 
+        error, 
+        errorMessage: error.message,
+        errorDetails: error.details,
+        errorHint: error.hint,
+        errorCode: error.code,
+        limitError: isContainerLimitError(error), 
+        insertedCount: totalInserted 
+      };
+    }
+    
+    totalInserted += chunk.length;
+  }
+
+  lastSyncInfo = { synced: true, at: new Date().toISOString(), user };
+  notifySyncStatus();
+  return { success: true, user, insertedCount: totalInserted };
+}
+
+// Delete items from Supabase by their IDs for the authenticated user.
+// Returns { success: boolean, error? }.
+export async function deleteItemsFromCloud(itemIds) {
+  if (!supabaseClient) {
+    return { success: false, error: new Error('Supabase is not configured.') };
+  }
+
+  if (!Array.isArray(itemIds) || itemIds.length === 0) {
+    return { success: true }; // Nothing to delete
+  }
+
+  const { data: { user }, error: userError } = await supabaseClient.auth.getUser();
+  if (userError || !user) {
+    return { success: false, error: new Error('Not authenticated.') };
+  }
+
+  const { error } = await supabaseClient
+    .from('items')
+    .delete()
+    .eq('user_id', user.id)
+    .in('id', itemIds);
+
+  if (error) {
+    console.error('Supabase delete failed:', error.message);
+    return { success: false, error };
+  }
+
+  return { success: true };
+}
+
+// Error callback for displaying sync errors as toasts in the UI layer.
+let syncErrorCallback = null;
+export function setSyncErrorCallback(fn) {
+  syncErrorCallback = fn;
+}
+
+function notifySyncError(error, context = 'sync') {
+  console.warn(`Cloud ${context} failed:`, error);
+  if (typeof syncErrorCallback === 'function') {
+    syncErrorCallback(error, context);
+  }
+}
+
 // Hybrid sync entry point — run on app load and after auth state changes.
+// When Supabase is configured and user is signed in, Supabase is the single
+// source of truth: items are fetched filtered by user_id and replace local state.
 export async function syncItemsWithCloud() {
   // Unconfigured / SDK unavailable: operate smoothly from localStorage.
   if (!supabaseClient) {
@@ -214,54 +404,52 @@ export async function syncItemsWithCloud() {
   }
 
   try {
-    // Check for an active Supabase user session.
+    // Session awareness: wait for auth to be fully initialized before fetching.
     const { data: { user }, error: userError } = await supabaseClient.auth.getUser();
     if (userError || !user) {
-      // Offline / guest user: continue operating from localStorage.
+      // Guest user: continue operating from localStorage only.
       saveItems();
       lastSyncInfo = { synced: false, at: null, user: null };
       notifySyncStatus();
       return { synced: false, reason: 'guest' };
     }
 
-    // 1) Fetch all items from the Supabase `items` table.
-    const { data: cloudRows, error: fetchError } = await supabaseClient.from('items').select('*');
+    // 1) Fetch items from Supabase filtered by the authenticated user's id.
+    //    Supabase is the single source of truth when signed in.
+    const { data: cloudRows, error: fetchError } = await supabaseClient
+      .from('items')
+      .select('*')
+      .eq('user_id', user.id);
     if (fetchError) throw fetchError;
     const cloudItems = (cloudRows || []).map(deserializeCloudRow);
     const cloudById = new Map(cloudItems.map(ci => [ci.id, ci]));
 
-    // 2) Merge cloud + local items, preferring the latest `updated_at`.
-    const merged = new Map();
-    cloudItems.forEach(ci => merged.set(ci.id, ci));
-    db.items.forEach(li => {
-      const ci = cloudById.get(li.id);
-      if (!ci || itemTimestamp(li) >= itemTimestamp(ci)) merged.set(li.id, li);
-    });
-
-    // 3) Push offline-created / locally newer items back up to Supabase.
-    const toUpsert = db.items.filter(li => {
-      const ci = cloudById.get(li.id);
-      return !ci || itemTimestamp(li) >= itemTimestamp(ci);
-    });
-    if (toUpsert.length) {
-      const rows = toUpsert.map(item => serializeItemForCloud(item, user.id));
-      const { error: upsertError } = await supabaseClient.from('items').upsert(rows);
+    // 2) Identify local-only items that need to be pushed up (offline-created).
+    //    These are items that exist locally but not in the cloud yet.
+    const localOnlyItems = db.items.filter(li => !cloudById.has(li.id));
+    
+    // 3) Push offline-created items to Supabase so they're not lost.
+    if (localOnlyItems.length) {
+      const rows = localOnlyItems.map(item => serializeItemForCloud(item, user.id));
+      const { error: upsertError } = await supabaseClient.from('items').upsert(rows, { onConflict: 'id' });
       if (upsertError) throw upsertError;
     }
 
-    // 4) Apply the merged state locally. Pre-align the snapshot so the merge
-    //    itself isn't mistaken for a local mutation by stampUpdatedItems().
-    db.items = Array.from(merged.values());
+    // 4) Supabase is the source of truth: replace local state with cloud data,
+    //    plus any local-only items we just pushed. Pre-align the snapshot so
+    //    this isn't mistaken for a local mutation by stampUpdatedItems().
+    const mergedItems = [...cloudItems, ...localOnlyItems];
+    db.items = mergedItems;
     pendingCloudIds.clear();
     lastItemsSnapshot = JSON.stringify(db.items);
     saveItems();
 
     lastSyncInfo = { synced: true, at: new Date().toISOString(), user };
     notifySyncStatus();
-    return { synced: true, user };
+    return { synced: true, user, itemCount: mergedItems.length };
   } catch (err) {
-    // Network failure / offline: keep operating smoothly from localStorage.
-    console.warn('Cloud sync failed; continuing from localStorage.', err);
+    // Network failure / offline: keep operating from localStorage but notify UI.
+    notifySyncError(err, 'sync');
     saveItems();
     lastSyncInfo = { synced: false, at: null, user: null, error: err };
     notifySyncStatus();

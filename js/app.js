@@ -2,7 +2,7 @@
 // Imports all modules, wires up global event listeners, exposes the functions
 // referenced by inline onclick handlers, and initializes the UI.
 
-import { db, saveItems, setRefreshCallback, getCustomContainers, addCustomContainer, initCloudSync, setSyncStatusCallback, isSupabaseConfigured, getSession, onAuthStateChange, isContainerLimitError } from './db.js';
+import { db, saveItems, setRefreshCallback, getCustomContainers, addCustomContainer, initCloudSync, setSyncStatusCallback, setSyncErrorCallback, isSupabaseConfigured, getSession, onAuthStateChange, isContainerLimitError, uploadItemsToCloud, syncItemsWithCloud } from './db.js';
 import {
   generateId,
   formatMMDDYY,
@@ -266,22 +266,97 @@ function exportJSON() {
 }
 
 function importJSON(e) {
-  const file = e.target.files[0];
+  const input = e.target;
+  const file = input.files[0];
   if (!file) return;
+
   const reader = new FileReader();
-  reader.onload = (event) => {
+  reader.onload = async (event) => {
+    // 1) Parse the backup file; malformed JSON is rejected up front.
+    let parsed;
     try {
-      const parsed = JSON.parse(event.target.result);
-      if (Array.isArray(parsed)) {
-        db.items = parsed;
-      } else {
-        db.items = parsed.items || [];
-        db.pcBatches = parsed.pcBatches || [];
-      }
-      saveItems();
-      alert('Backup restored successfully.');
+      parsed = JSON.parse(event.target.result);
     } catch (err) {
-      alert('Invalid backup JSON file.');
+      showToast('Invalid backup JSON file.', 'error');
+      input.value = '';
+      return;
+    }
+
+    try {
+      // 1) Parse the wrapper: check if the data is wrapped in an object with an `items` array.
+      //    Supported formats:
+      //    - Direct array: [{...}, {...}]
+      //    - Wrapped object: { items: [{...}, {...}], pcBatches: [...] }
+      let extractedItems = [];
+      let extractedBatches = [];
+
+      if (Array.isArray(parsed)) {
+        // Direct array format - use as-is
+        extractedItems = parsed;
+      } else if (parsed && typeof parsed === 'object') {
+        // Wrapped format - extract the items array
+        if (Array.isArray(parsed.items)) {
+          extractedItems = parsed.items;
+        } else if (parsed.items != null) {
+          // items exists but is not an array - invalid format
+          showToast('Invalid backup format: "items" is not an array.', 'error');
+          input.value = '';
+          return;
+        }
+        // Extract pcBatches if present
+        if (Array.isArray(parsed.pcBatches)) {
+          extractedBatches = parsed.pcBatches;
+        }
+      } else {
+        showToast('Invalid backup JSON file.', 'error');
+        input.value = '';
+        return;
+      }
+
+      db.items = extractedItems;
+      db.pcBatches = extractedBatches;
+
+      // Ensure every imported item has an id (required by the items table primary key).
+      db.items.forEach(item => {
+        if (item && (item.id == null || item.id === '')) item.id = generateId();
+      });
+
+      // Persist locally first so the restore always works, even offline.
+      saveItems();
+
+      // 2-4) Upload the restored items to Supabase under the current user:
+      //    - Fetches supabase.auth.getUser() for the active session
+      //    - Maps label->name, medium->medium_type
+      //    - Deletes invalid string IDs so Supabase auto-generates UUIDs
+      //    - Attaches user_id from the active session
+      //    - Executes: supabase.from('items').insert(formattedItems)
+      //    - Exposes full Supabase error details
+      if (isSupabaseConfigured()) {
+        showToast('Uploading backup to cloud...', 'info', 3000);
+        const result = await uploadItemsToCloud(db.items);
+        if (result.success) {
+          // Trigger a fresh query to reload items directly from Supabase.
+          await syncItemsWithCloud();
+          showToast(`Backup restored successfully and synced to your account. (${result.insertedCount || 0} items)`, 'success');
+        } else if (result.limitError) {
+          const msg = result.errorMessage || (result.error && result.error.message) || 'Active container limit reached. Upgrade to add more containers.';
+          showToast(`Backup restored on this device, but cloud sync failed: ${msg}`, 'warning', 8000);
+        } else {
+          // Expose full Supabase error details for debugging
+          const msg = result.errorMessage || (result.error && result.error.message) || 'Unknown error. Please try again.';
+          const details = result.errorDetails ? ` Details: ${result.errorDetails}` : '';
+          const hint = result.errorHint ? ` Hint: ${result.errorHint}` : '';
+          console.error('Cloud upload failed:', { error: result.error, code: result.errorCode, details: result.errorDetails, hint: result.errorHint });
+          showToast(`Backup restored on this device, but the cloud upload failed: ${msg}${details}${hint}`, 'error', 10000);
+        }
+      } else {
+        showToast('Backup restored successfully (saved on this device only).', 'success');
+      }
+    } catch (err) {
+      console.error('Backup restore failed:', err);
+      showToast('Backup restore failed: ' + (err && err.message ? err.message : 'Unexpected error.'), 'error', 8000);
+    } finally {
+      input.value = ''; // Allow re-importing the same file.
     }
   };
   reader.readAsText(file);
@@ -776,6 +851,19 @@ initFeedbackFormListener();
 // Registers the header "☁️ Cloud Synced" badge updater, syncs on app load,
 // and re-syncs automatically on auth state changes (sign in / out).
 setSyncStatusCallback(updateCloudSyncBadge);
+
+// Register error callback to display toast notifications for cloud sync failures.
+setSyncErrorCallback((error, context) => {
+  const message = error?.message || 'Unknown error';
+  if (context === 'sync') {
+    showToast(`Cloud sync failed: ${message}. Retrying on next action.`, 'error', 8000);
+  } else if (context === 'delete') {
+    showToast(`Failed to delete from cloud: ${message}`, 'error', 8000);
+  } else {
+    showToast(`Cloud operation failed: ${message}`, 'error', 8000);
+  }
+});
+
 initCloudSync();
 
 // --- SaaS app shell routing (public landing vs. authenticated dashboard) ---

@@ -21,7 +21,8 @@ import {
   isContainerLimitError,
   getBillingInfo,
   getSubscriptionTiers,
-  createLemonSqueezyCheckout
+  createLemonSqueezyCheckout,
+  deleteItemsFromCloud
 } from './db.js';
 import { callGeminiAPI, extractActiveBatchContext, saveChatMessage, loadChatHistory, hasApiKey, getStoredApiKey, saveApiKey, clearApiKey, processAIResponseActions } from './ai.js';
 import {
@@ -385,9 +386,18 @@ export function logYield() {
 export function deleteActiveItem() {
   if (!activeItemId) return;
   if (confirm(`Are you sure you want to delete item ${activeItemId}? This cannot be undone.`)) {
-    db.items = db.items.filter(i => i.id !== activeItemId);
+    const deletedId = activeItemId;
+    db.items = db.items.filter(i => i.id !== deletedId);
     closeModal();
     saveItems();
+    // Sync deletion to Supabase if configured
+    if (isSupabaseConfigured()) {
+      deleteItemsFromCloud([deletedId]).then(result => {
+        if (!result.success && result.error) {
+          showToast(`Failed to delete from cloud: ${result.error.message}`, 'error');
+        }
+      });
+    }
   }
 }
 
@@ -396,25 +406,53 @@ export function deleteItemDirect(id, e) {
   if (confirm(`Delete container ${id}?`)) {
     db.items = db.items.filter(i => i.id !== id);
     saveItems();
+    // Sync deletion to Supabase if configured
+    if (isSupabaseConfigured()) {
+      deleteItemsFromCloud([id]).then(result => {
+        if (!result.success && result.error) {
+          showToast(`Failed to delete from cloud: ${result.error.message}`, 'error');
+        }
+      });
+    }
   }
 }
 
 export function deleteUninoculated() {
-  const count = db.items.filter(i => i.stage === 'Uninoculated').length;
+  const uninoculatedItems = db.items.filter(i => i.stage === 'Uninoculated');
+  const count = uninoculatedItems.length;
   if (!count) return alert('No uninoculated containers to delete.');
   if (confirm(`Are you sure you want to purge all ${count} uninoculated jars?`)) {
+    const deletedIds = uninoculatedItems.map(i => i.id);
     db.items = db.items.filter(i => i.stage !== 'Uninoculated');
     saveItems();
+    // Sync deletion to Supabase if configured
+    if (isSupabaseConfigured()) {
+      deleteItemsFromCloud(deletedIds).then(result => {
+        if (!result.success && result.error) {
+          showToast(`Failed to delete from cloud: ${result.error.message}`, 'error');
+        }
+      });
+    }
   }
 }
 
 export function deletePCBatch(batchId) {
-  const affected = db.items.filter(i => i.pcBatch === batchId).length;
+  const affectedItems = db.items.filter(i => i.pcBatch === batchId);
+  const affected = affectedItems.length;
   if (confirm(`Delete PC Batch "${batchId}" and all ${affected} associated items?`)) {
+    const deletedIds = affectedItems.map(i => i.id);
     db.items = db.items.filter(i => i.pcBatch !== batchId);
     db.pcBatches = db.pcBatches.filter(b => b.batchId !== batchId);
     saveItems();
     openBatchModal();
+    // Sync deletion to Supabase if configured
+    if (isSupabaseConfigured()) {
+      deleteItemsFromCloud(deletedIds).then(result => {
+        if (!result.success && result.error) {
+          showToast(`Failed to delete from cloud: ${result.error.message}`, 'error');
+        }
+      });
+    }
   }
 }
 
