@@ -187,24 +187,33 @@ function serializeItemForCloud(item, userId) {
 }
 
 // Deserialize a Supabase row back to the local app item format.
-// Maps Supabase column names back to legacy field names:
-//   - name -> label
-//   - medium_type -> medium
-//   - batch_code -> pcBatch
+// Database-to-UI Mapping: maps Supabase column names back to frontend item structure.
+// Includes both legacy field names AND database column names with fallbacks
+// to ensure the UI never renders 'undefined' values.
 function deserializeCloudRow(row) {
   if (!row || typeof row !== 'object') return null;
   
+  // Map database columns to frontend item structure with comprehensive fallbacks
+  const itemName = row.name || row.label || 'Unnamed Item';
+  const itemMedium = row.medium_type || row.medium || '';
+  const itemBatch = row.batch_code || row.batch || row.pcBatch || '';
+  
   return {
     id: row.id,
-    // Map Supabase schema back to local app format
-    label: row.name || '',
+    user_id: row.user_id,
+    // Provide both legacy and new field names for maximum compatibility
+    label: itemName,
+    name: itemName,
     strain: row.strain || '',
-    medium: row.medium_type || '',
-    pcBatch: row.batch_code || '',
+    medium: itemMedium,
+    medium_type: itemMedium,
+    pcBatch: itemBatch,
+    batch_code: row.batch_code || '',
     stage: row.stage || 'Preparation',
     history: Array.isArray(row.history) ? row.history : [],
     yields: Array.isArray(row.yields) ? row.yields : [],
     createdAt: row.created_at || null,
+    created_at: row.created_at || null,
     updated_at: row.updated_at || null
   };
 }
