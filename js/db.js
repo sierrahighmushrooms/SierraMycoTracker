@@ -500,3 +500,95 @@ export function isContainerLimitError(error) {
          message.includes('container limit') ||
          message.includes('Upgrade to add more containers');
 }
+
+// --- Billing & Subscription Helpers ---
+
+// API endpoint for Lemon Squeezy checkout creation
+// This should point to your Supabase Edge Function or backend API
+export const LEMON_SQUEEZY_CHECKOUT_ENDPOINT = '/api/lemonsqueezy/create-checkout';
+
+// Fetch subscription tiers from Supabase RPC
+// Returns: [{ tier_name, display_name, max_active_containers, monthly_price_cents, lemonsqueezy_variant_id }]
+export async function getSubscriptionTiers() {
+  if (!supabaseClient) return null;
+  
+  try {
+    const { data, error } = await supabaseClient.rpc('get_subscription_tiers');
+    
+    if (error) {
+      console.warn('Failed to fetch subscription tiers:', error.message);
+      return null;
+    }
+    
+    return data || [];
+  } catch (err) {
+    console.warn('Error fetching subscription tiers:', err);
+    return null;
+  }
+}
+
+// Create a Lemon Squeezy checkout session for a tier upgrade
+// Returns: { checkout_url } or { error }
+export async function createLemonSqueezyCheckout(tierName, variantId) {
+  if (!supabaseClient) {
+    return { error: 'Supabase is not configured.' };
+  }
+  
+  try {
+    const { data: { user } } = await supabaseClient.auth.getUser();
+    if (!user) {
+      return { error: 'You must be signed in to upgrade.' };
+    }
+    
+    // Get the current session for the auth token
+    const { data: { session } } = await supabaseClient.auth.getSession();
+    
+    const response = await fetch(LEMON_SQUEEZY_CHECKOUT_ENDPOINT, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session?.access_token || ''}`
+      },
+      body: JSON.stringify({
+        tier: tierName,
+        variant_id: variantId,
+        user_id: user.id,
+        user_email: user.email
+      })
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      return { error: errorData.error || `Checkout creation failed (${response.status})` };
+    }
+    
+    const data = await response.json();
+    return { checkout_url: data.checkout_url || data.url };
+  } catch (err) {
+    console.warn('Error creating checkout:', err);
+    return { error: err.message || 'Failed to create checkout session.' };
+  }
+}
+
+// Get full billing info for the settings page
+// Combines container usage with subscription details
+export async function getBillingInfo() {
+  const usage = await getContainerUsage();
+  
+  if (!usage) {
+    // Fallback for offline/guest mode
+    const localCount = getLocalActiveContainerCount();
+    return {
+      active_count: localCount,
+      max_limit: TIER_LIMITS.free,
+      can_create: localCount < TIER_LIMITS.free,
+      tier: 'free',
+      subscription_status: 'none',
+      lemonsqueezy_subscription_id: null,
+      lemonsqueezy_customer_portal_url: null,
+      subscription_current_period_end: null
+    };
+  }
+  
+  return usage;
+}

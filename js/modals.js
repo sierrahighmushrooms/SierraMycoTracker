@@ -18,7 +18,10 @@ import {
   getLocalActiveContainerCount,
   TIER_LIMITS,
   INACTIVE_STAGES,
-  isContainerLimitError
+  isContainerLimitError,
+  getBillingInfo,
+  getSubscriptionTiers,
+  createLemonSqueezyCheckout
 } from './db.js';
 import { callGeminiAPI, extractActiveBatchContext, saveChatMessage, loadChatHistory, hasApiKey, getStoredApiKey, saveApiKey, clearApiKey, processAIResponseActions } from './ai.js';
 import {
@@ -1892,4 +1895,310 @@ export function handleContainerLimitError(error) {
     return true;
   }
   return false;
+}
+
+// --- Subscription & Billing Settings Page/Modal ---
+
+// Cached billing info for the settings page
+let cachedBillingInfo = null;
+let cachedTiers = null;
+
+// Open the billing settings modal (acts as /settings/billing page)
+export async function openBillingSettings() {
+  // Close any existing billing modal
+  closeBillingSettings();
+  
+  // Show loading state first
+  const loadingHtml = `
+    <div id="billing-settings-modal" class="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-[96]">
+      <div class="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto shadow-2xl">
+        <div class="p-8 text-center">
+          <div class="animate-spin w-8 h-8 border-2 border-emerald-500 border-t-transparent rounded-full mx-auto mb-4"></div>
+          <p class="text-slate-400 text-sm">Loading billing settings...</p>
+        </div>
+      </div>
+    </div>
+  `;
+  document.body.insertAdjacentHTML('beforeend', loadingHtml);
+  
+  // Fetch billing info and tiers in parallel
+  const [billingInfo, tiers] = await Promise.all([
+    getBillingInfo(),
+    getSubscriptionTiers()
+  ]);
+  
+  cachedBillingInfo = billingInfo;
+  cachedTiers = tiers;
+  
+  // Render the full billing settings page
+  renderBillingSettingsContent(billingInfo, tiers);
+}
+
+// Render the billing settings modal content
+function renderBillingSettingsContent(billing, tiers) {
+  const modal = document.getElementById('billing-settings-modal');
+  if (!modal) return;
+  
+  const currentTier = billing.tier || 'free';
+  const activeCount = billing.active_count || 0;
+  const maxLimit = billing.max_limit || TIER_LIMITS.free;
+  const subscriptionStatus = billing.subscription_status || 'none';
+  const hasSubscription = Boolean(billing.lemonsqueezy_subscription_id);
+  const portalUrl = billing.lemonsqueezy_customer_portal_url;
+  const periodEnd = billing.subscription_current_period_end;
+  
+  // Calculate usage percentage
+  const percentage = maxLimit >= 999999 ? 0 : Math.min(100, Math.round((activeCount / maxLimit) * 100));
+  
+  // Determine progress bar color
+  let barColor = 'bg-emerald-500';
+  if (percentage >= 90) barColor = 'bg-red-500';
+  else if (percentage >= 70) barColor = 'bg-amber-500';
+  
+  // Format limit display
+  const limitDisplay = maxLimit >= 999999 ? '∞' : maxLimit;
+  
+  // Tier display names and styling
+  const tierConfig = {
+    free: { name: 'Free', color: 'text-slate-300', badge: 'bg-slate-700 text-slate-300' },
+    grower: { name: 'Grower', color: 'text-amber-400', badge: 'bg-amber-900/50 text-amber-300 border-amber-700' },
+    commercial: { name: 'Commercial', color: 'text-emerald-400', badge: 'bg-emerald-900/50 text-emerald-300 border-emerald-700' }
+  };
+  
+  // Status badge styling
+  const statusConfig = {
+    active: { label: 'Active', class: 'bg-emerald-900/50 text-emerald-300 border-emerald-700' },
+    trialing: { label: 'Trialing', class: 'bg-blue-900/50 text-blue-300 border-blue-700' },
+    canceled: { label: 'Canceled', class: 'bg-red-900/50 text-red-300 border-red-700' },
+    past_due: { label: 'Past Due', class: 'bg-amber-900/50 text-amber-300 border-amber-700' },
+    expired: { label: 'Expired', class: 'bg-slate-700 text-slate-400 border-slate-600' },
+    none: { label: 'Free Plan', class: 'bg-slate-700 text-slate-300 border-slate-600' }
+  };
+  
+  const currentTierConfig = tierConfig[currentTier] || tierConfig.free;
+  const currentStatusConfig = statusConfig[subscriptionStatus] || statusConfig.none;
+  
+  // Format renewal date
+  const renewalDate = periodEnd ? new Date(periodEnd).toLocaleDateString('en-US', { 
+    month: 'long', day: 'numeric', year: 'numeric' 
+  }) : null;
+  
+  // Determine which upgrade button to show
+  const upgradeTarget = currentTier === 'free' ? 'grower' : currentTier === 'grower' ? 'commercial' : null;
+  const upgradeTargetConfig = upgradeTarget ? tierConfig[upgradeTarget] : null;
+  
+  // Get tier pricing from fetched tiers or use defaults
+  const tierPricing = {
+    free: { price: 0, limit: 15 },
+    grower: { price: 9, limit: 100 },
+    commercial: { price: 29, limit: 'Unlimited' }
+  };
+  
+  if (tiers && tiers.length) {
+    tiers.forEach(t => {
+      if (tierPricing[t.tier_name]) {
+        tierPricing[t.tier_name].price = (t.monthly_price_cents || 0) / 100;
+        tierPricing[t.tier_name].limit = t.max_active_containers >= 999999 ? 'Unlimited' : t.max_active_containers;
+        tierPricing[t.tier_name].variantId = t.lemonsqueezy_variant_id;
+      }
+    });
+  }
+  
+  modal.innerHTML = `
+    <div class="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto shadow-2xl">
+      <div class="p-6 space-y-6">
+        <!-- Header -->
+        <div class="flex justify-between items-start border-b border-slate-800 pb-4">
+          <div>
+            <h2 class="text-xl font-bold text-white flex items-center gap-2">
+              <span>💳</span> Subscription & Billing
+            </h2>
+            <p class="text-sm text-slate-400 mt-1">Manage your plan, usage, and payment settings.</p>
+          </div>
+          <button onclick="closeBillingSettings()" class="text-slate-400 hover:text-white font-bold text-xl">✕</button>
+        </div>
+        
+        <!-- Current Plan Overview -->
+        <div class="bg-slate-800/50 border border-slate-700 rounded-xl p-5">
+          <div class="flex flex-wrap justify-between items-start gap-4">
+            <div>
+              <div class="text-xs text-slate-500 uppercase tracking-wide mb-1">Current Plan</div>
+              <div class="flex items-center gap-3">
+                <span class="text-2xl font-bold ${currentTierConfig.color}">${currentTierConfig.name}</span>
+                <span class="text-[10px] px-2 py-1 rounded-full border ${currentStatusConfig.class}">${currentStatusConfig.label}</span>
+              </div>
+              ${renewalDate && hasSubscription ? `
+                <div class="text-xs text-slate-500 mt-2">Renews on ${renewalDate}</div>
+              ` : ''}
+            </div>
+            <div class="text-right">
+              <div class="text-xs text-slate-500 uppercase tracking-wide mb-1">Monthly Cost</div>
+              <div class="text-2xl font-bold text-white">$${tierPricing[currentTier]?.price || 0}<span class="text-sm font-normal text-slate-500">/mo</span></div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Plan Usage Section -->
+        <div class="bg-slate-800/50 border border-slate-700 rounded-xl p-5 space-y-4">
+          <div class="flex justify-between items-center">
+            <h3 class="text-sm font-bold text-white flex items-center gap-2">
+              <span>📊</span> Plan Usage
+            </h3>
+            <span class="text-xs text-slate-500">${percentage}% of limit used</span>
+          </div>
+          
+          <div class="flex items-end justify-between">
+            <span class="text-3xl font-bold text-white">${activeCount} <span class="text-lg font-normal text-slate-500">/ ${limitDisplay} Active Containers</span></span>
+          </div>
+          
+          <div class="w-full bg-slate-700 rounded-full h-3 overflow-hidden">
+            <div class="${barColor} h-3 rounded-full transition-all duration-500" style="width: ${maxLimit >= 999999 ? '2' : percentage}%"></div>
+          </div>
+          
+          <p class="text-xs text-slate-500">
+            💡 Containers in <strong>Archived</strong>, <strong>Spent</strong>, or <strong>Contaminated</strong> stages don't count toward your limit.
+          </p>
+        </div>
+        
+        <!-- Tier Upgrade Cards -->
+        <div class="space-y-4">
+          <h3 class="text-sm font-bold text-white flex items-center gap-2">
+            <span>🚀</span> Available Plans
+          </h3>
+          
+          <div class="grid md:grid-cols-3 gap-4">
+            ${renderBillingTierCard('free', currentTier, tierPricing.free, tierConfig.free)}
+            ${renderBillingTierCard('grower', currentTier, tierPricing.grower, tierConfig.grower, true)}
+            ${renderBillingTierCard('commercial', currentTier, tierPricing.commercial, tierConfig.commercial)}
+          </div>
+        </div>
+        
+        <!-- Manage Subscription Section (for paid users) -->
+        ${hasSubscription ? `
+          <div class="bg-slate-800/50 border border-slate-700 rounded-xl p-5 space-y-4">
+            <h3 class="text-sm font-bold text-white flex items-center gap-2">
+              <span>⚙️</span> Manage Subscription
+            </h3>
+            <p class="text-xs text-slate-400">
+              View your receipts, update payment methods, or cancel your subscription through our secure payment portal.
+            </p>
+            <a href="${portalUrl || '#'}" 
+               target="_blank" 
+               rel="noopener noreferrer"
+               onclick="${portalUrl ? '' : 'event.preventDefault(); showToast(\'Customer portal URL not available. Please contact support.\', \'warning\');'}"
+               class="block w-full bg-slate-700 hover:bg-slate-600 text-white text-sm font-bold py-3 px-4 rounded-lg transition text-center">
+              🧾 Manage Subscription & Receipts
+            </a>
+          </div>
+        ` : ''}
+        
+        <!-- Footer -->
+        <div class="text-center text-xs text-slate-500 border-t border-slate-800 pt-4">
+          <p>Need help? Contact <a href="mailto:support@sierramycolab.com" class="text-emerald-400 underline">support@sierramycolab.com</a></p>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// Render a tier card for the billing settings page
+function renderBillingTierCard(tierName, currentTier, pricing, config, isPopular = false) {
+  const isCurrentPlan = tierName === currentTier;
+  const isUpgradeTarget = (currentTier === 'free' && tierName === 'grower') || 
+                          (currentTier === 'grower' && tierName === 'commercial');
+  const isDowngrade = (currentTier === 'grower' && tierName === 'free') || 
+                      (currentTier === 'commercial' && (tierName === 'free' || tierName === 'grower'));
+  
+  const features = {
+    free: ['15 active containers', 'Cloud sync', 'QR label printing', 'Community support'],
+    grower: ['100 active containers', 'Cloud sync', 'QR label printing', 'Priority support'],
+    commercial: ['Unlimited containers', 'Cloud sync', 'QR label printing', 'Dedicated support']
+  };
+  
+  return `
+    <div class="bg-slate-800 border ${isCurrentPlan ? 'border-emerald-500 ring-2 ring-emerald-500/30' : isPopular ? 'border-amber-500/50' : 'border-slate-700'} rounded-xl p-5 space-y-3 relative">
+      ${isPopular && !isCurrentPlan ? '<div class="absolute -top-3 left-1/2 -translate-x-1/2 bg-amber-500 text-black text-[10px] font-bold px-3 py-1 rounded-full">POPULAR</div>' : ''}
+      <div class="text-center">
+        <h4 class="font-bold ${config.color} text-lg">${config.name}</h4>
+        <div class="text-2xl font-bold text-white mt-2">$${pricing.price}<span class="text-xs font-normal text-slate-400">/mo</span></div>
+        <div class="text-xs text-slate-500 mt-1">${pricing.limit} containers</div>
+      </div>
+      <ul class="text-xs text-slate-300 space-y-1.5">
+        ${features[tierName].map(f => `<li class="flex items-center gap-2"><span class="text-emerald-400">✓</span> ${f}</li>`).join('')}
+      </ul>
+      ${isCurrentPlan 
+        ? '<div class="text-center text-xs font-bold text-emerald-400 py-2 bg-emerald-900/30 rounded-lg">Current Plan</div>'
+        : isUpgradeTarget 
+          ? `<button onclick="initiateTierCheckout('${tierName}')" class="w-full bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white text-xs font-bold py-2.5 rounded-lg transition">
+               Upgrade to ${config.name} Tier
+             </button>`
+          : isDowngrade
+            ? '<div class="text-center text-xs text-slate-500 py-2">Contact support to downgrade</div>'
+            : '<div class="text-center text-xs text-slate-500 py-2">—</div>'}
+    </div>
+  `;
+}
+
+// Initiate checkout for a tier upgrade via Lemon Squeezy
+export async function initiateTierCheckout(tierName) {
+  // Get the variant ID from cached tiers
+  let variantId = null;
+  if (cachedTiers && cachedTiers.length) {
+    const tier = cachedTiers.find(t => t.tier_name === tierName);
+    variantId = tier?.lemonsqueezy_variant_id;
+  }
+  
+  // Fallback variant IDs (should be configured in database)
+  if (!variantId) {
+    const fallbackVariants = {
+      grower: 'GROWER_VARIANT_ID',
+      commercial: 'COMMERCIAL_VARIANT_ID'
+    };
+    variantId = fallbackVariants[tierName];
+  }
+  
+  if (!variantId || variantId.includes('VARIANT_ID')) {
+    showToast('Checkout is not configured yet. Please contact support to upgrade.', 'warning', 6000);
+    return;
+  }
+  
+  // Show loading toast
+  showToast('Creating secure checkout session...', 'info', 3000);
+  
+  // Call the checkout API
+  const result = await createLemonSqueezyCheckout(tierName, variantId);
+  
+  if (result.error) {
+    showToast(result.error, 'error', 6000);
+    return;
+  }
+  
+  if (result.checkout_url) {
+    // Open checkout in a new window or redirect
+    window.open(result.checkout_url, '_blank', 'noopener,noreferrer');
+    showToast('Opening secure checkout...', 'success', 3000);
+  } else {
+    showToast('Failed to create checkout session. Please try again.', 'error', 6000);
+  }
+}
+
+// Close the billing settings modal
+export function closeBillingSettings() {
+  const modal = document.getElementById('billing-settings-modal');
+  if (modal) modal.remove();
+}
+
+// Refresh billing info after returning from checkout
+export async function refreshBillingInfo() {
+  if (cachedBillingInfo) {
+    const billingInfo = await getBillingInfo();
+    cachedBillingInfo = billingInfo;
+    // Re-render if modal is open
+    const modal = document.getElementById('billing-settings-modal');
+    if (modal) {
+      renderBillingSettingsContent(billingInfo, cachedTiers);
+    }
+  }
+  // Also update the dashboard usage widget
+  updateContainerUsageUI();
 }

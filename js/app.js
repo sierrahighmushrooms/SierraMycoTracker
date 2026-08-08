@@ -88,7 +88,11 @@ import {
   closeUpgradeModal,
   selectUpgradePlan,
   showToast,
-  handleContainerLimitError
+  handleContainerLimitError,
+  openBillingSettings,
+  closeBillingSettings,
+  initiateTierCheckout,
+  refreshBillingInfo
 } from './modals.js';
 import { startScanner, stopScanner, startG2GCameraScan, stopG2GCameraScan } from './camera.js';
 import { STAGES, CONTAINER_STAGES } from './config.js';
@@ -610,6 +614,13 @@ document.getElementById('item-form').addEventListener('submit', (e) => {
 // --- URL Hash Handling ---
 function handleURLHash() {
   const hash = window.location.hash;
+  
+  // Handle /settings/billing route (via #settings/billing or #/settings/billing)
+  if (hash && (hash === '#settings/billing' || hash === '#/settings/billing')) {
+    openBillingSettings();
+    return;
+  }
+  
   if (hash && hash.startsWith('#item=')) {
     const id = hash.split('#item=')[1];
     if (id) {
@@ -736,6 +747,11 @@ Object.assign(window, {
   closeUpgradeModal,
   selectUpgradePlan,
   showToast,
+  // Billing Settings
+  openBillingSettings,
+  closeBillingSettings,
+  initiateTierCheckout,
+  refreshBillingInfo,
   // camera.js
   startScanner,
   stopScanner,
