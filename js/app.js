@@ -314,6 +314,17 @@ function importJSON(e) {
         return;
       }
 
+      // JSON Import Guard: Allow imports up to 100 total items.
+      // If an import would exceed 100 items, truncate and notify the user.
+      const MAX_IMPORT_ITEMS = 100;
+      let importTruncated = false;
+      let originalCount = extractedItems.length;
+      
+      if (extractedItems.length > MAX_IMPORT_ITEMS) {
+        extractedItems = extractedItems.slice(0, MAX_IMPORT_ITEMS);
+        importTruncated = true;
+      }
+
       db.items = extractedItems;
       db.pcBatches = extractedBatches;
 
@@ -321,6 +332,11 @@ function importJSON(e) {
       db.items.forEach(item => {
         if (item && (item.id == null || item.id === '')) item.id = generateId();
       });
+      
+      // Notify user if import was truncated
+      if (importTruncated) {
+        showToast(`Import limited to ${MAX_IMPORT_ITEMS} items. ${originalCount - MAX_IMPORT_ITEMS} items were not imported.`, 'warning', 8000);
+      }
 
       // Persist locally first so the restore always works, even offline.
       saveItems();

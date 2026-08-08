@@ -77,8 +77,8 @@ CREATE TABLE IF NOT EXISTS public.subscription_tiers (
 
 -- Insert tier limits
 INSERT INTO public.subscription_tiers (tier_name, max_active_containers, display_name) VALUES
-  ('free', 15, 'Free'),
-  ('grower', 100, 'Grower'),
+  ('free', 100, 'Free'),
+  ('grower', 500, 'Grower'),
   ('commercial', 999999, 'Commercial')
 ON CONFLICT (tier_name) DO UPDATE SET
   max_active_containers = EXCLUDED.max_active_containers,
@@ -119,9 +119,9 @@ BEGIN
   FROM public.subscription_tiers
   WHERE tier_name = v_tier;
   
-  -- Default to 15 if tier not found
+  -- Default to 100 if tier not found
   IF v_max_limit IS NULL THEN
-    v_max_limit := 15;
+    v_max_limit := 100;
   END IF;
   
   -- Count active containers (stage NOT in inactive stages)
@@ -181,9 +181,9 @@ BEGIN
   FROM public.subscription_tiers st
   WHERE st.tier_name = v_tier;
   
-  -- Default to 15 if tier not found
+  -- Default to 100 if tier not found
   IF v_max_limit IS NULL THEN
-    v_max_limit := 15;
+    v_max_limit := 100;
   END IF;
   
   -- Count active containers (stage NOT in inactive stages)

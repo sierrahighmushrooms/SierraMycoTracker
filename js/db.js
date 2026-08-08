@@ -698,8 +698,8 @@ export async function syncFeedbackWithCloud() {
 
 // Tier limits for local/offline checks (mirrors database subscription_tiers table)
 export const TIER_LIMITS = {
-  free: 15,
-  grower: 100,
+  free: 100,
+  grower: 500,
   commercial: 999999
 };
 

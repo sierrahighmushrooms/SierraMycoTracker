@@ -182,9 +182,9 @@ BEGIN
   FROM public.subscription_tiers st
   WHERE st.tier_name = v_tier;
   
-  -- Default to 15 if tier not found
+  -- Default to 100 if tier not found
   IF v_max_limit IS NULL THEN
-    v_max_limit := 15;
+    v_max_limit := 100;
   END IF;
   
   -- Count active containers (stage NOT in inactive stages)

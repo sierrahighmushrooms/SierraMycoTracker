@@ -1907,7 +1907,7 @@ export function openUpgradeModal() {
                 <div class="text-3xl font-bold text-white mt-2">$0<span class="text-sm font-normal text-slate-400">/mo</span></div>
               </div>
               <ul class="text-xs text-slate-300 space-y-2">
-                <li class="flex items-center gap-2"><span class="text-emerald-400">✓</span> 15 active containers</li>
+                <li class="flex items-center gap-2"><span class="text-emerald-400">✓</span> 100 active containers</li>
                 <li class="flex items-center gap-2"><span class="text-emerald-400">✓</span> Cloud sync</li>
                 <li class="flex items-center gap-2"><span class="text-emerald-400">✓</span> QR label printing</li>
                 <li class="flex items-center gap-2"><span class="text-slate-500">✕</span> <span class="text-slate-500">Priority support</span></li>
@@ -1925,7 +1925,7 @@ export function openUpgradeModal() {
                 <div class="text-3xl font-bold text-amber-400 mt-2">$9<span class="text-sm font-normal text-slate-400">/mo</span></div>
               </div>
               <ul class="text-xs text-slate-300 space-y-2">
-                <li class="flex items-center gap-2"><span class="text-emerald-400">✓</span> <strong>100</strong> active containers</li>
+                <li class="flex items-center gap-2"><span class="text-emerald-400">✓</span> <strong>500</strong> active containers</li>
                 <li class="flex items-center gap-2"><span class="text-emerald-400">✓</span> Cloud sync</li>
                 <li class="flex items-center gap-2"><span class="text-emerald-400">✓</span> QR label printing</li>
                 <li class="flex items-center gap-2"><span class="text-emerald-400">✓</span> Priority support</li>
@@ -2080,8 +2080,8 @@ function renderBillingSettingsContent(billing, tiers) {
   
   // Get tier pricing from fetched tiers or use defaults
   const tierPricing = {
-    free: { price: 0, limit: 15 },
-    grower: { price: 9, limit: 100 },
+    free: { price: 0, limit: 100 },
+    grower: { price: 9, limit: 500 },
     commercial: { price: 29, limit: 'Unlimited' }
   };
   
@@ -2201,8 +2201,8 @@ function renderBillingTierCard(tierName, currentTier, pricing, config, isPopular
                       (currentTier === 'commercial' && (tierName === 'free' || tierName === 'grower'));
   
   const features = {
-    free: ['15 active containers', 'Cloud sync', 'QR label printing', 'Community support'],
-    grower: ['100 active containers', 'Cloud sync', 'QR label printing', 'Priority support'],
+    free: ['100 active containers', 'Cloud sync', 'QR label printing', 'Community support'],
+    grower: ['500 active containers', 'Cloud sync', 'QR label printing', 'Priority support'],
     commercial: ['Unlimited containers', 'Cloud sync', 'QR label printing', 'Dedicated support']
   };
   
