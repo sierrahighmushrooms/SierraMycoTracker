@@ -255,16 +255,52 @@ function isValidUuid(id) {
   return typeof id === 'string' && UUID_REGEX.test(id);
 }
 
+// --- Safe Column Whitelist ---
+// Exact list of valid columns currently existing in our Supabase `items` table.
+// Any key NOT in this list will be stripped from the payload before insert.
+const ALLOWED_COLUMNS = [
+  'user_id',
+  'name',
+  'strain',
+  'medium_type',
+  'batch_code',
+  'stage',
+  'history',
+  'yields',
+  'created_at',
+  'updated_at'
+];
+
+// --- Defensive Key Mapping ---
+// Maps known legacy key aliases to their Supabase column names.
+// This ensures backwards-compatibility with older JSON export formats.
+const KEY_ALIASES = {
+  // name aliases
+  label: 'name',
+  name: 'name',
+  // medium_type aliases
+  medium: 'medium_type',
+  medium_type: 'medium_type',
+  // batch_code aliases
+  pcBatch: 'batch_code',
+  batch_code: 'batch_code',
+  // created_at aliases
+  createdAt: 'created_at',
+  created_at: 'created_at',
+  // updated_at aliases
+  updatedAt: 'updated_at',
+  updated_at: 'updated_at',
+  // direct mappings (no alias needed)
+  strain: 'strain',
+  stage: 'stage',
+  history: 'history',
+  yields: 'yields'
+};
+
 // Transform a legacy JSON item into a valid Supabase `items` record.
-// STRICTLY maps and sanitizes all item payload keys to match the Supabase schema.
-// Only includes keys that exist in the `items` table:
-//   user_id, name, strain, medium_type, batch_code, stage, history, yields, created_at, updated_at
-// Field mappings:
-//   - item.label -> name
-//   - item.medium -> medium_type
-//   - item.pcBatch -> batch_code
-//   - item.volumeMl -> volume_ml (if applicable)
-// Invalid string IDs (like "MY-Z9UGC") are deleted so Supabase auto-generates UUIDs.
+// SCHEMA-SAFE: Only includes keys present in ALLOWED_COLUMNS.
+// BACKWARDS-COMPATIBLE: Maps known legacy key aliases to current column names.
+// Strips extra fields like breakAndShake, parentItemId, legacy non-UUID ids, etc.
 function transformLegacyItemForSupabase(item, userId) {
   if (!item || typeof item !== 'object') return null;
 
@@ -274,27 +310,46 @@ function transformLegacyItemForSupabase(item, userId) {
   // are deleted so Supabase can auto-generate a proper database UUID.
   const hasValidUuid = isValidUuid(originalId);
 
-  // Build a clean payload with ONLY valid Supabase column names.
-  // This prevents "Could not find the 'X' column" errors.
-  const sanitizedItem = {
+  // Step 1: Defensive mapping - iterate over incoming item keys and map
+  // known legacy aliases to their Supabase column names.
+  const mappedItem = {};
+  for (const [key, value] of Object.entries(item)) {
+    const targetColumn = KEY_ALIASES[key];
+    if (targetColumn && ALLOWED_COLUMNS.includes(targetColumn)) {
+      // Only set if not already set (first alias wins)
+      if (mappedItem[targetColumn] === undefined) {
+        mappedItem[targetColumn] = value;
+      }
+    }
+    // Keys not in KEY_ALIASES are stripped (breakAndShake, parentItemId, etc.)
+  }
+
+  // Step 2: Build the clean payload with defaults for missing fields.
+  const cleanedItem = {
     user_id: userId,
-    // Map legacy field names to Supabase schema: label -> name
-    name: item.label || item.name || '',
-    strain: item.strain || '',
-    // Map legacy field names to Supabase schema: medium -> medium_type
-    medium_type: item.medium || item.medium_type || '',
-    // Map legacy field names to Supabase schema: pcBatch -> batch_code
-    batch_code: item.pcBatch || item.batch_code || '',
-    stage: item.stage || 'Preparation',
-    // JSON arrays - Supabase jsonb columns accept these directly
-    history: Array.isArray(item.history) ? item.history : [],
-    yields: Array.isArray(item.yields) ? item.yields : [],
-    created_at: item.createdAt || item.created_at || new Date().toISOString(),
-    updated_at: item.updated_at || new Date().toISOString()
+    name: mappedItem.name || '',
+    strain: mappedItem.strain || '',
+    medium_type: mappedItem.medium_type || '',
+    batch_code: mappedItem.batch_code || '',
+    stage: mappedItem.stage || 'Preparation',
+    history: Array.isArray(mappedItem.history) ? mappedItem.history : [],
+    yields: Array.isArray(mappedItem.yields) ? mappedItem.yields : [],
+    created_at: mappedItem.created_at || new Date().toISOString(),
+    updated_at: mappedItem.updated_at || new Date().toISOString()
   };
 
-  // Only include the id field if it's a valid UUID. Invalid string IDs
-  // (like "MY-Z9UGC") are deleted so Supabase can auto-generate valid UUIDs.
+  // Step 3: Final whitelist filter - ensure ONLY ALLOWED_COLUMNS are present.
+  // This is a safety net in case any unexpected keys slipped through.
+  const sanitizedItem = {};
+  for (const column of ALLOWED_COLUMNS) {
+    if (cleanedItem[column] !== undefined) {
+      sanitizedItem[column] = cleanedItem[column];
+    }
+  }
+
+  // Step 4: Only include the id field if it's a valid UUID.
+  // Invalid string IDs (like "MY-Z9UGC") are deleted so Supabase
+  // can auto-generate valid UUIDs.
   if (hasValidUuid) {
     sanitizedItem.id = originalId;
   }

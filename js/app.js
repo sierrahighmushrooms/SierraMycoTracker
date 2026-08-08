@@ -324,22 +324,29 @@ function importJSON(e) {
       // Persist locally first so the restore always works, even offline.
       saveItems();
 
-      // 2-4) Upload the restored items to Supabase under the current user:
+      // 2-6) Upload the restored items to Supabase under the current user:
       //    - Fetches supabase.auth.getUser() for the active session
-      //    - Maps label->name, medium->medium_type
-      //    - Deletes invalid string IDs so Supabase auto-generates UUIDs
+      //    - Maps label->name, medium->medium_type, pcBatch->batch_code, createdAt->created_at
+      //    - Strips unmapped/extra keys (breakAndShake, parentItemId, legacy IDs, etc.)
       //    - Attaches user_id from the active session
-      //    - Executes: supabase.from('items').insert(formattedItems)
-      //    - Exposes full Supabase error details
+      //    - Executes: supabase.from('items').insert(cleanedPayload)
+      //    - Shows success notification with item count and refreshes dashboard
       if (isSupabaseConfigured()) {
         showToast('Uploading backup to cloud...', 'info', 3000);
         const result = await uploadItemsToCloud(db.items);
         if (result.success) {
           // Trigger a fresh query to reload items directly from Supabase.
           await syncItemsWithCloud();
-          showToast(`Backup restored successfully and synced to your account. (${result.insertedCount || 0} items)`, 'success');
+          // Refresh the live dashboard view
+          render();
+          updateDashboard();
+          // Show success notification with item count
+          const count = result.insertedCount || 0;
+          showToast(`✓ Successfully imported ${count} item${count !== 1 ? 's' : ''} and synced to your account.`, 'success', 5000);
         } else if (result.limitError) {
           const msg = result.errorMessage || (result.error && result.error.message) || 'Active container limit reached. Upgrade to add more containers.';
+          render();
+          updateDashboard();
           showToast(`Backup restored on this device, but cloud sync failed: ${msg}`, 'warning', 8000);
         } else {
           // Expose full Supabase error details for debugging
@@ -347,10 +354,16 @@ function importJSON(e) {
           const details = result.errorDetails ? ` Details: ${result.errorDetails}` : '';
           const hint = result.errorHint ? ` Hint: ${result.errorHint}` : '';
           console.error('Cloud upload failed:', { error: result.error, code: result.errorCode, details: result.errorDetails, hint: result.errorHint });
+          render();
+          updateDashboard();
           showToast(`Backup restored on this device, but the cloud upload failed: ${msg}${details}${hint}`, 'error', 10000);
         }
       } else {
-        showToast('Backup restored successfully (saved on this device only).', 'success');
+        // Refresh the live dashboard view
+        render();
+        updateDashboard();
+        const count = db.items.length;
+        showToast(`✓ Successfully imported ${count} item${count !== 1 ? 's' : ''} (saved on this device only).`, 'success', 5000);
       }
     } catch (err) {
       console.error('Backup restore failed:', err);
