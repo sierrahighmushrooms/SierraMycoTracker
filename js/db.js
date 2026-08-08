@@ -142,28 +142,71 @@ function scheduleCloudPush() {
 }
 
 // --- Cloud row (de)serialization ---
-// Expected Supabase `items` table schema:
-//   id         text        PRIMARY KEY
-//   user_id    uuid
-//   label      text
-//   payload    jsonb       -- the full item object
-//   updated_at timestamptz DEFAULT now()
+// Expected Supabase `items` table schema (strict column names):
+//   id              uuid        PRIMARY KEY (auto-generated)
+//   user_id         uuid
+//   name            text        -- mapped from item.label
+//   medium_type     text        -- mapped from item.medium
+//   batch_code      text        -- mapped from item.pcBatch
+//   stage           text
+//   strain          text
+//   history         jsonb
+//   yields          jsonb
+//   created_at      timestamptz
+//   updated_at      timestamptz DEFAULT now()
+// NOTE: The 'label' column does NOT exist - must use 'name' instead.
 function serializeItemForCloud(item, userId) {
   const updatedAt = item.updated_at || new Date().toISOString();
-  return {
-    id: item.id,
+  const createdAt = item.createdAt || item.created_at || new Date().toISOString();
+  
+  // Build a clean payload with only valid Supabase column names.
+  // Map legacy field names to Supabase schema:
+  // - label -> name
+  // - medium -> medium_type
+  // - pcBatch -> batch_code
+  // - volumeMl -> volume_ml
+  const sanitizedItem = {
     user_id: userId,
-    label: item.label || '',
-    payload: { ...item, updated_at: updatedAt },
+    name: item.label || item.name || '',
+    strain: item.strain || '',
+    medium_type: item.medium || item.medium_type || '',
+    batch_code: item.pcBatch || item.batch_code || '',
+    stage: item.stage || 'Preparation',
+    history: Array.isArray(item.history) ? item.history : [],
+    yields: Array.isArray(item.yields) ? item.yields : [],
+    created_at: createdAt,
     updated_at: updatedAt
   };
+
+  // Only include id if it's a valid UUID (for upsert operations)
+  if (isValidUuid(item.id)) {
+    sanitizedItem.id = item.id;
+  }
+
+  return sanitizedItem;
 }
 
+// Deserialize a Supabase row back to the local app item format.
+// Maps Supabase column names back to legacy field names:
+//   - name -> label
+//   - medium_type -> medium
+//   - batch_code -> pcBatch
 function deserializeCloudRow(row) {
-  const base = (row.payload && typeof row.payload === 'object') ? { ...row.payload } : {};
-  base.id = row.id;
-  base.updated_at = row.updated_at || base.updated_at || null;
-  return base;
+  if (!row || typeof row !== 'object') return null;
+  
+  return {
+    id: row.id,
+    // Map Supabase schema back to local app format
+    label: row.name || '',
+    strain: row.strain || '',
+    medium: row.medium_type || '',
+    pcBatch: row.batch_code || '',
+    stage: row.stage || 'Preparation',
+    history: Array.isArray(row.history) ? row.history : [],
+    yields: Array.isArray(row.yields) ? row.yields : [],
+    createdAt: row.created_at || null,
+    updated_at: row.updated_at || null
+  };
 }
 
 function itemTimestamp(item) {
@@ -213,63 +256,52 @@ function isValidUuid(id) {
 }
 
 // Transform a legacy JSON item into a valid Supabase `items` record.
-// - Assigns user_id from the authenticated user.
-// - Stores the original custom ID (e.g., "MY-Z9UGC") in item_code if batch_code is empty.
-// - Deletes invalid string IDs so Supabase auto-generates proper UUIDs.
-// - Maps field names to match the Supabase schema: label->name, medium->medium_type.
-// - Ensures JSON arrays (history, yields) are passed properly.
+// STRICTLY maps and sanitizes all item payload keys to match the Supabase schema.
+// Only includes keys that exist in the `items` table:
+//   user_id, name, strain, medium_type, batch_code, stage, history, yields, created_at, updated_at
+// Field mappings:
+//   - item.label -> name
+//   - item.medium -> medium_type
+//   - item.pcBatch -> batch_code
+//   - item.volumeMl -> volume_ml (if applicable)
+// Invalid string IDs (like "MY-Z9UGC") are deleted so Supabase auto-generates UUIDs.
 function transformLegacyItemForSupabase(item, userId) {
   if (!item || typeof item !== 'object') return null;
 
   const originalId = item.id || null;
-  const batchCode = item.pcBatch || item.batch_code || null;
 
   // Determine if the original ID is valid. Invalid string IDs (like "MY-Z9UGC")
   // are deleted so Supabase can auto-generate a proper database UUID.
-  // Valid UUIDs are preserved to maintain referential integrity.
   const hasValidUuid = isValidUuid(originalId);
 
-  // Build the sanitized record with Supabase schema field names.
-  const record = {
+  // Build a clean payload with ONLY valid Supabase column names.
+  // This prevents "Could not find the 'X' column" errors.
+  const sanitizedItem = {
     user_id: userId,
     // Map legacy field names to Supabase schema: label -> name
     name: item.label || item.name || '',
+    strain: item.strain || '',
     // Map legacy field names to Supabase schema: medium -> medium_type
     medium_type: item.medium || item.medium_type || '',
-    strain: item.strain || null,
+    // Map legacy field names to Supabase schema: pcBatch -> batch_code
+    batch_code: item.pcBatch || item.batch_code || '',
     stage: item.stage || 'Preparation',
-    // Store original custom ID in item_code if batch_code is empty
-    batch_code: batchCode,
-    item_code: (!batchCode && originalId) ? originalId : (item.item_code || null),
-    parent_item_id: item.parentItemId || item.parent_item_id || null,
-    container_type: item.containerType || item.container_type || null,
-    container_weight: item.containerWeight || item.container_weight || null,
-    volume_ml: item.volumeMl !== undefined ? item.volumeMl : (item.volume_ml !== undefined ? item.volume_ml : null),
-    color: item.color || null,
-    contam_type: item.contamType || item.contam_type || null,
-    contam_vector: item.contamVector || item.contam_vector || null,
-    total_yield: item.totalYield !== undefined ? item.totalYield : (item.total_yield !== undefined ? item.total_yield : 0),
-    break_and_shake: item.breakAndShake || item.break_and_shake || null,
-    generation: item.generation || null,
-    created_at: item.createdAt || item.created_at || new Date().toISOString(),
-    updated_at: item.updated_at || new Date().toISOString(),
     // JSON arrays - Supabase jsonb columns accept these directly
     history: Array.isArray(item.history) ? item.history : [],
     yields: Array.isArray(item.yields) ? item.yields : [],
-    flush_yields: Array.isArray(item.flushYields) ? item.flushYields : (Array.isArray(item.flush_yields) ? item.flush_yields : []),
-    lifecycle_history: Array.isArray(item.lifecycleHistory) ? item.lifecycleHistory : (Array.isArray(item.lifecycle_history) ? item.lifecycle_history : []),
-    environment_history: Array.isArray(item.environmentHistory) ? item.environmentHistory : (Array.isArray(item.environment_history) ? item.environment_history : [])
+    created_at: item.createdAt || item.created_at || new Date().toISOString(),
+    updated_at: item.updated_at || new Date().toISOString()
   };
 
   // Only include the id field if it's a valid UUID. Invalid string IDs
   // (like "MY-Z9UGC") are deleted so Supabase can auto-generate valid UUIDs.
   if (hasValidUuid) {
-    record.id = originalId;
+    sanitizedItem.id = originalId;
   }
   // If hasValidUuid is false, the id key is intentionally omitted so
   // Supabase auto-generates a proper database UUID for the primary key.
 
-  return record;
+  return sanitizedItem;
 }
 
 // Batch-upload items to the Supabase `items` table under the currently
@@ -421,7 +453,10 @@ export async function syncItemsWithCloud() {
       .select('*')
       .eq('user_id', user.id);
     if (fetchError) throw fetchError;
-    const cloudItems = (cloudRows || []).map(deserializeCloudRow);
+    // Deserialize and filter out any null results
+    const cloudItems = (cloudRows || [])
+      .map(deserializeCloudRow)
+      .filter(item => item != null);
     const cloudById = new Map(cloudItems.map(ci => [ci.id, ci]));
 
     // 2) Identify local-only items that need to be pushed up (offline-created).
