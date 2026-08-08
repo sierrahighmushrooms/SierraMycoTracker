@@ -1,4 +1,4 @@
-// Global constants and application configuration for MycoTrack Pro.
+// Global constants and application configuration for Sierra Myco Lab.
 
 // Canonical lifecycle stages / workflows
 export const STAGES = ['Preparation', 'Inoculated', 'Colonizing', 'Fully Colonized', 'Ready to Use', 'Fruiting', 'Archived', 'Spent', 'Contaminated'];
@@ -17,7 +17,7 @@ export const GRAIN_STAGES = ['Preparation', 'Inoculated', 'Colonizing', 'Ready',
 
 // Application settings
 export const APP_CONFIG = {
-  APP_NAME: 'MycoTrack Pro',
+  APP_NAME: 'Sierra Myco Lab',
   STORAGE_KEYS: {
     ITEMS: 'myco_items_v5',
     BATCHES: 'myco_batches_v5',

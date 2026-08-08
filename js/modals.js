@@ -1,4 +1,4 @@
-// Modal rendering & interaction logic for MycoTrack Pro.
+// Modal rendering & interaction logic for Sierra Myco Lab.
 
 import {
   db,

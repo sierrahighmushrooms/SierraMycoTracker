@@ -1,4 +1,4 @@
-// Storage layer: loads, mutates, and persists MycoTrack data to localStorage.
+// Storage layer: loads, mutates, and persists Sierra Myco Lab data to localStorage.
 // Hybrid local/cloud sync: when Supabase is configured and a user session
 // exists, items are merged with the Supabase `items` table (latest
 // `updated_at` wins) and offline-created items are pushed back up.

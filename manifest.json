@@ -1,6 +1,7 @@
 {
-  "short_name": "MycoTracker",
-  "name": "Mycology Batch & Yield Tracker",
+  "short_name": "Myco Lab",
+  "name": "Sierra Myco Lab",
+  "description": "Sierra Myco Lab — mycology batch, lineage, and yield tracking system.",
   "icons": [
     {
       "src": "https://cdn-icons-png.flaticon.com/512/628/628283.png",

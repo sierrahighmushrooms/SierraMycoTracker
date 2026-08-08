@@ -1,4 +1,4 @@
-// MycoAI - Gemini 2.5 Flash API integration for the MycoTrack AI Assistant.
+// MycoAI - Gemini 2.5 Flash API integration for the Sierra Myco Lab AI Assistant.
 // Provides system prompt, active batch context extraction, API calls, and action execution.
 
 import { db, saveItems } from './db.js';
@@ -36,7 +36,7 @@ function getEffectiveApiKey() {
 
 // System prompt defining MycoAI's persona and behavior
 export const SYSTEM_PROMPT = `
-You are MycoAI, an expert mycology master cultivator and diagnostic assistant embedded in the MycoTracker app.
+You are MycoAI, an expert mycology master cultivator and diagnostic assistant embedded in the Sierra Myco Lab app.
 
 YOUR CORE RESPONSIBILITIES:
 1. Provide practical, scientific, and actionable mycology advice (agar, LC, grain spawn, bulk substrate).

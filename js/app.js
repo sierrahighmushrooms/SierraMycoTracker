@@ -1,4 +1,4 @@
-// MycoTrack Pro - Application entry point.
+// Sierra Myco Lab - Application entry point.
 // Imports all modules, wires up global event listeners, exposes the functions
 // referenced by inline onclick handlers, and initializes the UI.
 
@@ -251,7 +251,7 @@ function exportJSON() {
   const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify({ items: db.items, pcBatches: db.pcBatches }));
   const el = document.createElement('a');
   el.setAttribute('href', dataStr);
-  el.setAttribute('download', `MycoTrack_Backup_${new Date().toISOString().split('T')[0]}.json`);
+  el.setAttribute('download', `SierraMycoLab_Backup_${new Date().toISOString().split('T')[0]}.json`);
   document.body.appendChild(el); el.click(); el.remove();
 }
 
@@ -286,7 +286,7 @@ function exportCSV() {
   const dataStr = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
   const el = document.createElement('a');
   el.setAttribute('href', dataStr);
-  el.setAttribute('download', 'MycoTrack_Data.csv');
+  el.setAttribute('download', 'SierraMycoLab_Data.csv');
   document.body.appendChild(el); el.click(); el.remove();
 }
 

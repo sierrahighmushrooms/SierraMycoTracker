@@ -1,8 +1,8 @@
-// MycoTrack Pro - Service Worker
+// Sierra Myco Lab - Service Worker
 // Provides offline capability by precaching the app shell and runtime-caching
 // static assets (CSS, JS, and CDN libraries).
 
-const CACHE_NAME = 'mycotrack-v2';
+const CACHE_NAME = 'sierra-myco-lab-v1';
 const APP_SHELL = [
   './',
   './index.html',
@@ -14,7 +14,8 @@ const APP_SHELL = [
   './js/db.js',
   './js/camera.js',
   './js/modals.js',
-  './manifest.json'
+  './manifest.json',
+  './privacy.html'
 ];
 
 // Install: precache the application shell
