@@ -1,0 +1,160 @@
+/* ---- Printable Label Isolation (screen) ----
+   Prevents the bulk print section and its QR label cards from
+   leaking through or floating over the normal UI. */
+.print-label-container {
+  position: static !important;
+  display: block !important;
+  width: auto !important;
+  height: auto !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  overflow: visible !important;
+}
+
+.print-card, .label-card, .qr-label {
+  position: relative !important;
+  z-index: 1 !important;
+  margin: 0 !important;
+  padding: 5mm !important;
+  box-shadow: none !important;
+  border: 1px solid #ccc !important;
+  background: white !important;
+  color: black !important;
+}
+
+/* While NOT printing, keep the bulk print section hidden and inert so
+   generated QR labels never appear over the main UI. */
+#bulk-print-section {
+  position: absolute !important;
+  left: -9999px !important;
+  top: 0 !important;
+  width: 1px !important;
+  height: 1px !important;
+  overflow: hidden !important;
+  pointer-events: none !important;
+  z-index: -1 !important;
+}
+
+/* --- Modal fade-in animation ---
+   Provides a smooth entrance for modals that use the animate-fade-in class. */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.animate-fade-in {
+  animation: fadeIn 0.2s ease-out;
+}
+
+/* --- CVG Recipe Calculator results ---
+   Uses tabular numerals so values align cleanly in the result grid. */
+.recipe-result-value {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* --- Biological Efficiency (BE) badge ---
+   Subtle text-shadow to help the indicator stand out against the dark UI. */
+.be-badge {
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+
+/* --- AI Assistant Chat Drawer ---
+   Slide-in animation for the right-side drawer. The drawer is fixed to the
+   right edge and translates off-screen when closed. */
+.ai-drawer {
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: transform;
+}
+
+.drawer-open {
+  transform: translateX(0);
+}
+
+.drawer-closed {
+  transform: translateX(100%);
+}
+
+/* Ensure the AI drawer and feedback modal overlay cleanly above all
+   dashboard cards, maps, and other UI elements. */
+#ai-chat-drawer {
+  z-index: 70;
+}
+
+#feedback-modal {
+  z-index: 80;
+}
+
+#ai-fab {
+  z-index: 60;
+}
+
+/* AI chat message styling */
+.ai-message {
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+.ai-message p {
+  margin: 0;
+  line-height: 1.5;
+}
+
+/* Scrollbar styling for the AI chat messages area */
+#ai-chat-messages::-webkit-scrollbar {
+  width: 6px;
+}
+
+#ai-chat-messages::-webkit-scrollbar-track {
+  background: #1e293b;
+}
+
+#ai-chat-messages::-webkit-scrollbar-thumb {
+  background: #475569;
+  border-radius: 3px;
+}
+
+#ai-chat-messages::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
+}
+
+/* ---- SaaS Landing Page ----
+   Smooth anchor scrolling for the Features / Pricing navigation links. */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Dark backdrop with subtle slate/amber radial glows. */
+#landing-page {
+  min-height: 100vh;
+  background:
+    radial-gradient(ellipse 80% 50% at 50% -10%, rgba(245, 158, 11, 0.12), transparent),
+    radial-gradient(ellipse 60% 40% at 85% 20%, rgba(16, 185, 129, 0.06), transparent),
+    #020617;
+}
+
+/* Amber glow accents used by the hero preview, pricing card, and auth modal. */
+.landing-glow {
+  box-shadow: 0 0 60px rgba(245, 158, 11, 0.12), 0 0 120px rgba(245, 158, 11, 0.05);
+}
+
+.pricing-glow {
+  box-shadow: 0 0 40px rgba(245, 158, 11, 0.15);
+}
+
+.auth-modal-glow {
+  box-shadow: 0 0 80px rgba(245, 158, 11, 0.10);
+}
+
+/* Feature cards lift and glow gently on hover. */
+.feature-card {
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.feature-card:hover {
+  transform: translateY(-3px);
+  border-color: rgba(245, 158, 11, 0.4);
+  box-shadow: 0 0 30px rgba(245, 158, 11, 0.08);
+}

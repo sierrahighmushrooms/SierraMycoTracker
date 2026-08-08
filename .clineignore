@@ -1,0 +1,29 @@
+# Exclude large inventory data exports and backups (prevents token bloat)
+*backup*.json
+export*.json
+*.csv
+*.sqlite
+*.db
+
+# Exclude media assets (binary files that consume unnecessary context)
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.svg
+*.pdf
+*.ico
+
+# Exclude build artifacts, dependencies, and git history
+node_modules/
+dist/
+build/
+.next/
+out/
+.git/
+
+# Exclude OS metadata and log files
+.DS_Store
+Thumbs.db
+*.log
+*.tmp

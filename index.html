@@ -1,0 +1,1087 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MycoTrack Pro v5 - Complete UI/UX Edition</title>
+  <meta name="description" content="Mycology batch, lineage, and yield tracking system.">
+  <meta name="theme-color" content="#020617">
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/628/628283.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="MycoTracker">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+  <!-- Supabase JS v2 (UMD) — exposes the global `supabase` namespace used by js/db.js -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+  <link rel="stylesheet" href="css/styles.css">
+  <link rel="stylesheet" href="css/print.css">
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen font-sans">
+
+  <!-- ==================== PUBLIC SAAS LANDING PAGE ==================== -->
+  <div id="landing-page">
+    <!-- Navigation Bar -->
+    <nav class="max-w-7xl mx-auto flex items-center justify-between py-5 px-4 md:px-6">
+      <div class="flex items-center gap-2">
+        <span class="text-2xl">🍄</span>
+        <span class="text-lg font-bold text-white">MycoTrack <span class="text-amber-400">Pro</span></span>
+      </div>
+      <div class="hidden md:flex items-center gap-8 text-sm text-slate-400">
+        <a href="#features" class="hover:text-white transition">Features</a>
+        <a href="#pricing" class="hover:text-white transition">Pricing</a>
+        <a href="#" onclick="openFeedbackModal(); return false;" class="hover:text-white transition">Roadmap</a>
+      </div>
+      <div class="flex items-center gap-2">
+        <button onclick="openAuthModal('signin')" class="px-4 py-2 rounded-lg text-sm font-semibold text-slate-200 border border-slate-700 hover:border-slate-500 hover:text-white transition">Sign In</button>
+        <button onclick="openAuthModal('signup')" class="px-4 py-2 rounded-lg text-sm font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 transition shadow-lg shadow-amber-500/25">Get Started Free</button>
+      </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section class="max-w-7xl mx-auto text-center pt-14 md:pt-20 pb-16 px-4">
+      <div class="inline-flex items-center gap-2 text-[11px] font-bold text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-full px-3 py-1 mb-6">
+        🧫 Now with AI-powered contamination diagnostics
+      </div>
+      <h1 class="text-4xl md:text-6xl font-extrabold tracking-tight text-white leading-tight">
+        Master Your<br class="hidden md:block">
+        <span class="text-transparent bg-clip-text bg-gradient-to-r from-amber-400 via-amber-300 to-emerald-400">Mushroom Cultivation</span>
+      </h1>
+      <p class="mt-6 text-slate-400 max-w-2xl mx-auto text-sm md:text-base leading-relaxed">
+        The complete mycology workflow platform — batch lineage tracking, sterilization logs,
+        yield analytics, and AI diagnostics. Cloud-synced across all of your devices.
+      </p>
+      <div class="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3">
+        <button onclick="openAuthModal('signup')" class="px-7 py-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold transition shadow-xl shadow-amber-500/30 text-sm">Get Started Free →</button>
+        <a href="#features" class="px-7 py-3 rounded-xl border border-slate-700 text-slate-200 hover:border-slate-500 font-semibold transition text-sm">Explore Features</a>
+      </div>
+
+      <!-- Dynamic product preview mock -->
+      <div class="mt-14 max-w-4xl mx-auto landing-glow rounded-2xl border border-slate-800 bg-slate-900/90 backdrop-blur p-4 md:p-5 text-left">
+        <div class="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
+          <div class="flex items-center gap-2">
+            <span class="w-2.5 h-2.5 rounded-full bg-red-500/70"></span>
+            <span class="w-2.5 h-2.5 rounded-full bg-amber-500/70"></span>
+            <span class="w-2.5 h-2.5 rounded-full bg-emerald-500/70"></span>
+          </div>
+          <span class="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Live Dashboard Preview</span>
+        </div>
+        <div class="grid grid-cols-3 gap-3 mb-4">
+          <div class="bg-slate-800/80 border border-slate-700/60 rounded-lg p-3">
+            <div class="text-[10px] text-slate-500">Total Containers</div>
+            <div class="text-xl font-bold text-white">128</div>
+          </div>
+          <div class="bg-slate-800/80 border border-slate-700/60 rounded-lg p-3">
+            <div class="text-[10px] text-slate-500">Contam Rate</div>
+            <div class="text-xl font-bold text-red-400">4%</div>
+          </div>
+          <div class="bg-slate-800/80 border border-slate-700/60 rounded-lg p-3">
+            <div class="text-[10px] text-slate-500">Total Yield</div>
+            <div class="text-xl font-bold text-blue-400">1,240g</div>
+          </div>
+        </div>
+        <div class="space-y-2">
+          <div class="flex items-center justify-between bg-slate-800/60 border border-slate-700/60 rounded-lg p-3">
+            <div class="flex items-center gap-3 min-w-0">
+              <span class="text-xs font-mono bg-slate-900 text-amber-400 px-2 py-0.5 rounded border border-slate-700 whitespace-nowrap">WO-ALC-0208-01</span>
+              <span class="text-xs text-slate-300 truncate">Whole Oats - ALC (#1/7)</span>
+            </div>
+            <span class="text-[10px] uppercase font-bold px-2 py-1 rounded bg-slate-700 text-emerald-300 shrink-0">Colonizing</span>
+          </div>
+          <div class="flex items-center justify-between bg-slate-800/60 border border-slate-700/60 rounded-lg p-3">
+            <div class="flex items-center gap-3 min-w-0">
+              <span class="text-xs font-mono bg-slate-900 text-amber-400 px-2 py-0.5 rounded border border-slate-700 whitespace-nowrap">CVG-GT-0125-03</span>
+              <span class="text-xs text-slate-300 truncate">CVG Bulk - GT (#3/6)</span>
+            </div>
+            <span class="text-[10px] uppercase font-bold px-2 py-1 rounded bg-emerald-900/50 text-emerald-300 shrink-0">Fruiting</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Features Grid -->
+    <section id="features" class="max-w-7xl mx-auto px-4 py-16 scroll-mt-20">
+      <h2 class="text-2xl md:text-3xl font-bold text-white text-center">Everything you need to cultivate with confidence</h2>
+      <p class="text-center text-slate-500 text-sm mt-3 max-w-xl mx-auto">Purpose-built tools for hobbyists and commercial growers alike.</p>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mt-10">
+        <div class="feature-card bg-slate-900 border border-slate-800 rounded-2xl p-6">
+          <div class="w-11 h-11 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-xl mb-4">📊</div>
+          <h3 class="text-white font-bold mb-2">Batch Tracking</h3>
+          <p class="text-sm text-slate-400 leading-relaxed">Full lineage from spore to harvest — G2G transfers, PC sterilization logs, stage history, and QR-labeled containers.</p>
+        </div>
+        <div class="feature-card bg-slate-900 border border-slate-800 rounded-2xl p-6">
+          <div class="w-11 h-11 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-xl mb-4">🤖</div>
+          <h3 class="text-white font-bold mb-2">AI Mycology Diagnostics</h3>
+          <p class="text-sm text-slate-400 leading-relaxed">The built-in MycoAI assistant identifies contamination vectors, recommends fixes, and answers cultivation questions in real time.</p>
+        </div>
+        <div class="feature-card bg-slate-900 border border-slate-800 rounded-2xl p-6">
+          <div class="w-11 h-11 rounded-xl bg-fuchsia-500/10 border border-fuchsia-500/30 flex items-center justify-center text-xl mb-4">💡</div>
+          <h3 class="text-white font-bold mb-2">Community-Driven Features</h3>
+          <p class="text-sm text-slate-400 leading-relaxed">Vote on the public roadmap and submit feature requests. The platform evolves with cultivators — not against them.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Pricing Tier Cards -->
+    <section id="pricing" class="max-w-5xl mx-auto px-4 py-16 scroll-mt-20">
+      <h2 class="text-2xl md:text-3xl font-bold text-white text-center">Simple, transparent pricing</h2>
+      <p class="text-center text-slate-500 text-sm mt-3">Start free. Upgrade when your operation grows.</p>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-10">
+        <!-- Free Tier -->
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 flex flex-col">
+          <h3 class="text-white font-bold">Free</h3>
+          <div class="mt-2 flex items-end gap-1">
+            <span class="text-3xl font-extrabold text-white">$0</span>
+            <span class="text-xs text-slate-500 mb-1">/ forever</span>
+          </div>
+          <ul class="mt-5 space-y-2 text-sm text-slate-400 flex-1">
+            <li class="flex gap-2"><span class="text-emerald-400">✓</span> Unlimited container tracking</li>
+            <li class="flex gap-2"><span class="text-emerald-400">✓</span> QR label printing</li>
+            <li class="flex gap-2"><span class="text-emerald-400">✓</span> Local-first data storage</li>
+            <li class="flex gap-2"><span class="text-emerald-400">✓</span> Community roadmap access</li>
+          </ul>
+          <button onclick="openAuthModal('signup')" class="mt-6 w-full py-2.5 rounded-lg border border-slate-700 text-slate-200 hover:border-slate-500 font-bold text-sm transition">Get Started Free</button>
+        </div>
+        <!-- Pro Tier -->
+        <div class="relative bg-slate-900 border border-amber-500/50 rounded-2xl p-6 flex flex-col pricing-glow">
+          <span class="absolute -top-3 left-1/2 -translate-x-1/2 text-[10px] font-bold bg-amber-500 text-slate-950 px-3 py-1 rounded-full uppercase tracking-wider whitespace-nowrap">Most Popular</span>
+          <h3 class="text-amber-400 font-bold">Pro</h3>
+          <div class="mt-2 flex items-end gap-1">
+            <span class="text-3xl font-extrabold text-white">$6</span>
+            <span class="text-xs text-slate-500 mb-1">/ month</span>
+          </div>
+          <ul class="mt-5 space-y-2 text-sm text-slate-400 flex-1">
+            <li class="flex gap-2"><span class="text-amber-400">✓</span> Everything in Free</li>
+            <li class="flex gap-2"><span class="text-amber-400">✓</span> ☁️ Real-time cloud sync</li>
+            <li class="flex gap-2"><span class="text-amber-400">✓</span> Multi-device access</li>
+            <li class="flex gap-2"><span class="text-amber-400">✓</span> AI diagnostics included</li>
+            <li class="flex gap-2"><span class="text-amber-400">✓</span> Priority support</li>
+          </ul>
+          <button onclick="openAuthModal('signup')" class="mt-6 w-full py-2.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-sm transition shadow-lg shadow-amber-500/25">Start Pro Trial</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="border-t border-slate-800 py-8 text-center text-xs text-slate-500">
+      © 2026 MycoTrack Pro — Built for cultivators, by cultivators. 🍄
+    </footer>
+  </div>
+
+  <!-- ==================== APP DASHBOARD (authenticated shell) ==================== -->
+  <div id="app-dashboard" class="hidden p-4 md:p-6">
+
+  <div class="max-w-7xl mx-auto space-y-6">
+    <!-- Header & Action Bar -->
+    <header class="border-b border-slate-700 pb-4 space-y-4">
+      <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+          <h1 class="text-2xl font-bold text-emerald-400">🍄 MycoTrack Pro</h1>
+          <p class="text-xs text-slate-400">Workflow, Lineage, Bulk PC Prep & Audit System</p>
+        </div>
+        <div class="flex flex-wrap gap-2">
+          <button onclick="openBatchModal()" class="bg-amber-600 hover:bg-amber-500 text-slate-950 px-3 py-1.5 rounded text-xs font-bold transition">📋 PC Batch Log</button>
+          <button onclick="document.getElementById('import-file').click()" class="bg-slate-700 hover:bg-slate-600 px-3 py-1.5 rounded text-xs transition">Restore JSON</button>
+          <input type="file" id="import-file" class="hidden" accept=".json" onchange="importJSON(event)">
+          <button onclick="exportJSON()" class="bg-slate-700 hover:bg-slate-600 px-3 py-1.5 rounded text-xs transition">Backup JSON</button>
+          <button onclick="exportCSV()" class="bg-blue-600 hover:bg-blue-500 px-3 py-1.5 rounded text-xs transition">Export CSV</button>
+          <button onclick="openPrintSettingsModal()" class="bg-indigo-600 hover:bg-indigo-500 px-3 py-1.5 rounded text-xs font-bold transition flex items-center gap-1">🖨️ Label Settings</button>
+          <button onclick="startScanner()" class="bg-emerald-600 hover:bg-emerald-500 px-3 py-1.5 rounded text-xs font-bold transition flex items-center gap-1">📷 Scan QR</button>
+          <button onclick="openRecipeCalcModal()" class="bg-teal-600 hover:bg-teal-500 px-3 py-1.5 rounded text-xs font-bold transition flex items-center gap-1">🧮 Recipe Calc</button>
+          <button onclick="openFeedbackModal()" class="bg-fuchsia-600 hover:bg-fuchsia-500 px-3 py-1.5 rounded text-xs font-bold transition flex items-center gap-1">💡 Request Feature</button>
+          <button onclick="openAuthModal()" class="bg-slate-700 hover:bg-slate-600 px-3 py-1.5 rounded text-xs font-bold transition flex items-center gap-1">👤 Account / Sync</button>
+          <span id="cloud-sync-status" class="hidden items-center gap-1 text-[10px] font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-700/60 px-2 py-1 rounded-full self-center whitespace-nowrap">☁️ Cloud Synced</span>
+        </div>
+      </div>
+
+      <!-- Dashboard Stats -->
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div class="bg-slate-800 p-3 rounded border border-slate-700">
+          <div class="text-xs text-slate-400">Total Containers</div>
+          <div id="stat-total" class="text-xl font-bold text-white">0</div>
+        </div>
+        <div class="bg-slate-800 p-3 rounded border border-slate-700">
+          <div class="text-xs text-slate-400">Uninoculated / Ready</div>
+          <div id="stat-blank" class="text-xl font-bold text-yellow-400">0</div>
+        </div>
+        <div class="bg-slate-800 p-3 rounded border border-slate-700">
+          <div class="text-xs text-slate-400">Overall Contam Rate</div>
+          <div id="stat-contam" class="text-xl font-bold text-red-400">0%</div>
+        </div>
+        <div class="bg-slate-800 p-3 rounded border border-slate-700">
+          <div class="text-xs text-slate-400">Total Yield (g)</div>
+          <div id="stat-yield" class="text-xl font-bold text-blue-400">0</div>
+        </div>
+      </div>
+    </header>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <!-- Forms Section -->
+      <div class="space-y-6">
+        
+        <!-- BULK PC PREP FORM -->
+        <div class="bg-slate-800 p-5 rounded-xl border border-amber-500/40 shadow-lg space-y-4">
+          <div class="flex justify-between items-center">
+            <h2 class="text-lg font-semibold text-amber-400">🔥 Bulk PC Prep</h2>
+            <span class="text-[10px] bg-amber-500/20 text-amber-300 font-bold px-2 py-0.5 rounded">Sterilization Run</span>
+          </div>
+
+          <form id="bulk-form" class="space-y-3">
+            <div class="grid grid-cols-2 gap-2">
+              <div>
+                <label class="block text-xs font-medium text-slate-400 mb-1">Medium</label>
+                <select id="bulk-medium" onchange="toggleLCMedium(); updateBatchCodeAuto()" class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-sm text-slate-100">
+                  <option selected>Whole Oats</option>
+                  <option>Rye Grain</option>
+                  <option>Millet</option>
+                  <option>Popcorn</option>
+                  <option>Agar Dishes</option>
+                  <option>Media Bottle (Agar/LC)</option>
+                  <option>Liquid Culture</option>
+                  <option>CVG Bulk</option>
+                  <option value="PC Substrate - Masters Mix">PC Substrate - Master's Mix (50/50 Oak & Soy)</option>
+                  <option value="PC Substrate - Coir/Verm/Gypsum">PC Substrate - CVG</option>
+                  <option value="PC Substrate - Supplemented Sawdust">PC Substrate - Supplemented Sawdust</option>
+                  <option value="PC Substrate - Straw/Manure">PC Substrate - Straw / Manure</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-slate-400 mb-1">Container</label>
+                <select id="bulk-container" onchange="toggleCustomContainer()" class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-sm text-slate-100">
+                  <option>Quart Jar</option>
+                  <option>Pint Jar</option>
+                  <option>3lb Bag</option>
+                  <option>5lb Bag</option>
+                  <option>Petri Dish</option>
+                  <option>500mL Bottle</option>
+                  <option>1000mL Bottle</option>
+                  <option value="custom">+ Custom Container</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Custom Container Fields -->
+            <div id="custom-container-fields" class="hidden grid grid-cols-2 gap-2">
+              <div>
+                <label class="block text-xs font-medium text-slate-400 mb-1">Custom Name</label>
+                <input type="text" id="custom-container-name" placeholder="e.g., 10oz Jar" class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-sm text-slate-100" oninput="updateLCTargetVolumeDefault()">
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-slate-400 mb-1">Capacity (mL)</label>
+                <input type="number" id="custom-container-capacity" placeholder="300" class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-sm text-slate-100" oninput="updateLCTargetVolumeDefault()">
+              </div>
+            </div>
+
+            <!-- Media Bottle Fields -->
+            <div id="media-bottle-fields" class="hidden grid grid-cols-2 gap-2">
+              <div>
+                <label class="block text-xs font-medium text-slate-400 mb-1">Volume per Container (mL)</label>
+                <input type="number" id="bulk-volume-ml" placeholder="e.g., 500" class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-sm text-slate-100">
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-slate-400 mb-1">Color / Variant</label>
+                <input type="text" id="bulk-color" placeholder="e.g., Charcoal, Blue, Pink" class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-sm text-slate-100">
+              </div>
+            </div>
+
+            <!-- LIQUID CULTURE RECIPE CALCULATOR -->
+            <div id="lc-calculator-box" class="hidden bg-emerald-950/20 p-3 rounded-lg border border-emerald-800/40 space-y-2">
+              <h4 class="text-xs font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-1">
+                <span>🧪</span> Liquid Culture Recipe Calculator
+              </h4>
+              <div class="grid grid-cols-2 gap-2">
+                <div>
+                  <label class="block text-[10px] text-emerald-300 font-medium mb-1">Target Volume per Container (mL)</label>
+                  <input type="number" id="lc-target-volume" value="500" class="w-full bg-slate-900 border border-emerald-800/80 rounded p-1.5 text-xs text-slate-100" oninput="updateLCCalculator()">
+                </div>
+                <div class="flex flex-col justify-end">
+                  <span class="text-[10px] text-slate-400">Total Liquid for batch:</span>
+                  <span id="lc-total-batch-volume" class="text-xs font-bold text-white">3500 mL</span>
+                </div>
+              </div>
+              <div class="bg-slate-900 p-2 rounded text-xs space-y-1 text-slate-300 border border-slate-800">
+                <div class="flex justify-between">
+                  <span>💧 Distilled Water:</span>
+                  <span id="lc-calc-water" class="font-bold text-emerald-400">500 mL</span>
+                </div>
+                <div class="flex justify-between">
+                  <span>🌾 Light Malt Extract (LME):</span>
+                  <span id="lc-calc-lme" class="font-bold text-emerald-400">1.00 g</span>
+                </div>
+                <div class="flex justify-between">
+                  <span>🍯 Honey / Dextrose:</span>
+                  <span id="lc-calc-sugar" class="font-bold text-emerald-400">10.00 g</span>
+                </div>
+                <div class="flex justify-between">
+                  <span>🧪 Peptone:</span>
+                  <span id="lc-calc-peptone" class="font-bold text-emerald-400">0.50 g</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-3 gap-2">
+              <div>
+                <label class="block text-xs font-medium text-slate-400 mb-1">Quantity</label>
+                <input type="number" id="bulk-qty" min="1" max="50" value="7" required class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-sm text-slate-100" oninput="updateLCCalculator()">
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-slate-400 mb-1">PC Time (m)</label>
+                <input type="number" id="bulk-time" value="180" required class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-sm text-slate-100">
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-slate-400 mb-1">Batch Code</label>
+                <input type="text" id="bulk-batch" placeholder="PC-Aug5" class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-sm text-slate-100">
+              </div>
+            </div>
+
+            <button type="submit" class="w-full bg-amber-600 hover:bg-amber-500 text-slate-950 font-bold py-2 rounded transition">
+              ⚡ Generate & Print Labels
+            </button>
+          </form>
+        </div>
+
+        <!-- UNIFIED LOG ACTIVE INOCULATIONS MODULE -->
+        <div class="bg-slate-800 p-5 rounded-xl border border-emerald-500/40 shadow-lg space-y-4">
+          <div class="flex justify-between items-center">
+            <h2 class="text-lg font-semibold text-emerald-400">💉 Log Active Inoculations</h2>
+            <span class="text-[10px] bg-emerald-500/20 text-emerald-300 font-bold px-2 py-0.5 rounded">Inoculation Run</span>
+          </div>
+          <form id="item-form" class="space-y-3">
+            
+            <!-- Sterilization Metadata -->
+            <div class="space-y-2 border-b border-slate-700/50 pb-3">
+              <label class="block text-xs font-semibold text-slate-300">Sterilization / PC Batch</label>
+              <div class="flex gap-4 text-[11px] mb-1">
+                <label class="flex items-center gap-1.5 cursor-pointer">
+                  <input type="radio" name="pc-source" value="existing" checked onchange="togglePCSourceFields()" class="text-emerald-500 focus:ring-emerald-500 bg-slate-900 border-slate-700">
+                  <span>Existing PC Batch ID</span>
+                </label>
+                <label class="flex items-center gap-1.5 cursor-pointer">
+                  <input type="radio" name="pc-source" value="manual" onchange="togglePCSourceFields()" class="text-emerald-500 focus:ring-emerald-500 bg-slate-900 border-slate-700">
+                  <span>Manual PC Date</span>
+                </label>
+              </div>
+
+              <!-- PC Batch Dropdown -->
+              <div id="pc-batch-select-container">
+                <select id="input-pc-select" class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-sm text-slate-100">
+                  <!-- Will be populated dynamically -->
+                </select>
+              </div>
+
+              <!-- Manual PC Date Input -->
+              <div id="pc-date-input-container" class="hidden">
+                <input type="date" id="input-pc-date" class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-sm text-slate-100">
+              </div>
+            </div>
+
+            <!-- Basic Info: Strain & Medium -->
+            <div class="grid grid-cols-2 gap-2">
+              <div>
+                <label class="block text-xs font-medium text-slate-400 mb-1">Strain</label>
+                <input type="text" id="input-strain" required placeholder="e.g., APE" class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-sm text-slate-100">
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-slate-400 mb-1">Medium</label>
+                <select id="input-medium" class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-sm text-slate-100">
+                  <option selected>Whole Oats</option>
+                  <option>Rye Grain</option>
+                  <option>Millet</option>
+                  <option>Agar</option>
+                  <option>Liquid Culture</option>
+                  <option>CVG Bulk</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Container Type & Stage (dynamic) -->
+            <div class="grid grid-cols-2 gap-2">
+              <div>
+                <label class="block text-xs font-medium text-slate-400 mb-1">Container Type</label>
+                <select id="input-container-type" onchange="handleContainerTypeChange()" class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-sm text-slate-100">
+                  <option value="Agar Dish / Slant">Agar Dish / Slant</option>
+                  <option value="Liquid Culture Jar">Liquid Culture Jar</option>
+                  <option value="Grain Jar / Bag">Grain Jar / Bag</option>
+                  <option value="Fruiting Block / Monotub">Fruiting Block / Monotub</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-slate-400 mb-1">Stage</label>
+                <select id="input-stage" class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-sm text-slate-100">
+                  <!-- Dynamically populated based on Container Type -->
+                </select>
+              </div>
+            </div>
+
+            <!-- Container Size / Fill Weight -->
+            <div>
+              <label class="block text-xs font-medium text-slate-400 mb-1">Container Size / Fill Weight</label>
+              <input type="text" id="input-container-weight" placeholder="e.g., 5 lb, 3 lb, 500 mL" class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-sm text-slate-100">
+            </div>
+
+            <!-- Inoculant Type & Source Selection -->
+            <div class="space-y-2">
+              <div>
+                <label class="block text-xs font-medium text-slate-400 mb-1">Inoculant Type</label>
+                <select id="input-inoculant-type" onchange="toggleInoculantTypeFields()" class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-sm text-slate-100">
+                  <option value="Liquid Culture" selected>Liquid Culture</option>
+                  <option value="Agar">Agar</option>
+                  <option value="Spore Syringe">Spore Syringe</option>
+                  <option value="Grain-to-Grain">Grain-to-Grain</option>
+                </select>
+              </div>
+
+              <div id="inoculant-source-container" class="space-y-2 bg-slate-900/40 p-3 rounded border border-slate-700/50">
+                <div class="flex justify-between items-center">
+                  <label class="block text-xs font-medium text-slate-400">Inoculant Source</label>
+                  <button type="button" onclick="openQuickAddModal()" class="text-emerald-400 hover:text-emerald-300 text-xs font-bold flex items-center gap-1">
+                    <span>➕</span> Quick Add
+                  </button>
+                </div>
+                
+                <select id="input-parent" class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-sm text-slate-100">
+                  <!-- Dynamically filled depending on type -->
+                </select>
+
+                <!-- Volume field for Liquid Culture -->
+                <div id="volume-per-bag-container">
+                  <label class="block text-xs font-medium text-slate-400 mb-1">Volume per Item (cc/mL)</label>
+                  <input type="number" id="input-volume-per-bag" min="1" value="10" class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-sm text-slate-100">
+                </div>
+              </div>
+            </div>
+
+            <!-- Batch Generation (Quantity) -->
+            <div>
+              <label class="block text-xs font-medium text-slate-400 mb-1">Quantity</label>
+              <input type="number" id="input-quantity" min="1" value="1" required class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-sm text-slate-100">
+            </div>
+
+            <!-- Label Printing Toggle -->
+            <div class="flex items-center gap-2 py-1">
+              <input type="checkbox" id="input-print-toggle" checked class="rounded text-emerald-600 focus:ring-emerald-500 bg-slate-900 border-slate-700">
+              <label for="input-print-toggle" class="text-xs font-medium text-slate-300 cursor-pointer select-none">Print labels for these items upon creation</label>
+            </div>
+
+            <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold py-2 rounded transition flex items-center justify-center gap-2">
+              <span>💉</span> Create & Log Inoculation(s)
+            </button>
+          </form>
+        </div>
+
+      </div>
+
+      <!-- Main Directory -->
+      <div class="lg:col-span-2 space-y-4">
+        <div class="flex flex-wrap justify-between items-center gap-4">
+          <div id="filter-bar" class="flex flex-wrap items-center gap-2"></div>
+          <button onclick="deleteUninoculated()" class="text-xs text-red-400 hover:text-red-300 underline whitespace-nowrap">Clear All Uninoculated</button>
+        </div>
+
+        <!-- Dashboard Bulk Selection Controls -->
+        <div class="flex items-center justify-between bg-slate-800/80 p-3 rounded-lg border border-slate-700">
+          <label class="flex items-center gap-2 text-xs font-semibold text-slate-300 cursor-pointer select-none">
+            <input type="checkbox" id="select-all-checkbox" onchange="toggleSelectAll(this)" class="rounded text-emerald-600 focus:ring-emerald-500 bg-slate-900 border-slate-700">
+            <span>Select All Shown</span>
+          </label>
+          <button id="print-selected-btn" onclick="printSelectedLabels()" class="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold px-3 py-1.5 rounded transition">
+            🖨️ Print Selected Labels (0)
+          </button>
+        </div>
+
+        <div id="items-grid" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
+      </div>
+    </div>
+  </div>
+
+    <!-- Floating AI Assistant FAB -->
+    <button id="ai-fab" onclick="toggleAIDrawer()" class="fixed bottom-5 right-5 z-[60] bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-sm px-4 py-3 rounded-full shadow-2xl shadow-emerald-900/50 transition transform hover:scale-105 flex items-center gap-2">
+      🤖 Ask MycoAI
+    </button>
+
+    <!-- AI Assistant Chat Drawer -->
+    <div id="ai-chat-drawer" class="ai-drawer drawer-closed fixed top-0 right-0 h-full w-full max-w-md z-[70] bg-slate-900 border-l border-slate-700 shadow-2xl flex flex-col">
+      <div class="p-4 border-b border-slate-700 flex justify-between items-center bg-slate-900">
+        <h2 class="text-lg font-bold text-emerald-400 flex items-center gap-2">
+          <span>🤖</span> MycoAI Assistant
+        </h2>
+        <div class="flex items-center gap-2">
+          <button onclick="openApiKeyManager()" class="text-slate-400 hover:text-amber-400 font-bold text-lg p-1 rounded hover:bg-slate-800 transition" title="API Key Settings">🔑</button>
+          <button onclick="closeAIDrawer()" class="text-slate-400 hover:text-white font-bold text-lg p-1 rounded hover:bg-slate-800 transition" title="Close">✕</button>
+        </div>
+      </div>
+
+      <div id="ai-chat-messages" class="flex-1 overflow-y-auto p-4 space-y-4"></div>
+
+      <div class="p-4 border-t border-slate-700 bg-slate-900">
+        <div class="flex gap-2">
+          <input type="text" id="ai-chat-input" placeholder="Ask about batches, teks, or contam..." class="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-500" onkeydown="if(event.key==='Enter')sendChatMessage()">
+          <button onclick="sendChatMessage()" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-4 py-2 rounded-lg transition text-sm shrink-0">Send</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+  <!-- ==================== END APP DASHBOARD ==================== -->
+
+  <!-- PC Batch Log Modal -->
+  <div id="batch-modal" class="fixed inset-0 bg-black/80 hidden items-center justify-center p-4 z-40">
+    <div class="bg-slate-800 border border-slate-700 rounded-xl w-full max-w-3xl max-h-[90vh] flex flex-col">
+      <div class="p-4 border-b border-slate-700 flex justify-between items-center">
+        <div>
+          <h2 class="text-lg font-bold text-amber-400">🔥 PC Batch Activity Log</h2>
+          <p class="text-xs text-slate-400">Track sterilization history, success rates, and bulk purge batches.</p>
+        </div>
+        <button onclick="closeBatchModal()" class="text-slate-400 hover:text-white font-bold text-lg">✕</button>
+      </div>
+      <div class="p-4 overflow-y-auto space-y-4 flex-1" id="batch-modal-content"></div>
+    </div>
+  </div>
+
+  <!-- Single Item Detail Modal -->
+  <div id="modal" class="fixed inset-0 z-50 items-center justify-center bg-black/80 p-2 sm:p-4 overflow-hidden min-h-[100dvh] hidden">
+    <div class="w-full max-w-lg max-h-[85dvh] flex flex-col bg-slate-900 border border-slate-700 rounded-lg shadow-2xl overflow-hidden">
+      <div class="shrink-0 p-4 bg-slate-900 border-b border-slate-800 flex justify-between items-start z-10">
+        <div>
+          <span id="modal-id" class="text-xs font-mono text-emerald-400 bg-slate-900 px-2 py-0.5 rounded border border-slate-700"></span>
+          <h2 id="modal-label" class="text-xl font-bold mt-1 text-slate-100"></h2>
+          <p id="modal-lineage" class="text-xs text-slate-400 mt-1"></p>
+          <div id="modal-lineage-badge" class="hidden"></div>
+        </div>
+        <div class="flex gap-2 shrink-0">
+          <button onclick="printSingleLabel()" class="bg-slate-700 hover:bg-slate-600 p-2 rounded" title="Print QR Label">🖨️</button>
+          <button onclick="deleteActiveItem()" class="bg-red-900/60 hover:bg-red-800 text-red-200 p-2 rounded" title="Delete Item">🗑️</button>
+          <button onclick="closeModal()" class="p-2 text-slate-400 hover:text-white bg-slate-800 rounded-full shrink-0 ml-2" title="Close">✕</button>
+        </div>
+      </div>
+
+      <div class="overflow-y-auto p-4 space-y-4 grow">
+        <!-- Inactive Container Lockout Badge -->
+        <div id="modal-inactive-badge" class="hidden"></div>
+
+        <!-- Quick Inoculate Banner for Blank Items -->
+        <div id="inoculate-banner" class="hidden bg-amber-500/10 border border-amber-500/40 p-4 rounded-lg space-y-3">
+          <h3 class="text-sm font-bold text-amber-400">💉 Inoculate Blank Container</h3>
+          <p class="text-xs text-slate-300">Assign genetics to move from "Uninoculated" to active tracking.</p>
+          <div class="grid grid-cols-2 gap-2">
+            <input type="text" id="inoc-strain" placeholder="Strain Name (e.g., GT)" class="bg-slate-900 border border-slate-700 rounded p-2 text-xs text-white">
+            <select id="inoc-parent" class="bg-slate-900 border border-slate-700 rounded p-2 text-xs text-white">
+              <option value="">Source: Spore / LC</option>
+            </select>
+          </div>
+          <button onclick="applyInoculation()" class="w-full bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold py-2 rounded">
+            Confirm Inoculation
+          </button>
+        </div>
+
+        <!-- Milestones Row -->
+        <div class="grid grid-cols-2 gap-4">
+          <div class="bg-slate-900 p-3 rounded border border-slate-700 text-center space-y-2">
+            <h4 class="text-xs text-slate-400 mb-2">Colonization</h4>
+            <button id="btn-break-shake" onclick="logBreakAndShake()" class="bg-blue-600 hover:bg-blue-500 text-xs text-white px-3 py-1.5 rounded w-full">Log Break & Shake</button>
+            <p id="text-break-shake" class="text-xs text-slate-300 hidden"></p>
+            <button id="btn-g2g-transfer" type="button" onclick="openG2GModal()" class="bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold py-1.5 rounded w-full transition flex items-center justify-center gap-1.5">
+              <span>🧫</span> Perform G2G Transfer
+            </button>
+          </div>
+          <div id="yield-log-block" class="bg-slate-900 p-3 rounded border border-slate-700 text-center">
+            <h4 class="text-xs text-slate-400 mb-2">Yield Log (Grams)</h4>
+            <div class="flex gap-2">
+              <input type="number" id="input-yield" placeholder="0" class="w-full bg-slate-800 text-white rounded p-1 text-sm">
+              <button onclick="logYield()" class="bg-emerald-600 hover:bg-emerald-500 text-xs px-2 rounded">+</button>
+            </div>
+            <p id="text-yield-total" class="text-xs text-emerald-400 font-bold mt-2">Total: 0g</p>
+          </div>
+        </div>
+
+        <!-- Flush Yield Tracking Block (Bulk Substrate / Fruiting) -->
+        <div id="flush-yield-section" class="hidden bg-slate-800/80 border border-slate-700 rounded-lg p-4 space-y-3 mt-4">
+          <div class="flex items-center justify-between border-b border-slate-700 pb-2">
+            <h4 class="text-sm font-bold text-emerald-400 flex items-center gap-2">
+              🍄 Harvest & Flush Yields
+            </h4>
+            <!-- Visual Counter Badges -->
+            <div class="flex gap-2 text-xs">
+              <span class="bg-emerald-950 border border-emerald-600 text-emerald-300 px-2 py-1 rounded font-bold">
+                Wet: <span id="yield-total-wet">0</span>g
+              </span>
+              <span class="bg-amber-950 border border-amber-600 text-amber-300 px-2 py-1 rounded font-bold">
+                Dry (Est.): <span id="yield-total-dry">0</span>g
+              </span>
+              <span class="be-badge bg-blue-950 border border-blue-600 text-blue-300 px-2 py-1 rounded font-bold">
+                BE: <span id="yield-total-be">0</span>%
+              </span>
+            </div>
+          </div>
+
+          <!-- New Flush Entry Form -->
+          <div class="grid grid-cols-12 gap-2 text-xs">
+            <div class="col-span-3">
+              <label class="block text-slate-400 mb-1">Flush #</label>
+              <select id="flush-num-input" class="w-full bg-slate-900 border border-slate-700 rounded p-1.5 text-slate-100">
+                <option value="Flush 1">Flush 1</option>
+                <option value="Flush 2">Flush 2</option>
+                <option value="Flush 3">Flush 3</option>
+                <option value="Flush 4+">Flush 4+</option>
+              </select>
+            </div>
+            <div class="col-span-4">
+              <label class="block text-slate-400 mb-1">Wet Weight (g)</label>
+              <input type="number" id="flush-wet-input" placeholder="e.g. 250" class="w-full bg-slate-900 border border-slate-700 rounded p-1.5 text-slate-100" min="0" step="0.1">
+            </div>
+            <div class="col-span-5 flex items-end">
+              <button type="button" onclick="addFlushYieldRecord()" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-1.5 px-3 rounded transition text-xs">
+                ➕ Log Harvest
+              </button>
+            </div>
+          </div>
+
+          <!-- Flush History Table -->
+          <div class="overflow-x-auto max-h-40 overflow-y-auto mt-2 border border-slate-700/60 rounded">
+            <table class="w-full text-left text-xs text-slate-300">
+              <thead class="bg-slate-900/90 text-slate-400 sticky top-0 border-b border-slate-700">
+                <tr>
+                  <th class="p-2">Flush</th>
+                  <th class="p-2">Wet</th>
+                  <th class="p-2">Dry (~10%)</th>
+                  <th class="p-2">Date</th>
+                  <th class="p-2 text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody id="flush-history-table-body" class="divide-y divide-slate-800">
+                <!-- Rendered dynamically -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Advance Stage Form -->
+        <form id="stage-form" class="bg-slate-900 p-4 rounded-lg border border-slate-700 space-y-3">
+          <h3 class="text-sm font-semibold text-emerald-400">Advance Stage</h3>
+          <div>
+            <label class="block text-xs font-medium text-slate-400 mb-1">Container Type</label>
+            <select id="modal-container-type" onchange="handleModalContainerTypeChange()" class="w-full bg-slate-800 border border-slate-700 rounded p-2 text-sm text-slate-100">
+              <option value="Agar Dish / Slant">Agar Dish / Slant</option>
+              <option value="Liquid Culture Jar">Liquid Culture Jar</option>
+              <option value="Grain Jar / Bag">Grain Jar / Bag</option>
+              <option value="Fruiting Block / Monotub">Fruiting Block / Monotub</option>
+            </select>
+          </div>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <select id="modal-stage-select" onchange="toggleContamFields()" class="md:col-span-1 w-full bg-slate-800 border border-slate-700 rounded p-2 text-sm text-slate-100"></select>
+            <input type="number" id="modal-temp" placeholder="Temp (°F)" class="w-full bg-slate-800 border border-slate-700 rounded p-2 text-sm text-slate-100">
+            <input type="number" id="modal-hum" placeholder="Humid (%)" class="w-full bg-slate-800 border border-slate-700 rounded p-2 text-sm text-slate-100">
+          </div>
+
+          <!-- Dynamic Contamination Diagnostic Audit Fields -->
+          <div id="contam-audit-fields" class="hidden bg-red-950/40 p-3 rounded-lg border border-red-800/60 space-y-2">
+            <h4 class="text-xs font-bold text-red-400 uppercase tracking-wider flex items-center gap-1">
+              <span>⚠️</span> Contamination Diagnostic Audit
+            </h4>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+              <div>
+                <label class="block text-[10px] text-red-300 font-medium mb-1">Contaminant Type</label>
+                <select id="modal-contam-type" class="w-full bg-slate-900 border border-red-800/80 rounded p-1.5 text-xs text-red-200">
+                  <option value="Trichoderma (Green Mold)">Trichoderma (Green Mold)</option>
+                  <option value="Cobweb Mold">Cobweb Mold</option>
+                  <option value="Wet Bubble">Wet Bubble</option>
+                  <option value="Bacterial / Sour Rot">Bacterial / Sour Rot</option>
+                  <option value="Unknown / Other">Unknown / Other</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-[10px] text-red-300 font-medium mb-1">Probable Vector Cause</label>
+                <select id="modal-contam-vector" class="w-full bg-slate-900 border border-red-800/80 rounded p-1.5 text-xs text-red-200">
+                  <option value="Sterilization Deficit (PSI/Time)">Sterilization Deficit (PSI/Time)</option>
+                  <option value="Grain Hydration / Burst Kernels">Grain Hydration / Burst Kernels</option>
+                  <option value="Dirty Inoculant (Spore/LC)">Dirty Inoculant (Spore/LC)</option>
+                  <option value="Handling / SAB Airborne Air">Handling / SAB Airborne Air</option>
+                  <option value="Container Filter / Lid Seal Failure">Container Filter / Lid Seal Failure</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <textarea id="modal-stage-notes" rows="2" placeholder="Notes..." class="w-full bg-slate-800 border border-slate-700 rounded p-2 text-sm text-slate-100"></textarea>
+          <button type="submit" class="w-full bg-slate-700 hover:bg-emerald-600 text-white text-xs font-bold py-2 rounded transition">Save Stage Update</button>
+        </form>
+
+        <!-- History Log -->
+        <div>
+          <h3 class="text-sm font-semibold text-slate-300 mb-2">Lifecycle History</h3>
+          <div id="modal-history" class="space-y-2 border border-slate-700 rounded p-3 bg-slate-900"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- G2G Transfer Modal -->
+  <div id="g2g-modal" class="fixed inset-0 bg-black/80 hidden items-center justify-center p-4 z-50 animate-fade-in">
+    <div class="bg-slate-800 border border-slate-700 rounded-xl w-full max-w-lg p-5 space-y-4 shadow-2xl">
+      <div class="flex justify-between items-center border-b border-slate-700/60 pb-2">
+        <h3 class="text-md font-bold text-emerald-400 flex items-center gap-1.5">
+          <span>🧫</span> Grain-to-Grain Transfer
+        </h3>
+        <button onclick="closeG2GModal()" class="text-slate-400 hover:text-white font-bold text-lg">✕</button>
+      </div>
+
+      <!-- Source Item Info -->
+      <div class="bg-slate-900 p-3 rounded-lg border border-slate-700 space-y-1">
+        <div class="text-[10px] uppercase tracking-wider text-slate-400">Source Item</div>
+        <div id="g2g-source-name" class="text-sm font-bold text-slate-100"></div>
+        <div id="g2g-source-gen" class="text-xs text-emerald-400"></div>
+      </div>
+
+      <!-- Mode Tabs -->
+      <div class="flex gap-1 border-b border-slate-700">
+        <button id="g2g-tab-auto" onclick="switchG2GTab('auto')" class="px-3 py-2 text-xs font-bold border-b-2 border-emerald-500 text-emerald-400 transition">Auto-Generate Child Bags</button>
+        <button id="g2g-tab-scan" onclick="switchG2GTab('scan')" class="px-3 py-2 text-xs font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-200 transition">Select Existing Uninoculated Bags</button>
+      </div>
+
+      <!-- Auto-Generate Mode Panel -->
+      <div id="g2g-auto-panel" class="space-y-3">
+        <div class="grid grid-cols-3 gap-2">
+          <div>
+            <label class="block text-xs font-medium text-slate-400 mb-1">Quantity</label>
+            <input type="number" id="g2g-qty" min="1" max="20" value="4" class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-sm text-slate-100">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-400 mb-1">Container Type</label>
+            <select id="g2g-container-type" class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-sm text-slate-100">
+              <option>Grain Jar / Bag</option>
+              <option>Quart Jar</option>
+              <option>Pint Jar</option>
+              <option>3lb Bag</option>
+              <option>5lb Bag</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-400 mb-1">Substrate Recipe</label>
+            <select id="g2g-substrate" class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-sm text-slate-100">
+              <option>Whole Oats</option>
+              <option>Rye Grain</option>
+              <option>Millet</option>
+              <option>Popcorn</option>
+              <option>CVG Bulk</option>
+            </select>
+          </div>
+        </div>
+        <button onclick="executeG2GAutoGenerate()" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2 rounded transition">
+          ✅ Confirm Transfer
+        </button>
+      </div>
+
+      <!-- Scan Existing Mode Panel -->
+      <div id="g2g-scan-panel" class="space-y-3 hidden">
+        <div>
+          <label class="block text-xs font-medium text-slate-400 mb-1">Scan QR Code (or type item ID + Enter)</label>
+          <div class="flex gap-2">
+            <input type="text" id="g2g-scan-input" placeholder="Scan or enter ID..." class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-sm text-slate-100" onkeydown="handleG2GScanInput(event)">
+            <button id="btnOpenG2GCamera" type="button" onclick="startG2GCameraScan()" class="bg-slate-700 hover:bg-slate-600 text-white text-xs px-3 py-2 rounded shrink-0">📷 Camera</button>
+          </div>
+        </div>
+        <!-- Webcam Scan Container -->
+        <div id="g2g-camera-container" class="hidden mt-3 p-2 bg-slate-900 border border-slate-700 rounded text-center">
+          <div id="g2g-qr-reader" class="w-full rounded overflow-hidden"></div>
+          <button id="btnCloseG2GCamera" type="button" onclick="stopG2GCameraScan()" class="mt-2 bg-rose-600 hover:bg-rose-500 text-white text-xs px-3 py-1.5 rounded w-full font-semibold">
+            ❌ Stop Camera
+          </button>
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-slate-400 mb-1">Or Select from Preparation Items</label>
+          <select id="g2g-scan-select" class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-sm text-slate-100" onchange="addG2GScanItem(this.value)">
+            <option value="">-- Select an item --</option>
+          </select>
+        </div>
+        <div id="g2g-scanned-list" class="space-y-2 min-h-[60px]"></div>
+        <label class="flex items-center gap-2 text-xs text-slate-300 my-2 cursor-pointer">
+          <input type="checkbox" id="chkMarkParentSpent" checked class="rounded bg-slate-900 border-slate-700">
+          <span>Mark parent item as "Spent" after completing transfer</span>
+        </label>
+        <button onclick="executeG2GScanTransfer()" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2 rounded transition">
+          ✅ Confirm Transfer to Scanned Items
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- QR Scanner Modal -->
+  <div id="scanner-modal" class="fixed inset-0 bg-black/90 hidden items-center justify-center p-4 z-50">
+    <div class="bg-slate-800 border border-slate-700 rounded-xl w-full max-w-md p-4 flex flex-col items-center">
+      <div class="w-full flex justify-between mb-4">
+        <h3 class="text-lg font-bold">Scan QR Label</h3>
+        <button onclick="stopScanner()" class="text-red-400 font-bold">Close</button>
+      </div>
+      <div id="qr-reader" class="w-full"></div>
+    </div>
+  </div>
+
+  <!-- Quick Add Source Modal -->
+  <div id="quick-add-modal" class="fixed inset-0 bg-black/80 hidden items-center justify-center p-4 z-50 animate-fade-in">
+    <div class="bg-slate-800 border border-slate-700 rounded-xl w-full max-w-md p-5 space-y-4 shadow-2xl">
+      <div class="flex justify-between items-center border-b border-slate-700/60 pb-2">
+        <h3 class="text-md font-bold text-emerald-400 flex items-center gap-1.5">
+          <span>🧪</span> Quick Add LC Source
+        </h3>
+        <button onclick="closeQuickAddModal()" class="text-slate-400 hover:text-white font-bold text-lg">✕</button>
+      </div>
+      <form id="quick-add-form" class="space-y-3">
+        <div>
+          <label class="block text-xs font-medium text-slate-400 mb-1">Label / Name</label>
+          <input type="text" id="qa-label" required placeholder="e.g., Vendor Syringe - LM" class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-sm text-slate-100">
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-slate-400 mb-1">Strain</label>
+          <input type="text" id="qa-strain" required placeholder="e.g., Lion's Mane" class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-sm text-slate-100">
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-slate-400 mb-1">Volume (cc/mL)</label>
+          <input type="number" id="qa-volume" required min="1" value="50" class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-sm text-slate-100">
+        </div>
+        <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold py-2 rounded transition">
+          Add Source
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Label Print Settings & Layout Modal -->
+  <div id="print-settings-modal" class="fixed inset-0 bg-black/80 hidden items-center justify-center p-4 z-50 animate-fade-in">
+    <div class="bg-slate-800 border border-slate-700 rounded-xl w-full max-w-md p-5 space-y-4 shadow-2xl">
+      <div class="flex justify-between items-center border-b border-slate-700/60 pb-2">
+        <h3 class="text-md font-bold text-emerald-400 flex items-center gap-1.5">
+          <span>🖨️</span> Label Print Settings & Layout
+        </h3>
+        <button onclick="closePrintSettingsModal()" class="text-slate-400 hover:text-white font-bold text-lg">✕</button>
+      </div>
+      
+      <div class="space-y-4">
+        <!-- Layout Selection -->
+        <div>
+          <label class="block text-xs font-medium text-slate-400 mb-1">Label Sheet Layout</label>
+          <select id="print-layout-select" onchange="onPrintLayoutChange()" class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-sm text-slate-100">
+            <option value="30-up">Standard 30-Up Sheet (2.625" x 1" - 3x10 grid)</option>
+            <option value="10-up">Large 10-Up Sheet (4" x 2" - 2x5 grid)</option>
+            <option value="20-up">Medium 20-Up Sheet (4" x 1" - 2x10 grid)</option>
+            <option value="80-up">Mini Slant/Vial 80-Up Sheet (1.75" x 0.5" - 4x20 grid)</option>
+            <option value="single">Continuous Roll / Single Label</option>
+          </select>
+          <p class="text-[11px] text-slate-400 mt-1">Select the format matching your physical labels.</p>
+        </div>
+
+        <!-- Optional Container Details Toggle on Labels -->
+        <div class="flex items-center gap-2 py-1">
+          <input type="checkbox" id="print-include-container" class="rounded text-emerald-600 focus:ring-emerald-500 bg-slate-900 border-slate-700">
+          <label for="print-include-container" class="text-xs font-medium text-slate-300 cursor-pointer select-none">Include Container Details on Labels</label>
+        </div>
+
+        <!-- Offset / Starting Position -->
+        <div id="print-offset-container" class="space-y-3">
+          <div>
+            <label class="block text-xs font-medium text-slate-400 mb-1">Offset / Starting Position</label>
+            <select id="print-offset-select" onchange="onPrintOffsetChange()" class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-sm text-slate-100">
+              <!-- Dynamically populated options -->
+            </select>
+            <p class="text-[11px] text-slate-400 mt-1">Allows you to skip already-peeled labels on a partially used sheet.</p>
+          </div>
+
+          <!-- Interactive Sheet Layout Preview -->
+          <div>
+            <label class="block text-xs font-medium text-slate-400 mb-2">Interactive Sheet Layout Preview (Click to select slot)</label>
+            <div class="bg-amber-950/40 border border-amber-800/40 p-2.5 rounded text-[11px] text-amber-300 mb-3 leading-relaxed text-left">
+              ⚠️ Paper Alignment Tip: Always feed sheets top-edge first into your printer tray. If using a bottom paper cassette where sheets flip, ensure the top edge points toward the feed mechanism so Slot #1 matches your physical sheet top.
+            </div>
+            <div class="grid grid-cols-3 gap-1 bg-slate-950 p-2 rounded-lg border border-slate-700 max-w-[280px] mx-auto text-center" id="print-preview-grid">
+              <!-- Will be populated dynamically by JS -->
+            </div>
+            <p class="text-[10px] text-center text-slate-500 mt-2">
+              <span class="inline-block w-2.5 h-2.5 bg-slate-700 rounded mr-1"></span> Skipped / Used
+              <span class="inline-block w-2.5 h-2.5 bg-emerald-500 rounded ml-3 mr-1"></span> Printing Positions
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div class="flex gap-2 pt-2 border-t border-slate-700/60">
+        <button onclick="closePrintSettingsModal()" class="w-1/2 bg-slate-700 hover:bg-slate-600 text-slate-100 font-bold py-2 rounded transition">
+          Cancel
+        </button>
+        <button id="print-settings-action-btn" onclick="applyOrExecutePrintSettings()" class="w-1/2 bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold py-2 rounded transition">
+          Save Settings
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- CVG Recipe Calculator Modal -->
+  <div id="recipe-calc-modal" class="fixed inset-0 bg-black/80 hidden items-center justify-center p-4 z-50 animate-fade-in">
+    <div class="bg-slate-800 border border-slate-700 rounded-xl w-full max-w-md p-5 space-y-4 shadow-2xl">
+      <div class="flex justify-between items-center border-b border-slate-700/60 pb-2">
+        <h3 class="text-md font-bold text-emerald-400 flex items-center gap-1.5">
+          <span>🧮</span> CVG Recipe Calculator
+        </h3>
+        <button onclick="closeRecipeCalcModal()" class="text-slate-400 hover:text-white font-bold text-lg">✕</button>
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-slate-400 mb-1">Target Field Capacity (Quarts)</label>
+        <input type="number" id="cvg-quarts" min="0.5" step="0.5" value="6" class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-sm text-slate-100">
+      </div>
+      <button onclick="calculateCVG()" class="w-full bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold py-2 rounded transition">
+        Calculate Recipe
+      </button>
+      <div id="cvg-results" class="bg-slate-900 p-3 rounded-lg border border-slate-700 space-y-2 hidden">
+        <div class="flex justify-between text-sm">
+          <span class="text-slate-300">🥥 Coir (Coconut)</span>
+          <span id="cvg-coir" class="recipe-result-value font-bold text-emerald-400">0 g</span>
+        </div>
+        <div class="flex justify-between text-sm">
+          <span class="text-slate-300">🪨 Vermiculite</span>
+          <span id="cvg-vermiculite" class="recipe-result-value font-bold text-emerald-400">0 quarts</span>
+        </div>
+        <div class="flex justify-between text-sm">
+          <span class="text-slate-300">⚪ Gypsum</span>
+          <span id="cvg-gypsum" class="recipe-result-value font-bold text-emerald-400">0 g</span>
+        </div>
+        <div class="flex justify-between text-sm border-t border-slate-800 pt-2">
+          <span class="text-slate-300">💧 Water</span>
+          <span id="cvg-water" class="recipe-result-value font-bold text-blue-400">0 L</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Community Feedback & Feature Request Modal -->
+  <div id="feedback-modal" class="fixed inset-0 bg-black/80 hidden items-center justify-center p-4 z-[80] animate-fade-in">
+    <div class="bg-slate-800 border border-slate-700 rounded-xl w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl">
+      <div class="p-4 border-b border-slate-700 flex justify-between items-center">
+        <div>
+          <h2 class="text-lg font-bold text-fuchsia-400 flex items-center gap-2">
+            <span>💡</span> Community Feedback & Roadmap
+          </h2>
+          <p class="text-xs text-slate-400">Submit feature requests and see what's on the roadmap.</p>
+        </div>
+        <button onclick="closeFeedbackModal()" class="text-slate-400 hover:text-white font-bold text-lg">✕</button>
+      </div>
+
+      <!-- Tabs -->
+      <div class="flex gap-1 border-b border-slate-700 px-4 pt-3">
+        <button id="feedback-tab-submit" onclick="switchFeedbackTab('submit')" class="px-4 py-2 text-xs font-bold border-b-2 border-fuchsia-500 text-fuchsia-400 transition">📝 Submit Feedback</button>
+        <button id="feedback-tab-roadmap" onclick="switchFeedbackTab('roadmap')" class="px-4 py-2 text-xs font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-200 transition">🗺️ Community Roadmap</button>
+      </div>
+
+      <div class="p-4 overflow-y-auto flex-1">
+        <!-- Submit Feedback Tab -->
+        <div id="feedback-submit-panel" class="space-y-4">
+          <form id="feedback-form" class="space-y-3">
+            <div>
+              <label class="block text-xs font-medium text-slate-400 mb-1">Feature Title</label>
+              <input type="text" id="fb-title" required placeholder="e.g., Bulk yield export to spreadsheet" class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-sm text-slate-100">
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-400 mb-1">Category</label>
+              <select id="fb-category" class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-sm text-slate-100">
+                <option value="UI">UI</option>
+                <option value="Tracker">Tracker</option>
+                <option value="Recipe">Recipe</option>
+                <option value="Contam">Contam</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-400 mb-1">Description</label>
+              <textarea id="fb-description" rows="3" placeholder="Describe the feature you'd like to see..." class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-sm text-slate-100"></textarea>
+            </div>
+            <button type="submit" class="w-full bg-fuchsia-600 hover:bg-fuchsia-500 text-white font-bold py-2 rounded transition">
+              🚀 Submit Feature Request
+            </button>
+          </form>
+        </div>
+
+        <!-- Community Roadmap Tab -->
+        <div id="feedback-roadmap-panel" class="hidden space-y-3">
+          <div id="roadmap-list" class="space-y-3">
+            <!-- Rendered dynamically -->
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modern SaaS Auth Modal -->
+  <div id="auth-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm hidden items-center justify-center p-4 z-[85] animate-fade-in">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md shadow-2xl auth-modal-glow overflow-hidden">
+      <div class="flex justify-between items-start p-5 pb-0">
+        <div class="flex items-center gap-2">
+          <span class="text-2xl">🍄</span>
+          <span class="font-bold text-white">MycoTrack <span class="text-amber-400">Pro</span></span>
+        </div>
+        <button onclick="closeAuthModal()" class="text-slate-500 hover:text-white font-bold text-lg">✕</button>
+      </div>
+
+      <div class="px-6 pb-6 pt-4">
+        <!-- Setup notice (Supabase credentials not configured yet) -->
+        <div id="auth-setup-notice" class="hidden text-xs p-3 rounded-lg border border-amber-700/60 bg-amber-950/40 text-amber-300 space-y-1 mb-4">
+          <p class="font-bold">⚙️ Supabase not configured</p>
+          <p class="text-amber-200/80">Set <code class="font-mono">SUPABASE_URL</code> and <code class="font-mono">SUPABASE_ANON_KEY</code> in <code class="font-mono">js/config.js</code> to enable cloud sync.</p>
+        </div>
+
+        <!-- Signed-out view: toggle tabs + Google OAuth + email form -->
+        <div id="auth-form-view" class="space-y-4">
+          <div class="text-center">
+            <h2 id="auth-modal-title" class="text-lg font-bold text-white">Welcome back</h2>
+            <p class="text-xs text-slate-500 mt-1">Sync your cultivation data across devices.</p>
+          </div>
+
+          <!-- Top Segment: Sign In / Sign Up toggle -->
+          <div class="grid grid-cols-2 gap-1 bg-slate-800/70 border border-slate-800 rounded-xl p-1">
+            <button id="auth-tab-signin" onclick="switchAuthTab('signin')" class="px-4 py-2 rounded-lg text-sm font-bold bg-slate-950 text-white shadow transition">Sign In</button>
+            <button id="auth-tab-signup" onclick="switchAuthTab('signup')" class="px-4 py-2 rounded-lg text-sm font-bold text-slate-400 hover:text-slate-200 transition">Sign Up</button>
+          </div>
+
+          <!-- Google OAuth -->
+          <button id="auth-google-btn" onclick="handleAuthGoogle()" class="w-full flex items-center justify-center gap-2.5 bg-white hover:bg-slate-100 text-slate-800 font-semibold py-2.5 rounded-lg transition text-sm">
+            <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true">
+              <path fill="#FFC107" d="M43.611 20.083H42V20H24v8h11.303c-1.649 4.657-6.08 8-11.303 8-6.627 0-12-5.373-12-12s5.373-12 12-12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 12.955 4 4 12.955 4 24s8.955 20 20 20 20-8.955 20-20c0-1.341-.138-2.65-.389-3.917z"/>
+              <path fill="#FF3D00" d="m6.306 14.691 6.571 4.819C14.655 15.108 18.961 12 24 12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 16.318 4 9.656 8.337 6.306 14.691z"/>
+              <path fill="#4CAF50" d="M24 44c5.166 0 9.86-1.977 13.409-5.192l-6.19-5.238A11.91 11.91 0 0 1 24 36c-5.202 0-9.619-3.317-11.283-7.946l-6.522 5.025C9.505 39.556 16.227 44 24 44z"/>
+              <path fill="#1976D2" d="M43.611 20.083H42V20H24v8h11.303a12.04 12.04 0 0 1-4.087 5.571l.003-.002 6.19 5.238C36.971 39.205 44 34 44 24c0-1.341-.138-2.65-.389-3.917z"/>
+            </svg>
+            Continue with Google
+          </button>
+
+          <!-- Divider -->
+          <div class="flex items-center gap-3 text-[11px] text-slate-500">
+            <div class="flex-1 h-px bg-slate-800"></div>
+            or continue with email
+            <div class="flex-1 h-px bg-slate-800"></div>
+          </div>
+
+          <!-- Email Form -->
+          <div class="space-y-3">
+            <input type="email" id="auth-email" placeholder="Email address" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-amber-500/60">
+            <input type="password" id="auth-password" placeholder="Password" onkeydown="if(event.key==='Enter')handleAuthSubmit()" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-amber-500/60">
+            <div id="auth-message" class="hidden text-xs"></div>
+            <button id="auth-submit-btn" onclick="handleAuthSubmit()" class="w-full bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold py-2.5 rounded-lg transition text-sm shadow-lg shadow-amber-500/20">Sign In</button>
+          </div>
+
+          <!-- Footer -->
+          <p class="text-[10px] text-slate-600 text-center leading-relaxed">By continuing, you agree to the Terms of Service.</p>
+        </div>
+
+        <!-- Signed-in account view -->
+        <div id="auth-account-view" class="hidden space-y-4">
+          <div id="auth-status-indicator" class="text-xs px-3 py-2.5 rounded-lg border border-emerald-600/60 bg-emerald-950/40 text-emerald-300 font-semibold">☁️ Cloud Synced</div>
+          <div id="auth-account-info" class="bg-slate-950 border border-slate-800 rounded-lg p-3 text-sm text-slate-300"></div>
+          <button onclick="handleAuthLogout()" class="w-full bg-slate-800 hover:bg-slate-700 border border-slate-700 text-red-300 font-bold py-2.5 rounded-lg transition text-sm">🚪 Log Out</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="bulk-print-section" class="hidden"></div>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

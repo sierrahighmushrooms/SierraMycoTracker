@@ -1,0 +1,252 @@
+@media print {
+  @page {
+    margin: 0mm;
+    size: auto;
+  }
+  html, body {
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: visible !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: white !important;
+    color: black !important;
+  }
+  body * { visibility: hidden; }
+  #bulk-print-section, #bulk-print-section * { visibility: visible; }
+
+  /* Hide non-printable UI elements */
+  nav, header, footer, button, .btn, .no-print,
+  #sidebar, .modal-backdrop, select, input[type="text"],
+  .max-w-7xl {
+    display: none !important;
+  }
+
+  /* Ensure print target container fits tightly without overflow */
+  .print-container, .printable-area {
+    position: static !important;
+    width: 100% !important;
+    height: auto !important;
+    margin: 0 !important;
+    padding: 0.5cm !important;
+    box-shadow: none !important;
+    border: none !important;
+    overflow: visible !important;
+  }
+
+  /* Prevent accidental orphan page breaks */
+  .print-card, .qr-label, .batch-card {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  /* Remove page break after the last printed item */
+  .print-card:last-child, .qr-label:last-child {
+    break-after: auto !important;
+    page-break-after: auto !important;
+  }
+  
+  #bulk-print-section {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 8.5in;
+    height: 11in;
+    max-height: 11in;
+    overflow: hidden;
+    page-break-after: avoid;
+    break-after: avoid;
+    box-sizing: border-box;
+  }
+
+  /* 30-Up Layout Grid Styling */
+  #bulk-print-section.layout-30-up {
+    padding-top: 0.5in;
+    padding-bottom: 0.5in;
+    padding-left: 0.1875in;
+    padding-right: 0.1875in;
+    display: grid !important;
+    grid-template-columns: repeat(3, 2.625in);
+    grid-auto-rows: 1.0in;
+    column-gap: 0.125in;
+    row-gap: 0in;
+  }
+
+  /* 10-Up Layout Grid Styling */
+  #bulk-print-section.layout-10-up {
+    padding-top: 0.5in;
+    padding-bottom: 0.5in;
+    padding-left: 0.175in;
+    padding-right: 0.175in;
+    display: grid !important;
+    grid-template-columns: repeat(2, 4.0in);
+    grid-auto-rows: 2.0in;
+    column-gap: 0.15in;
+    row-gap: 0in;
+  }
+
+  /* 20-Up Layout Grid Styling */
+  #bulk-print-section.layout-20-up {
+    padding-top: 0.5in;
+    padding-bottom: 0.5in;
+    padding-left: 0.175in;
+    padding-right: 0.175in;
+    display: grid !important;
+    grid-template-columns: repeat(2, 4.0in);
+    grid-auto-rows: 1.0in;
+    column-gap: 0.15in;
+    row-gap: 0in;
+  }
+
+  /* 80-Up Layout Grid Styling */
+  #bulk-print-section.layout-80-up {
+    padding-top: 0.5in;
+    padding-bottom: 0.5in;
+    padding-left: 0.6in;
+    padding-right: 0.6in;
+    display: grid !important;
+    grid-template-columns: repeat(4, 1.75in);
+    grid-auto-rows: 0.5in;
+    column-gap: 0.1in;
+    row-gap: 0in;
+  }
+  
+  /* Single Label Layout Styling */
+  #bulk-print-section.layout-single {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    display: flex !important;
+    flex-direction: column;
+    gap: 10px;
+    padding: 10px;
+  }
+  
+  .print-card {
+    box-sizing: border-box;
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+    border: 1px dashed #ddd;
+    page-break-inside: avoid;
+    overflow: hidden;
+    background: white !important;
+    color: black !important;
+  }
+
+  .layout-30-up .print-card {
+    width: 2.625in;
+    height: 1.0in;
+    padding: 0.05in 0.1in;
+    gap: 0.1in;
+  }
+
+  .layout-10-up .print-card {
+    width: 4.0in;
+    height: 2.0in;
+    padding: 0.15in 0.2in;
+    gap: 0.2in;
+  }
+
+  .layout-20-up .print-card {
+    width: 4.0in;
+    height: 1.0in;
+    padding: 0.05in 0.1in;
+    gap: 0.15in;
+  }
+
+  .layout-80-up .print-card {
+    width: 1.75in;
+    height: 0.5in;
+    padding: 0.02in 0.04in;
+    gap: 0.04in;
+  }
+  
+  .print-placeholder {
+    visibility: hidden !important;
+    box-sizing: border-box;
+    border: none !important;
+  }
+
+  .layout-30-up .print-placeholder { width: 2.625in; height: 1.0in; }
+  .layout-10-up .print-placeholder { width: 4.0in; height: 2.0in; }
+  .layout-20-up .print-placeholder { width: 4.0in; height: 1.0in; }
+  .layout-80-up .print-placeholder { width: 1.75in; height: 0.5in; }
+  
+  .print-qr-container {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    flex-shrink: 0;
+  }
+
+  .layout-30-up .print-qr-container { width: 0.8in; height: 0.8in; }
+  .layout-10-up .print-qr-container { width: 1.6in; height: 1.6in; }
+  .layout-20-up .print-qr-container { width: 0.8in; height: 0.8in; }
+  .layout-80-up .print-qr-container { width: 0.44in; height: 0.44in; }
+  
+  .print-qr-container img {
+    width: 100% !important;
+    height: 100% !important;
+  }
+  
+  .print-text-container {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    text-align: left;
+    line-height: 1.1;
+    overflow: hidden;
+    color: black !important;
+  }
+  
+  .print-id {
+    font-family: monospace;
+    font-weight: 700;
+    word-break: break-all;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .layout-30-up .print-id { font-size: 8.5pt; }
+  .layout-10-up .print-id { font-size: 13pt; }
+  .layout-20-up .print-id { font-size: 10pt; }
+  .layout-80-up .print-id { font-size: 5pt; }
+  
+  .print-strain {
+    font-weight: 700;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .layout-30-up .print-strain { font-size: 8.5pt; }
+  .layout-10-up .print-strain { font-size: 13pt; }
+  .layout-20-up .print-strain { font-size: 10pt; }
+  .layout-80-up .print-strain { font-size: 5pt; }
+  
+  .print-date {
+    white-space: nowrap;
+  }
+
+  .layout-30-up .print-date { font-size: 7pt; color: #333; }
+  .layout-10-up .print-date { font-size: 10pt; color: #333; }
+  .layout-20-up .print-date { font-size: 8pt; color: #333; }
+  .layout-80-up .print-date { font-size: 4pt; color: #333; }
+  
+  .print-extra {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .layout-30-up .print-extra { font-size: 7pt; color: #555; }
+  .layout-10-up .print-extra { font-size: 10pt; color: #555; }
+  .layout-20-up .print-extra { font-size: 8pt; color: #555; }
+  .layout-80-up .print-extra { font-size: 4pt; color: #555; }
+}
