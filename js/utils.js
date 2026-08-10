@@ -1,8 +1,8 @@
 // Shared utility functions: classification, ID/code generation, formatting,
 // and dry-yield estimation.
 
-import { db } from './db.js';
-import { APP_CONFIG } from './config.js';
+import { db, getCustomContainerPresets, getCustomMediumPresets } from './db.js';
+import { APP_CONFIG, MEDIUM_CATEGORIES, CONTAINER_CATEGORIES, getMediumCategory, getContainerCategory, getContainerCapacityMl, isUnconventionalPair } from './config.js';
 
 // Determine item category (Bulk Substrate vs Grain Spawn) by inspecting item.type/category
 // or inferring from medium, containerType, and label.
@@ -143,6 +143,11 @@ export function getStrainInitials(strain) {
 
 // Standard container capacity in mL.
 export function getStandardCapacity(name) {
+  // First check the categorized container definitions
+  const categorizedCapacity = getContainerCapacityMl(name);
+  if (categorizedCapacity) return categorizedCapacity;
+
+  // Legacy fallback capacities
   const capacities = {
     'Quart Jar': 950,
     'Pint Jar': 473,
@@ -153,6 +158,164 @@ export function getStandardCapacity(name) {
     '1000mL Bottle': 1000
   };
   return capacities[name] || 500;
+}
+
+// --- Smart Dropdown Population (Medium & Container) ---
+
+// Populate the Bulk PC Prep medium dropdown with categorized optgroups.
+export function populateMediumDropdown(selectId = 'bulk-medium', selectedValue = null) {
+  const select = document.getElementById(selectId);
+  if (!select) return;
+
+  const customMediums = getCustomMediumPresets();
+
+  let html = '<option value="" disabled>Select Medium...</option>';
+
+  // Standard categorized mediums
+  for (const [catKey, cat] of Object.entries(MEDIUM_CATEGORIES)) {
+    html += `<optgroup label="${cat.icon} ${cat.label}">`;
+    cat.items.forEach(item => {
+      const selected = selectedValue === item.value ? ' selected' : '';
+      html += `<option value="${item.value}"${selected}>${item.name}</option>`;
+    });
+    html += '</optgroup>';
+  }
+
+  // Custom mediums
+  if (customMediums.length > 0) {
+    html += '<optgroup label="⭐ Custom Mediums">';
+    customMediums.forEach(m => {
+      const selected = selectedValue === m.name ? ' selected' : '';
+      html += `<option value="${m.name}"${selected}>${m.name}</option>`;
+    });
+    html += '</optgroup>';
+  }
+
+  // Add Custom option
+  html += '<option value="__add_custom_medium__">+ Add Custom Medium</option>';
+
+  select.innerHTML = html;
+  if (selectedValue) select.value = selectedValue;
+}
+
+// Populate the Bulk PC Prep container dropdown with smart filtering.
+// When a medium is selected, recommended containers are grouped at the top.
+export function populateContainerDropdownSmart(selectId = 'bulk-container', selectedMedium = null, selectedValue = null) {
+  const select = document.getElementById(selectId);
+  if (!select) return;
+
+  const customContainers = getCustomContainerPresets();
+  const mediumCat = getMediumCategory(selectedMedium);
+
+  // Determine which containers are "recommended" for the selected medium
+  const isRecommended = (containerValue) => {
+    if (!mediumCat) return false;
+    const catKey = getContainerCategory(containerValue);
+    if (!catKey) return false;
+    return CONTAINER_CATEGORIES[catKey].primaryMediums.includes(mediumCat);
+  };
+
+  // Build the full list of standard containers
+  const allStandard = [];
+  for (const [catKey, cat] of Object.entries(CONTAINER_CATEGORIES)) {
+    cat.items.forEach(item => {
+      allStandard.push({ ...item, category: catKey, categoryLabel: cat.label, categoryIcon: cat.icon });
+    });
+  }
+
+  // Split into recommended vs other
+  const recommended = allStandard.filter(c => isRecommended(c.value));
+  const others = allStandard.filter(c => !isRecommended(c.value));
+
+  let html = '<option value="" disabled>Select Container...</option>';
+
+  // Recommended containers at top
+  if (recommended.length > 0) {
+    html += '<optgroup label="⭐ Recommended">';
+    recommended.forEach(c => {
+      const selected = selectedValue === c.value ? ' selected' : '';
+      html += `<option value="${c.value}"${selected}>${c.categoryIcon} ${c.name} (${c.capacityMl} mL)</option>`;
+    });
+    html += '</optgroup>';
+  }
+
+  // Other / All containers in secondary section
+  if (others.length > 0) {
+    html += '<optgroup label="📦 Other Containers">';
+    others.forEach(c => {
+      const selected = selectedValue === c.value ? ' selected' : '';
+      html += `<option value="${c.value}"${selected}>${c.categoryIcon} ${c.name} (${c.capacityMl} mL)</option>`;
+    });
+    html += '</optgroup>';
+  }
+
+  // Custom containers
+  if (customContainers.length > 0) {
+    html += '<optgroup label="⭐ Custom Containers">';
+    customContainers.forEach(c => {
+      const selected = selectedValue === c.name ? ' selected' : '';
+      const capText = c.capacityValue ? ` (${c.capacityValue} ${c.capacityUnit})` : '';
+      html += `<option value="${c.name}"${selected}>${c.name}${capText}</option>`;
+    });
+    html += '</optgroup>';
+  }
+
+  // Add Custom option
+  html += '<option value="__add_custom_container__">+ Add Custom Container</option>';
+
+  select.innerHTML = html;
+  if (selectedValue) select.value = selectedValue;
+}
+
+// --- Non-Blocking Pair Validation ---
+// Returns the warning message if the medium/container pair is unconventional,
+// or null if the pair is fine.
+export function getPairValidationWarning(mediumValue, containerValue) {
+  if (!mediumValue || !containerValue) return null;
+  if (isUnconventionalPair(mediumValue, containerValue)) {
+    return '💡 Note: Narrow-neck media bottles/flasks are intended for liquids. Retrieving grain spawn from narrow openings can be difficult.';
+  }
+  return null;
+}
+
+// Update the pair validation warning badge in the UI
+export function updatePairValidationWarning() {
+  const medium = (document.getElementById('bulk-medium') || {}).value || '';
+  const container = (document.getElementById('bulk-container') || {}).value || '';
+  const warningEl = document.getElementById('pair-validation-warning');
+
+  if (!warningEl) return;
+
+  const warning = getPairValidationWarning(medium, container);
+  if (warning) {
+    warningEl.innerHTML = `<span class="text-amber-300 text-xs">${warning}</span>`;
+    warningEl.classList.remove('hidden');
+  } else {
+    warningEl.classList.add('hidden');
+    warningEl.innerHTML = '';
+  }
+}
+
+// --- Prep Date Helpers ---
+// Format a YYYY-MM-DD date string as "Aug 8, 2026"
+export function formatPrepDate(dateStr) {
+  if (!dateStr) return '';
+  const d = new Date(dateStr + 'T12:00:00');
+  if (isNaN(d.getTime())) return dateStr;
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+// Get today's date as YYYY-MM-DD
+export function getTodayDateString() {
+  return new Date().toISOString().split('T')[0];
+}
+
+// Initialize the prep date input with today's date
+export function initPrepDateInput() {
+  const input = document.getElementById('bulk-prep-date');
+  if (input && !input.value) {
+    input.value = getTodayDateString();
+  }
 }
 
 // Resolve a standard prefix based on the selected medium name.
@@ -170,10 +333,20 @@ export function getBatchPrefix(mediumName) {
 export function generateBatchCode() {
   const medium = (document.getElementById('bulk-medium') || {}).value || '';
   const prefix = getBatchPrefix(medium);
-  const now = new Date();
-  const yyyy = now.getFullYear();
-  const mm = String(now.getMonth() + 1).padStart(2, '0');
-  const dd = String(now.getDate()).padStart(2, '0');
+  
+  let yyyy, mm, dd;
+  const dateInput = document.getElementById('bulk-prep-date');
+  if (dateInput && dateInput.value) {
+    const parts = dateInput.value.split('-');
+    yyyy = parts[0];
+    mm = parts[1];
+    dd = parts[2];
+  } else {
+    const now = new Date();
+    yyyy = now.getFullYear();
+    mm = String(now.getMonth() + 1).padStart(2, '0');
+    dd = String(now.getDate()).padStart(2, '0');
+  }
   const dateStr = `${yyyy}${mm}${dd}`;
 
   const base = `${prefix}${dateStr}`;
@@ -241,20 +414,29 @@ export function updateLCTargetVolumeDefault() {
   const targetInput = document.getElementById('lc-target-volume');
   if (!select || !targetInput) return;
 
-  if (select.value === 'custom') {
-    const cap = parseInt(document.getElementById('custom-container-capacity').value) || 300;
-    targetInput.value = Math.round(cap * 0.7);
+  const selectedValue = select.value;
+  if (!selectedValue || selectedValue === '__add_custom_container__') {
+    targetInput.value = 500;
   } else {
-    const volumes = {
-      'Quart Jar': 500,
-      'Pint Jar': 250,
-      '3lb Bag': 1000,
-      '5lb Bag': 1500,
-      'Petri Dish': 20,
-      '500mL Bottle': 350,
-      '1000mL Bottle': 700
-    };
-    targetInput.value = volumes[select.value] || 500;
+    // Use the categorized capacity when available
+    const capacity = getContainerCapacityMl(selectedValue);
+    if (capacity) {
+      targetInput.value = Math.round(capacity * 0.7);
+    } else {
+      // Fallback for custom containers
+      const customPresets = getCustomContainerPresets();
+      const custom = customPresets.find(c => c.name === selectedValue);
+      if (custom && custom.capacityValue) {
+        // Convert to mL if needed
+        let capMl = custom.capacityValue;
+        if (custom.capacityUnit === 'qt') capMl = custom.capacityValue * 946.353;
+        else if (custom.capacityUnit === 'lb') capMl = custom.capacityValue * 453.592;
+        else if (custom.capacityUnit === 'oz') capMl = custom.capacityValue * 29.5735;
+        targetInput.value = Math.round(capMl * 0.7);
+      } else {
+        targetInput.value = 500;
+      }
+    }
   }
   updateLCCalculator();
 }
@@ -287,21 +469,24 @@ export function toggleLCMedium() {
   const calcBox = document.getElementById('lc-calculator-box');
   const mediaBottleBox = document.getElementById('media-bottle-fields');
 
-  if (medium === 'Liquid Culture') {
+  // Show LC calculator for liquid mediums
+  const isLiquid = medium === 'Liquid Culture' || medium === 'Malt Extract Broth' || medium === 'Water';
+  if (isLiquid) {
     calcBox.classList.remove('hidden');
     updateLCTargetVolumeDefault();
   } else {
     calcBox.classList.add('hidden');
   }
 
-  if (medium === 'Media Bottle (Agar/LC)') {
+  // Show media bottle fields for liquid/agar mediums
+  const isLiquidOrAgar = isLiquid || medium === 'Malt Extract Agar' || medium === 'Potato Dextrose Agar';
+  if (isLiquidOrAgar) {
     mediaBottleBox.classList.remove('hidden');
     const container = document.getElementById('bulk-container').value;
     const volumeMlInput = document.getElementById('bulk-volume-ml');
     if (!volumeMlInput.value) {
-      if (container === '500mL Bottle') volumeMlInput.value = 500;
-      else if (container === '1000mL Bottle') volumeMlInput.value = 1000;
-      else volumeMlInput.value = 500;
+      const capacity = getContainerCapacityMl(container);
+      volumeMlInput.value = capacity || 500;
     }
   } else {
     mediaBottleBox.classList.add('hidden');
@@ -311,7 +496,7 @@ export function toggleLCMedium() {
 export function toggleCustomContainer() {
   const select = document.getElementById('bulk-container');
   const customDiv = document.getElementById('custom-container-fields');
-  const isCustom = select.value === 'custom';
+  const isCustom = select.value === '__add_custom_container__';
 
   if (isCustom) customDiv.classList.remove('hidden');
   else customDiv.classList.add('hidden');
@@ -319,9 +504,13 @@ export function toggleCustomContainer() {
   updateLCTargetVolumeDefault();
 
   const medium = document.getElementById('bulk-medium').value;
-  if (medium === 'Media Bottle (Agar/LC)') {
+  const isLiquidOrAgar = medium === 'Liquid Culture' || medium === 'Malt Extract Broth' || medium === 'Water' ||
+    medium === 'Malt Extract Agar' || medium === 'Potato Dextrose Agar';
+  if (isLiquidOrAgar) {
     const volumeMlInput = document.getElementById('bulk-volume-ml');
-    if (select.value === '500mL Bottle') volumeMlInput.value = 500;
-    else if (select.value === '1000mL Bottle') volumeMlInput.value = 1000;
+    if (!volumeMlInput.value) {
+      const capacity = getContainerCapacityMl(select.value);
+      volumeMlInput.value = capacity || 500;
+    }
   }
 }

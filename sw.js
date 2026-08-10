@@ -2,7 +2,10 @@
 // Provides offline capability by precaching the app shell and runtime-caching
 // static assets (CSS, JS, and CDN libraries).
 
-const CACHE_NAME = 'sierra-myco-lab-v2';
+// Bump this version whenever app shell files change: the activate handler
+// deletes every cache with an older name, so stale JS (e.g. js/db.js with
+// outdated plan-badge logic) is never served from cache-first lookups.
+const CACHE_NAME = 'sierra-myco-lab-v4';
 const APP_SHELL = [
   './',
   './index.html',

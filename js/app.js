@@ -2,7 +2,7 @@
 // Imports all modules, wires up global event listeners, exposes the functions
 // referenced by inline onclick handlers, and initializes the UI.
 
-import { db, saveItems, setRefreshCallback, getCustomContainers, addCustomContainer, initCloudSync, setSyncStatusCallback, setSyncErrorCallback, isSupabaseConfigured, getSession, onAuthStateChange, isContainerLimitError, uploadItemsToCloud, syncItemsWithCloud } from './db.js';
+import { db, saveItems, setRefreshCallback, getCustomContainers, addCustomContainer, addCustomContainerPreset, addCustomMediumPreset, getCustomContainerPresets, initCloudSync, setSyncStatusCallback, setSyncErrorCallback, isSupabaseConfigured, getSession, onAuthStateChange, isContainerLimitError, uploadItemsToCloud, syncItemsWithCloud, clearLegacyStorage, clearPendingImportStorage, checkAndClearStaleCache, loadCustomPresetsFromCloud } from './db.js';
 import {
   generateId,
   formatMMDDYY,
@@ -15,7 +15,12 @@ import {
   updateLCTargetVolumeDefault,
   toggleLCMedium,
   toggleCustomContainer,
-  isLockedStage
+  isLockedStage,
+  populateMediumDropdown,
+  populateContainerDropdownSmart,
+  updatePairValidationWarning,
+  getTodayDateString,
+  initPrepDateInput
 } from './utils.js';
 import {
   openModal,
@@ -325,7 +330,20 @@ function importJSON(e) {
         importTruncated = true;
       }
 
-      db.items = extractedItems;
+      // Sanitize the payload BEFORE insertion: legacy JSON may carry custom
+      // string codes (e.g. "MY-Z9UGC") in the `id` field, which conflict with
+      // Supabase's UUID `id` column. Save the custom code into `item.code`,
+      // then drop the legacy `id` so Supabase auto-generates a valid UUID
+      // primary key on insert.
+      const sanitizedItems = extractedItems.map((item) => {
+        const { id, ...rest } = item || {};
+        return {
+          ...rest,
+          code: id || rest.code || null // preserve custom code
+        };
+      });
+
+      db.items = sanitizedItems;
       db.pcBatches = extractedBatches;
 
       // Ensure every imported item has an id (required by the items table primary key).
@@ -387,6 +405,7 @@ function importJSON(e) {
       showToast('Backup restore failed: ' + (err && err.message ? err.message : 'Unexpected error.'), 'error', 8000);
     } finally {
       input.value = ''; // Allow re-importing the same file.
+      clearPendingImportStorage();
     }
   };
   reader.readAsText(file);
@@ -478,6 +497,136 @@ function render() {
   updateDashboard();
 }
 
+// --- Bulk PC Prep: Smart Dropdown Handlers ---
+function handleBulkMediumChange() {
+  const medium = document.getElementById('bulk-medium').value;
+  
+  // If user selected "+ Add Custom Medium", open the custom preset modal
+  if (medium === '__add_custom_medium__') {
+    openCustomPresetModal('medium');
+    // Reset to a valid selection
+    populateMediumDropdown('bulk-medium', 'Whole Oats');
+    return;
+  }
+  
+  // Re-populate container dropdown with smart filtering based on selected medium
+  const currentContainer = document.getElementById('bulk-container').value;
+  populateContainerDropdownSmart('bulk-container', medium, currentContainer);
+  
+  // Update LC calculator and media bottle fields
+  toggleLCMedium();
+  updateBatchCodeAuto();
+  updatePairValidationWarning();
+}
+
+function handleBulkContainerChange() {
+  const container = document.getElementById('bulk-container').value;
+  
+  // If user selected "+ Add Custom Container", open the custom preset modal
+  if (container === '__add_custom_container__') {
+    openCustomPresetModal('container');
+    // Reset to a valid selection
+    const medium = document.getElementById('bulk-medium').value;
+    populateContainerDropdownSmart('bulk-container', medium, 'Quart Wide Mouth');
+    return;
+  }
+  
+  toggleCustomContainer();
+  updatePairValidationWarning();
+}
+
+// --- Custom Preset Modal ---
+function openCustomPresetModal(type) {
+  const modal = document.getElementById('custom-preset-modal');
+  if (!modal) return;
+  
+  const presetType = type || 'container';
+  document.getElementById('custom-preset-type').value = presetType;
+  
+  const title = document.getElementById('custom-preset-modal-title');
+  const containerFields = document.getElementById('custom-preset-container-fields');
+  const mediumFields = document.getElementById('custom-preset-medium-fields');
+  
+  if (presetType === 'container') {
+    title.innerHTML = '<span>➕</span> Add Custom Container';
+    containerFields.classList.remove('hidden');
+    mediumFields.classList.add('hidden');
+  } else {
+    title.innerHTML = '<span>➕</span> Add Custom Medium';
+    containerFields.classList.add('hidden');
+    mediumFields.classList.remove('hidden');
+  }
+  
+  // Reset form
+  document.getElementById('custom-preset-form').reset();
+  document.getElementById('custom-preset-type').value = presetType;
+  
+  modal.classList.remove('hidden');
+  modal.classList.add('flex');
+}
+
+function closeCustomPresetModal() {
+  const modal = document.getElementById('custom-preset-modal');
+  if (modal) {
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+  }
+}
+
+// Handle custom preset form submission
+function handleCustomPresetSubmit(e) {
+  e.preventDefault();
+  
+  const presetType = document.getElementById('custom-preset-type').value;
+  const name = document.getElementById('custom-preset-name').value.trim();
+  
+  if (!name) {
+    showToast('Please enter a name for your custom preset.', 'error');
+    return;
+  }
+  
+  if (presetType === 'container') {
+    const containerType = document.getElementById('custom-preset-container-type').value;
+    const capacityValue = parseFloat(document.getElementById('custom-preset-capacity').value) || 0;
+    const capacityUnit = document.getElementById('custom-preset-unit').value;
+    const recommendedMedium = document.getElementById('custom-preset-recommended-medium').value;
+    
+    const result = addCustomContainerPreset({
+      name,
+      type: containerType,
+      capacityValue,
+      capacityUnit,
+      recommendedMedium
+    });
+    
+    if (result) {
+      showToast(`✓ Custom container "${name}" saved.`, 'success');
+      // Refresh dropdowns
+      const medium = document.getElementById('bulk-medium').value;
+      populateContainerDropdownSmart('bulk-container', medium, name);
+      closeCustomPresetModal();
+    } else {
+      showToast('A container with that name already exists.', 'warning');
+    }
+  } else {
+    const category = document.getElementById('custom-preset-medium-category').value;
+    
+    const result = addCustomMediumPreset({
+      name,
+      category
+    });
+    
+    if (result) {
+      showToast(`✓ Custom medium "${name}" saved.`, 'success');
+      // Refresh dropdowns
+      populateMediumDropdown('bulk-medium', name);
+      closeCustomPresetModal();
+    } else {
+      showToast('A medium with that name already exists.', 'warning');
+    }
+  }
+}
+
 // --- Bulk PC Prep Submission ---
 document.getElementById('bulk-form').addEventListener('submit', (e) => {
   e.preventDefault();
@@ -486,17 +635,27 @@ document.getElementById('bulk-form').addEventListener('submit', (e) => {
   const qty = parseInt(document.getElementById('bulk-qty').value);
   const pcTime = document.getElementById('bulk-time').value;
   const pcBatchCode = document.getElementById('bulk-batch').value || generateBatchCode();
-  const today = new Date().toLocaleDateString();
+  const prepDate = document.getElementById('bulk-prep-date').value || getTodayDateString();
+  
+  const selectedDateObj = new Date(prepDate + 'T12:00:00');
+  const selectedDateStr = selectedDateObj.toLocaleDateString();
+  const selectedTimestampStr = selectedDateObj.toLocaleString();
 
   let containerDisplay = container;
   let isCustomContainer = false;
   let containerCapacity = getStandardCapacity(container);
 
-  if (container === 'custom') {
-    const customName = document.getElementById('custom-container-name').value || 'Custom Container';
-    const customCapacity = parseInt(document.getElementById('custom-container-capacity').value) || 300;
-    containerDisplay = `${customName} (${customCapacity}mL)`;
-    containerCapacity = customCapacity;
+  // Check if this is a custom container preset
+  const customPresets = getCustomContainerPresets();
+  const customPreset = customPresets.find(c => c.name === container);
+  if (customPreset) {
+    containerDisplay = customPreset.name;
+    // Convert capacity to mL for PC load calculations
+    let capMl = customPreset.capacityValue || 0;
+    if (customPreset.capacityUnit === 'qt') capMl = customPreset.capacityValue * 946.353;
+    else if (customPreset.capacityUnit === 'lb') capMl = customPreset.capacityValue * 453.592;
+    else if (customPreset.capacityUnit === 'oz') capMl = customPreset.capacityValue * 29.5735;
+    containerCapacity = Math.round(capMl) || 500;
     isCustomContainer = true;
   }
 
@@ -509,22 +668,24 @@ document.getElementById('bulk-form').addEventListener('submit', (e) => {
   const isPCSubstrate = medium.startsWith('PC Substrate');
   const defaultStage = 'Preparation'; // Sterilized / Ready for Inoculation
 
-  if (medium === 'Media Bottle (Agar/LC)') {
-    finalMedium = 'Media Bottle';
-    volVal = parseInt(document.getElementById('bulk-volume-ml').value) || null;
+  // Handle liquid/agar mediums for volume tracking
+  const isLiquidOrAgar = medium === 'Liquid Culture' || medium === 'Malt Extract Broth' || medium === 'Water' ||
+    medium === 'Malt Extract Agar' || medium === 'Potato Dextrose Agar';
+  if (isLiquidOrAgar) {
+    volVal = parseInt(document.getElementById('bulk-volume-ml').value) || 
+             parseInt(document.getElementById('lc-target-volume').value) || null;
     colorVal = document.getElementById('bulk-color').value || null;
-  } else if (medium === 'Liquid Culture') {
-    volVal = parseInt(document.getElementById('lc-target-volume').value) || null;
   }
 
   const newBatch = {
     batchId: pcBatchCode,
-    date: today,
+    date: prepDate,
+    prepDate: prepDate,
     medium: `${finalMedium} (${containerDisplay})`,
     qty: qty,
     pcTime: pcTime,
     container: {
-      name: isCustomContainer ? document.getElementById('custom-container-name').value : container,
+      name: isCustomContainer ? containerDisplay : container,
       capacity: containerCapacity,
       isCustom: isCustomContainer
     }
@@ -546,7 +707,11 @@ document.getElementById('bulk-form').addEventListener('submit', (e) => {
       pcBatch: pcBatchCode,
       parentItemId: null,
       stage: defaultStage,
-      createdAt: today,
+      createdAt: selectedDateStr,
+      sterilizationDate: selectedDateStr,
+      prepDate: prepDate,
+      containerType: containerDisplay,
+      containerCapacity: containerCapacity,
       breakAndShake: null,
       totalYield: 0,
       yields: [],
@@ -554,7 +719,7 @@ document.getElementById('bulk-form').addEventListener('submit', (e) => {
       contamVector: null,
       history: [{
         stage: defaultStage,
-        timestamp: new Date().toLocaleString(),
+        timestamp: selectedTimestampStr,
         notes: isPCSubstrate
           ? `${finalMedium} sterilized in PC batch ${pcBatchCode} for ${pcTime} mins. Ready for inoculation.`
           : `Sterilized in PC batch ${pcBatchCode} for ${pcTime} mins.`,
@@ -716,7 +881,7 @@ document.getElementById('item-form').addEventListener('submit', (e) => {
   }
 });
 
-// --- URL Hash Handling ---
+// --- URL Hash & Path Handling ---
 function handleURLHash() {
   const hash = window.location.hash;
   
@@ -750,8 +915,38 @@ function handleURLHash() {
   }
 }
 
+// Handle path-based routing for /container/{id} URLs
+function handleContainerPath() {
+  const path = window.location.pathname;
+  const match = path.match(/^\/container\/([^\/]+)$/);
+  
+  if (match) {
+    const id = match[1];
+    const found = db.items.find(i => i.id === id);
+    if (found) {
+      currentFilter = 'All';
+      scannedItemId = null;
+      render();
+      openModal(id);
+      setTimeout(() => {
+        const card = document.getElementById(`card-${id}`);
+        if (card) {
+          card.scrollIntoView({ behavior: 'smooth' });
+          card.classList.add('ring-4', 'ring-emerald-400');
+          setTimeout(() => {
+            card.classList.remove('ring-4', 'ring-emerald-400');
+          }, 4000);
+        }
+      }, 200);
+    }
+  }
+}
+
 window.addEventListener('hashchange', handleURLHash);
-window.addEventListener('DOMContentLoaded', handleURLHash);
+window.addEventListener('DOMContentLoaded', () => {
+  handleURLHash();
+  handleContainerPath();
+});
 
 // --- Expose globals referenced by inline handlers ---
 Object.defineProperty(window, 'currentFilter', { get: () => currentFilter, set: v => { currentFilter = v; } });
@@ -775,6 +970,12 @@ Object.assign(window, {
   exportJSON,
   importJSON,
   exportCSV,
+  // Bulk PC Prep smart dropdowns & custom presets
+  handleBulkMediumChange,
+  handleBulkContainerChange,
+  openCustomPresetModal,
+  closeCustomPresetModal,
+  handleCustomPresetSubmit,
   // utils.js
   toggleLCMedium,
   updateBatchCodeAuto,
@@ -884,16 +1085,29 @@ initFeedbackFormListener();
 setSyncStatusCallback(updateCloudSyncBadge);
 
 // Register error callback to display toast notifications for cloud sync failures.
+// On a database fetch failure the local cache is cleared (never falls back to
+// stale/corrupted localStorage) and a clean error toast is shown.
 setSyncErrorCallback((error, context) => {
   const message = error?.message || 'Unknown error';
   if (context === 'sync') {
-    showToast(`Cloud sync failed: ${message}. Retrying on next action.`, 'error', 8000);
+    showToast(`Failed to load data from the server: ${message}. Local data has been cleared — please try again.`, 'error', 8000);
   } else if (context === 'delete') {
     showToast(`Failed to delete from cloud: ${message}`, 'error', 8000);
   } else {
     showToast(`Cloud operation failed: ${message}`, 'error', 8000);
   }
 });
+
+// --- Startup storage cleanup & cache-busting ---
+// 1) Version check: if the stored version tag doesn't match the current app
+//    version, localStorage is cleared to prevent out-of-sync builds across
+//    different browsers.
+// 2) Remove legacy cached item keys so stale arrays from previous builds
+//    never hydrate or seed local state.
+// These run BEFORE initCloudSync() so the Supabase fetch is the sole source
+// of truth for state.
+checkAndClearStaleCache();
+clearLegacyStorage();
 
 initCloudSync();
 
@@ -928,9 +1142,18 @@ async function initAppRouting() {
 }
 
 // Keep routing in sync with auth events (OAuth redirect returns, logouts…).
+// Also refresh the plan/container badge immediately after sign-in or profile
+// updates so database-side plan changes (profiles / app_metadata) appear
+// without waiting for the next data save.
 onAuthStateChange((event) => {
-  if (event === 'SIGNED_IN') showAppDashboard();
-  else if (event === 'SIGNED_OUT') showLandingPage();
+  if (event === 'SIGNED_IN') {
+    showAppDashboard();
+    updateContainerUsageUI();
+  } else if (event === 'USER_UPDATED') {
+    updateContainerUsageUI();
+  } else if (event === 'SIGNED_OUT') {
+    showLandingPage();
+  }
 });
 
 initAppRouting();
@@ -951,9 +1174,27 @@ window.addEventListener('container-limit-error', (event) => {
   updateContainerUsageUI();
 });
 
+// --- Initialize custom preset form listener ---
+document.getElementById('custom-preset-form').addEventListener('submit', handleCustomPresetSubmit);
+
 // --- Initialize application ---
 updateDashboard();
 initInoculationsForm();
+initPrepDateInput();
+
+// When bulk-prep-date changes, update batch code automatically
+const prepDateInput = document.getElementById('bulk-prep-date');
+if (prepDateInput) {
+  prepDateInput.addEventListener('change', updateBatchCodeAuto);
+}
+
+// Populate smart dropdowns with categorized mediums/containers
+populateMediumDropdown('bulk-medium', 'Whole Oats');
+populateContainerDropdownSmart('bulk-container', 'Whole Oats', 'Quart Wide Mouth');
 updateBatchCodeAuto();
+updatePairValidationWarning();
 render();
 updateContainerUsageUI();
+
+// Load custom presets from Supabase user metadata (non-blocking)
+loadCustomPresetsFromCloud();

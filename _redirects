@@ -1,0 +1,2 @@
+# Netlify SPA redirects — ensure /container/{id} deep links resolve to the SPA shell
+/container/:id  /index.html  200

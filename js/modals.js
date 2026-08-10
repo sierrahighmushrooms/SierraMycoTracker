@@ -13,8 +13,10 @@ import {
   signInWithGoogle,
   signOutUser,
   syncItemsWithCloud,
+  pushLocalChangesToCloud,
   getSyncStatus,
   getContainerUsage,
+  getProfilePlanInfo,
   getLocalActiveContainerCount,
   TIER_LIMITS,
   INACTIVE_STAGES,
@@ -40,7 +42,9 @@ import {
   APP_CONFIG,
   CONTAINER_STAGES,
   SUBSTRATE_STAGES,
-  GRAIN_STAGES
+  GRAIN_STAGES,
+  getAppBaseUrl,
+  isUsingTemporaryBaseUrl
 } from './config.js';
 
 // --- Module-level modal state ---
@@ -194,6 +198,88 @@ export function closeModal() {
   hideModal(document.getElementById('modal'));
   document.body.classList.remove('overflow-hidden');
   activeItemId = null;
+}
+
+// --- View QR Code Modal ---
+// Opens a focused dialog displaying the container's QR code, the code text,
+// and a "Copy Link" button. The QR value uses the /container/{id} route format
+// so scanned codes resolve directly to the live app URL.
+export function openViewQRCodeModal() {
+  const item = db.items.find(i => i.id === activeItemId);
+  if (!item) return;
+
+  const modal = document.getElementById('view-qr-modal');
+  if (!modal) return;
+
+  // Set container ID display
+  const idEl = document.getElementById('view-qr-item-id');
+  if (idEl) idEl.innerText = item.id;
+
+  // Compute QR value — must be a non-empty string for the QR library
+  const qrValue = item?.id ? `${getAppBaseUrl()}/container/${item.id}` : '';
+
+  // Set link text
+  const linkEl = document.getElementById('view-qr-link');
+  if (linkEl) linkEl.innerText = qrValue || 'No valid container ID';
+
+  // Render QR code or skeleton placeholder
+  renderQRCodeWithSkeleton('view-qr-code', qrValue, 160);
+
+  showModal(modal);
+}
+
+export function closeViewQRCodeModal() {
+  hideModal(document.getElementById('view-qr-modal'));
+}
+
+// Copy the container's shareable link to the clipboard
+export function copyQRCodeLink() {
+  const item = db.items.find(i => i.id === activeItemId);
+  if (!item) return;
+
+  const link = `${getAppBaseUrl()}/container/${item.id}`;
+  navigator.clipboard.writeText(link).then(() => {
+    showToast('Link copied to clipboard!', 'success', 2000);
+  }).catch(() => {
+    // Fallback for older browsers
+    const textarea = document.createElement('textarea');
+    textarea.value = link;
+    document.body.appendChild(textarea);
+    textarea.select();
+    document.execCommand('copy');
+    textarea.remove();
+    showToast('Link copied to clipboard!', 'success', 2000);
+  });
+}
+
+// Helper: Render a QR code with a skeleton placeholder when the value is empty.
+// Uses the global qrcodejs library (QRCode constructor) loaded via CDN.
+// When `value` is empty or falsy, a pulsing skeleton is shown instead of a
+// blank white square, giving the user clear visual feedback.
+function renderQRCodeWithSkeleton(containerId, value, size = 128) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+
+  // Clear any existing content (including previously rendered QR codes)
+  container.innerHTML = '';
+
+  if (!value) {
+    // Show skeleton placeholder instead of a blank white square
+    container.innerHTML = `
+      <div class="w-full h-full flex items-center justify-center">
+        <div class="animate-pulse bg-slate-700 border-2 border-dashed border-slate-600 rounded w-10 h-10"></div>
+      </div>
+    `;
+    return;
+  }
+
+  // Render the QR code using the qrcodejs library
+  new QRCode(container, {
+    text: value,
+    width: size,
+    height: size,
+    correctLevel: QRCode.CorrectLevel.M
+  });
 }
 
 // --- Stage dropdown population (modal) ---
@@ -854,6 +940,17 @@ export function openPrintSettingsModal(itemList = null) {
   if (modal) {
     showModal(modal);
   }
+
+  // Show a subtle dev-environment warning when printing labels from a
+  // temporary dev URL (dev tunnel / localhost) without an explicit base URL.
+  const devWarning = document.getElementById('print-dev-warning');
+  if (devWarning) {
+    if (isUsingTemporaryBaseUrl()) {
+      devWarning.classList.remove('hidden');
+    } else {
+      devWarning.classList.add('hidden');
+    }
+  }
 }
 
 export function closePrintSettingsModal() {
@@ -1011,12 +1108,21 @@ export function executePrint(itemList, layout, offset) {
       containerElement = `<div class="print-extra font-semibold text-emerald-800">${item.containerType}${item.containerWeight ? ` (${item.containerWeight})` : ''}</div>`;
     }
 
+    // Format prep date for display (e.g., "Prepped: Aug 8, 2026")
+    let prepDateText = '';
+    if (item.prepDate) {
+      const d = new Date(item.prepDate + 'T12:00:00');
+      if (!isNaN(d.getTime())) {
+        prepDateText = `Prepped: ${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+      }
+    }
+
     card.innerHTML = `
       <div class="print-qr-container" id="print-qr-${item.id}"></div>
       <div class="print-text-container">
         <div class="print-id">${item.id}</div>
         <div class="print-strain">${item.strain === 'Uninoculated' ? 'Uninoculated' : item.strain}</div>
-        <div class="print-date">Inoc: ${item.createdAt}</div>
+        <div class="print-date">${prepDateText || `Inoc: ${item.createdAt}`}</div>
         <div class="print-extra">${item.medium}</div>
         ${containerElement}
       </div>
@@ -1026,7 +1132,7 @@ export function executePrint(itemList, layout, offset) {
     // Render QR Code in background
     setTimeout(() => {
       const size = layout === '10-up' ? 140 : layout === '80-up' ? 38 : 70;
-      const qrPayload = `${window.location.origin}${window.location.pathname}#item=${item.id}`;
+      const qrPayload = `${getAppBaseUrl()}/container/${item.id}`;
       new QRCode(document.getElementById(`print-qr-${item.id}`), {
         text: qrPayload,
         width: size,
@@ -1692,6 +1798,10 @@ async function handleAuthSignIn() {
   try {
     await signInWithEmail(email, password);
     document.getElementById('auth-password').value = '';
+    // Push locally created/edited items FIRST (explicit user action, not a
+    // page-load auto-push) so offline guest work isn't wiped out when the
+    // fetch-only sync replaces local state with the cloud view.
+    await pushLocalChangesToCloud().catch(() => {});
     await syncItemsWithCloud();
     closeAuthModal();
   } catch (err) {
@@ -1715,6 +1825,8 @@ async function handleAuthSignUp() {
     if (data.session) {
       // Email confirmation disabled: session created, sync right away.
       document.getElementById('auth-password').value = '';
+      // Push guest items first (explicit action), then fetch-only sync.
+      await pushLocalChangesToCloud().catch(() => {});
       await syncItemsWithCloud();
       closeAuthModal();
     } else {
@@ -1750,66 +1862,102 @@ export function updateCloudSyncBadge(status) {
 // Cached usage data for the current session
 let cachedUsage = null;
 
-// Update the container usage progress bar in the dashboard
+// Update the container usage progress bar in the dashboard.
+// Plan + limit are read from public.profiles (`plan`, `container_limit`) or
+// user metadata; the active count comes from the server-side RPC when
+// available, falling back to the local count for offline/guest mode.
 export async function updateContainerUsageUI() {
   const usageContainer = document.getElementById('container-usage-widget');
   if (!usageContainer) return;
 
-  // Try to get usage from Supabase RPC first
-  let usage = await getContainerUsage();
+  // Fetch server usage + profile plan info in parallel.
+  const [usage, planInfo] = await Promise.all([
+    getContainerUsage(),
+    getProfilePlanInfo()
+  ]);
   
-  // Fallback to local count if RPC unavailable (offline/guest mode)
-  if (!usage) {
-    const localCount = getLocalActiveContainerCount();
-    usage = {
-      active_count: localCount,
-      max_limit: TIER_LIMITS.free,
-      can_create: localCount < TIER_LIMITS.free,
-      tier: 'free'
-    };
+  // Active count: prefer the server-side count; fall back to the local count
+  // for offline/guest mode.
+  const activeCount = (usage && usage.active_count != null)
+    ? usage.active_count
+    : getLocalActiveContainerCount();
+
+  // Plan: profiles.plan / user app_metadata wins; fall back to the RPC tier.
+  const rawPlan = String((planInfo && planInfo.plan) || (usage && usage.tier) || 'free').toLowerCase();
+  const isAdminRole = (planInfo && planInfo.role) === 'admin';
+  const isProPlan = rawPlan === 'pro' || rawPlan === 'admin' || isAdminRole;
+
+  // Container limit: profiles.container_limit wins; PRO/admin default to
+  // unlimited; then RPC max_limit; then the free tier default.
+  let maxLimit;
+  if (planInfo && planInfo.containerLimit != null) {
+    maxLimit = planInfo.containerLimit;
+  } else if (isProPlan) {
+    maxLimit = Infinity;
+  } else if (usage && usage.max_limit != null) {
+    maxLimit = usage.max_limit;
+  } else {
+    maxLimit = TIER_LIMITS.free;
   }
+
+  const unlimited = !isFinite(maxLimit) || maxLimit >= 999999;
+  const canCreate = unlimited || activeCount < maxLimit;
   
-  cachedUsage = usage;
+  cachedUsage = {
+    active_count: activeCount,
+    max_limit: unlimited ? 999999 : maxLimit,
+    can_create: canCreate,
+    tier: rawPlan,
+    unlimited
+  };
   
-  // Calculate percentage
-  const percentage = Math.min(100, Math.round((usage.active_count / usage.max_limit) * 100));
+  // Calculate percentage (nominal 0 for unlimited plans)
+  const percentage = unlimited ? 0 : Math.min(100, Math.round((activeCount / maxLimit) * 100));
   
   // Determine color based on usage level
   let barColor = 'bg-emerald-500';
   let textColor = 'text-emerald-400';
-  if (percentage >= 90) {
+  if (!unlimited && percentage >= 90) {
     barColor = 'bg-red-500';
     textColor = 'text-red-400';
-  } else if (percentage >= 70) {
+  } else if (!unlimited && percentage >= 70) {
     barColor = 'bg-amber-500';
     textColor = 'text-amber-400';
   }
   
-  // Format the limit display (show ∞ for commercial tier)
-  const limitDisplay = usage.max_limit >= 999999 ? '∞' : usage.max_limit;
+  // Format the limit display (∞ for unlimited / PRO plans)
+  const limitDisplay = unlimited ? '∞' : maxLimit;
   
-  // Tier display names
-  const tierNames = { free: 'Free', grower: 'Grower', commercial: 'Commercial' };
-  const tierDisplay = tierNames[usage.tier] || 'Free';
+  // Plan badge label & styling
+  let planLabel;
+  let planBadgeClass = 'bg-slate-700 text-slate-300 border-slate-600';
+  if (isProPlan) {
+    planLabel = 'PRO Plan';
+    planBadgeClass = 'bg-emerald-900/60 text-emerald-300 border-emerald-600';
+  } else {
+    const tierNames = { free: 'Free', grower: 'Grower', commercial: 'Commercial' };
+    const planName = tierNames[rawPlan] || (rawPlan.charAt(0).toUpperCase() + rawPlan.slice(1));
+    planLabel = `${planName} Plan`;
+  }
   
   usageContainer.innerHTML = `
     <div class="bg-slate-800 border border-slate-700 rounded-xl p-4 space-y-3">
       <div class="flex justify-between items-center">
         <span class="text-xs font-semibold text-slate-400 uppercase tracking-wide">Active Containers</span>
-        <span class="text-[10px] px-2 py-0.5 rounded-full bg-slate-700 text-slate-300 border border-slate-600">${tierDisplay} Plan</span>
+        <span id="container-plan-badge" class="text-[10px] px-2 py-0.5 rounded-full border ${planBadgeClass}">${planLabel}</span>
       </div>
       <div class="flex items-end justify-between">
-        <span class="text-2xl font-bold ${textColor}">${usage.active_count} <span class="text-sm font-normal text-slate-500">/ ${limitDisplay}</span></span>
-        <span class="text-xs text-slate-500">${percentage}% used</span>
+        <span class="text-2xl font-bold ${textColor}">${activeCount} <span class="text-sm font-normal text-slate-500">/ ${limitDisplay}</span></span>
+        <span class="text-xs text-slate-500">${unlimited ? 'Unlimited plan' : percentage + '% used'}</span>
       </div>
       <div class="w-full bg-slate-700 rounded-full h-2 overflow-hidden">
-        <div class="${barColor} h-2 rounded-full transition-all duration-500" style="width: ${percentage}%"></div>
+        <div class="${barColor} h-2 rounded-full transition-all duration-500" style="width: ${unlimited ? 4 : percentage}%"></div>
       </div>
-      ${!usage.can_create ? `
+      ${!canCreate ? `
         <button onclick="openUpgradeModal()" class="w-full bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white text-xs font-bold py-2 px-3 rounded-lg transition flex items-center justify-center gap-1">
           ⚡ Limit Reached — Upgrade Plan
         </button>
-      ` : usage.active_count >= usage.max_limit * 0.8 ? `
+      ` : !unlimited && activeCount >= maxLimit * 0.8 ? `
         <button onclick="openUpgradeModal()" class="w-full bg-slate-700 hover:bg-slate-600 text-slate-300 text-xs font-semibold py-2 px-3 rounded-lg transition">
           View Upgrade Options
         </button>
@@ -1818,9 +1966,9 @@ export async function updateContainerUsageUI() {
   `;
   
   // Update the "Add Container" button state
-  updateAddContainerButtonState(usage.can_create);
+  updateAddContainerButtonState(canCreate);
   
-  return usage;
+  return cachedUsage;
 }
 
 // Enable/disable the Add Container buttons based on usage
@@ -2053,7 +2201,9 @@ function renderBillingSettingsContent(billing, tiers) {
   const tierConfig = {
     free: { name: 'Free', color: 'text-slate-300', badge: 'bg-slate-700 text-slate-300' },
     grower: { name: 'Grower', color: 'text-amber-400', badge: 'bg-amber-900/50 text-amber-300 border-amber-700' },
-    commercial: { name: 'Commercial', color: 'text-emerald-400', badge: 'bg-emerald-900/50 text-emerald-300 border-emerald-700' }
+    commercial: { name: 'Commercial', color: 'text-emerald-400', badge: 'bg-emerald-900/50 text-emerald-300 border-emerald-700' },
+    pro: { name: 'PRO', color: 'text-emerald-400', badge: 'bg-emerald-900/50 text-emerald-300 border-emerald-700' },
+    admin: { name: 'PRO', color: 'text-emerald-400', badge: 'bg-emerald-900/50 text-emerald-300 border-emerald-700' }
   };
   
   // Status badge styling
