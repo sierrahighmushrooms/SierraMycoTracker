@@ -307,7 +307,12 @@ export function formatPrepDate(dateStr) {
 
 // Get today's date as YYYY-MM-DD
 export function getTodayDateString() {
-  return new Date().toISOString().split('T')[0];
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  const localDateStr = `${year}-${month}-${day}`;
+  return localDateStr;
 }
 
 // Initialize the prep date input with today's date
@@ -343,9 +348,14 @@ export function generateBatchCode() {
     dd = parts[2];
   } else {
     const now = new Date();
-    yyyy = now.getFullYear();
-    mm = String(now.getMonth() + 1).padStart(2, '0');
-    dd = String(now.getDate()).padStart(2, '0');
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const localDateStr = `${year}-${month}-${day}`;
+    const parts = localDateStr.split('-');
+    yyyy = parts[0];
+    mm = parts[1];
+    dd = parts[2];
   }
   const dateStr = `${yyyy}${mm}${dd}`;
 

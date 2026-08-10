@@ -267,7 +267,14 @@ function exportJSON() {
   const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify({ items: db.items, pcBatches: db.pcBatches }));
   const el = document.createElement('a');
   el.setAttribute('href', dataStr);
-  el.setAttribute('download', `SierraMycoLab_Backup_${new Date().toISOString().split('T')[0]}.json`);
+  
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  const localDateStr = `${year}-${month}-${day}`;
+  
+  el.setAttribute('download', `SierraMycoLab_Backup_${localDateStr}.json`);
   document.body.appendChild(el); el.click(); el.remove();
 }
 
