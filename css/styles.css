@@ -1,3 +1,21 @@
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap');
+
+:root {
+  --font-sans: 'Manrope', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+  --font-display: 'Space Grotesk', var(--font-sans);
+}
+
+.font-sans-custom {
+  font-family: var(--font-sans);
+}
+.font-mono-custom {
+  font-family: var(--font-mono);
+}
+.font-display-custom {
+  font-family: var(--font-display);
+}
+
 /* ---- Printable Label Isolation (screen) ----
    Prevents the bulk print section and its QR label cards from
    leaking through or floating over the normal UI. */

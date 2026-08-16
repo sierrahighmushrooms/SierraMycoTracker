@@ -265,113 +265,113 @@
       <div class="space-y-6">
         
         <!-- BULK PC PREP FORM -->
-        <div class="bg-slate-800 p-5 rounded-xl border border-amber-500/40 shadow-lg space-y-4">
-          <div class="flex justify-between items-center">
-            <h2 class="text-lg font-semibold text-amber-400">🔥 Bulk PC Prep</h2>
-            <span class="text-[10px] bg-amber-500/20 text-amber-300 font-bold px-2 py-0.5 rounded">Sterilization Run</span>
+        <div class="bg-slate-900 p-6 rounded-xl border border-slate-800 shadow-xl space-y-5 transition-all duration-150 hover:border-slate-700">
+          <div class="flex justify-between items-center pb-2 border-b border-slate-800/80">
+            <h2 class="text-lg font-bold font-display-custom text-amber-400 tracking-tight">🔥 Bulk PC Prep</h2>
+            <span class="text-[10px] bg-amber-500/10 text-amber-300 font-semibold font-mono-custom px-2 py-0.5 rounded border border-amber-500/20">Sterilization Run</span>
           </div>
 
-          <form id="bulk-form" class="space-y-3">
-            <div class="grid grid-cols-2 gap-2">
+          <form id="bulk-form" class="space-y-4">
+            <div class="grid grid-cols-2 gap-3">
               <div>
-                <label class="block text-xs font-medium text-slate-400 mb-1">Medium</label>
-                <select id="bulk-medium" onchange="handleBulkMediumChange()" class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-sm text-slate-100">
+                <label class="block text-xs font-semibold font-sans-custom uppercase tracking-wider text-slate-400 mb-1.5">Medium</label>
+                <select id="bulk-medium" onchange="handleBulkMediumChange()" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/50 rounded-lg p-2.5 text-sm text-slate-100 transition duration-150 outline-none">
                   <!-- Populated dynamically by populateMediumDropdown() -->
                 </select>
               </div>
               <div>
-                <label class="block text-xs font-medium text-slate-400 mb-1">Container</label>
-                <select id="bulk-container" onchange="handleBulkContainerChange()" class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-sm text-slate-100">
+                <label class="block text-xs font-semibold font-sans-custom uppercase tracking-wider text-slate-400 mb-1.5">Container</label>
+                <select id="bulk-container" onchange="handleBulkContainerChange()" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/50 rounded-lg p-2.5 text-sm text-slate-100 transition duration-150 outline-none">
                   <!-- Populated dynamically by populateContainerDropdownSmart() -->
                 </select>
               </div>
             </div>
 
             <!-- Non-Blocking Pair Validation Warning -->
-            <div id="pair-validation-warning" class="hidden bg-amber-950/30 border border-amber-800/40 rounded-lg p-2.5"></div>
+            <div id="pair-validation-warning" class="hidden bg-amber-950/20 border border-amber-800/30 rounded-lg p-3 text-xs text-amber-300 font-sans-custom leading-relaxed"></div>
 
             <!-- Custom Container Fields (legacy inline form, kept for backwards compat) -->
-            <div id="custom-container-fields" class="hidden grid grid-cols-2 gap-2">
+            <div id="custom-container-fields" class="hidden grid grid-cols-2 gap-3">
               <div>
-                <label class="block text-xs font-medium text-slate-400 mb-1">Custom Name</label>
-                <input type="text" id="custom-container-name" placeholder="e.g., 10oz Jar" class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-sm text-slate-100" oninput="updateLCTargetVolumeDefault()">
+                <label class="block text-xs font-semibold font-sans-custom uppercase tracking-wider text-slate-400 mb-1.5">Custom Name</label>
+                <input type="text" id="custom-container-name" placeholder="e.g., 10oz Jar" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/50 rounded-lg p-2.5 text-sm text-slate-100 transition duration-150 outline-none" oninput="updateLCTargetVolumeDefault()">
               </div>
               <div>
-                <label class="block text-xs font-medium text-slate-400 mb-1">Capacity (mL)</label>
-                <input type="number" id="custom-container-capacity" placeholder="300" class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-sm text-slate-100" oninput="updateLCTargetVolumeDefault()">
+                <label class="block text-xs font-semibold font-sans-custom uppercase tracking-wider text-slate-400 mb-1.5">Capacity (mL)</label>
+                <input type="number" id="custom-container-capacity" placeholder="300" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/50 rounded-lg p-2.5 text-sm text-slate-100 transition duration-150 outline-none font-mono-custom" oninput="updateLCTargetVolumeDefault()">
               </div>
             </div>
 
             <!-- Media Bottle Fields -->
-            <div id="media-bottle-fields" class="hidden grid grid-cols-2 gap-2">
+            <div id="media-bottle-fields" class="hidden grid grid-cols-2 gap-3">
               <div>
-                <label class="block text-xs font-medium text-slate-400 mb-1">Volume per Container (mL)</label>
-                <input type="number" id="bulk-volume-ml" placeholder="e.g., 500" class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-sm text-slate-100">
+                <label class="block text-xs font-semibold font-sans-custom uppercase tracking-wider text-slate-400 mb-1.5">Volume per Container (mL)</label>
+                <input type="number" id="bulk-volume-ml" placeholder="e.g., 500" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/50 rounded-lg p-2.5 text-sm text-slate-100 transition duration-150 outline-none font-mono-custom">
               </div>
               <div>
-                <label class="block text-xs font-medium text-slate-400 mb-1">Color / Variant</label>
-                <input type="text" id="bulk-color" placeholder="e.g., Charcoal, Blue, Pink" class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-sm text-slate-100">
+                <label class="block text-xs font-semibold font-sans-custom uppercase tracking-wider text-slate-400 mb-1.5">Color / Variant</label>
+                <input type="text" id="bulk-color" placeholder="e.g., Charcoal, Blue, Pink" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/50 rounded-lg p-2.5 text-sm text-slate-100 transition duration-150 outline-none">
               </div>
             </div>
 
             <!-- LIQUID CULTURE RECIPE CALCULATOR -->
-            <div id="lc-calculator-box" class="hidden bg-emerald-950/20 p-3 rounded-lg border border-emerald-800/40 space-y-2">
-              <h4 class="text-xs font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-1">
+            <div id="lc-calculator-box" class="hidden bg-emerald-950/10 p-3 rounded-lg border border-emerald-900/30 space-y-2.5">
+              <h4 class="text-xs font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-1.5 font-display-custom">
                 <span>🧪</span> Liquid Culture Recipe Calculator
               </h4>
-              <div class="grid grid-cols-2 gap-2">
+              <div class="grid grid-cols-2 gap-3">
                 <div>
-                  <label class="block text-[10px] text-emerald-300 font-medium mb-1">Target Volume per Container (mL)</label>
-                  <input type="number" id="lc-target-volume" value="500" class="w-full bg-slate-900 border border-emerald-800/80 rounded p-1.5 text-xs text-slate-100" oninput="updateLCCalculator()">
+                  <label class="block text-[10px] text-emerald-400 font-semibold uppercase tracking-wider mb-1 font-sans-custom">Target Volume per Container (mL)</label>
+                  <input type="number" id="lc-target-volume" value="500" class="w-full bg-slate-950 border border-emerald-900/40 focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/50 rounded-lg p-2 text-xs text-slate-100 transition duration-150 outline-none font-mono-custom" oninput="updateLCCalculator()">
                 </div>
                 <div class="flex flex-col justify-end">
-                  <span class="text-[10px] text-slate-400">Total Liquid for batch:</span>
-                  <span id="lc-total-batch-volume" class="text-xs font-bold text-white">3500 mL</span>
+                  <span class="text-[10px] text-slate-500 font-medium uppercase tracking-wider font-sans-custom">Total Liquid for batch:</span>
+                  <span id="lc-total-batch-volume" class="text-xs font-bold text-white font-mono-custom">3500 mL</span>
                 </div>
               </div>
-              <div class="bg-slate-900 p-2 rounded text-xs space-y-1 text-slate-300 border border-slate-800">
+              <div class="bg-slate-950 p-2.5 rounded-lg text-xs space-y-1.5 text-slate-300 border border-slate-900">
                 <div class="flex justify-between">
-                  <span>💧 Distilled Water:</span>
-                  <span id="lc-calc-water" class="font-bold text-emerald-400">500 mL</span>
+                  <span class="font-sans-custom text-slate-400">💧 Distilled Water:</span>
+                  <span id="lc-calc-water" class="font-bold font-mono-custom text-emerald-400">500 mL</span>
                 </div>
                 <div class="flex justify-between">
-                  <span>🌾 Light Malt Extract (LME):</span>
-                  <span id="lc-calc-lme" class="font-bold text-emerald-400">1.00 g</span>
+                  <span class="font-sans-custom text-slate-400">🌾 Light Malt Extract (LME):</span>
+                  <span id="lc-calc-lme" class="font-bold font-mono-custom text-emerald-400">1.00 g</span>
                 </div>
                 <div class="flex justify-between">
-                  <span>🍯 Honey / Dextrose:</span>
-                  <span id="lc-calc-sugar" class="font-bold text-emerald-400">10.00 g</span>
+                  <span class="font-sans-custom text-slate-400">🍯 Honey / Dextrose:</span>
+                  <span id="lc-calc-sugar" class="font-bold font-mono-custom text-emerald-400">10.00 g</span>
                 </div>
                 <div class="flex justify-between">
-                  <span>🧪 Peptone:</span>
-                  <span id="lc-calc-peptone" class="font-bold text-emerald-400">0.50 g</span>
+                  <span class="font-sans-custom text-slate-400">🧪 Peptone:</span>
+                  <span id="lc-calc-peptone" class="font-bold font-mono-custom text-emerald-400">0.50 g</span>
                 </div>
               </div>
             </div>
 
-            <div class="grid grid-cols-2 gap-2">
+            <div class="grid grid-cols-2 gap-3">
               <div>
-                <label class="block text-xs font-medium text-slate-400 mb-1">Quantity</label>
-                <input type="number" id="bulk-qty" min="1" max="50" value="7" required class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-sm text-slate-100" oninput="updateLCCalculator()">
+                <label class="block text-xs font-semibold font-sans-custom uppercase tracking-wider text-slate-400 mb-1.5">Quantity</label>
+                <input type="number" id="bulk-qty" min="1" max="50" value="7" required class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/50 rounded-lg p-2.5 text-sm text-slate-100 font-mono-custom transition duration-150 outline-none" oninput="updateLCCalculator()">
               </div>
               <div>
-                <label class="block text-xs font-medium text-slate-400 mb-1">PC Time (m)</label>
-                <input type="number" id="bulk-time" value="180" required class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-sm text-slate-100">
-              </div>
-            </div>
-
-            <div class="grid grid-cols-2 gap-2">
-              <div>
-                <label class="block text-xs font-medium text-slate-400 mb-1">Run Date</label>
-                <input type="date" id="bulk-prep-date" class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-sm text-slate-100">
-              </div>
-              <div>
-                <label class="block text-xs font-medium text-slate-400 mb-1">Batch Code</label>
-                <input type="text" id="bulk-batch" placeholder="PC-Aug5" class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-sm text-slate-100">
+                <label class="block text-xs font-semibold font-sans-custom uppercase tracking-wider text-slate-400 mb-1.5">PC Time (m)</label>
+                <input type="number" id="bulk-time" value="180" required class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/50 rounded-lg p-2.5 text-sm text-slate-100 font-mono-custom transition duration-150 outline-none">
               </div>
             </div>
 
-            <button type="submit" class="w-full bg-amber-600 hover:bg-amber-500 text-slate-950 font-bold py-2 rounded transition">
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="block text-xs font-semibold font-sans-custom uppercase tracking-wider text-slate-400 mb-1.5">Run Date</label>
+                <input type="date" id="bulk-prep-date" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/50 rounded-lg p-2.5 text-sm text-slate-100 font-mono-custom transition duration-150 outline-none">
+              </div>
+              <div>
+                <label class="block text-xs font-semibold font-sans-custom uppercase tracking-wider text-slate-400 mb-1.5">Batch Code</label>
+                <input type="text" id="bulk-batch" placeholder="PC-Aug5" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/50 rounded-lg p-2.5 text-sm text-slate-100 font-mono-custom transition duration-150 outline-none">
+              </div>
+            </div>
+
+            <button type="submit" class="w-full bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold py-3 px-4 rounded-xl transition duration-150 transform hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-amber-500/10 hover:shadow-amber-500/20 flex items-center justify-center gap-2 text-sm font-sans-custom outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2 focus:ring-offset-slate-900">
               ⚡ Generate & Print Labels
             </button>
           </form>
