@@ -16,6 +16,12 @@ export const db = {
   pcBatches: []
 };
 
+// Multi-tenant organization and location context variables
+export let userOrganizations = [];
+export let userLocations = [];
+export let currentOrganizationId = null;
+export let currentLocationId = null;
+
 // Optional UI refresh callback registered by app.js so the storage layer can
 // notify the DOM layer after data changes, without creating a circular import.
 let refreshCallback = null;
@@ -291,7 +297,9 @@ function serializeItemForCloud(item, userId) {
     history: Array.isArray(item.history) ? item.history : [],
     yields: Array.isArray(item.yields) ? item.yields : [],
     created_at: createdAt,
-    updated_at: updatedAt
+    updated_at: updatedAt,
+    organization_id: item.organization_id || currentOrganizationId || null,
+    location_id: item.location_id || currentLocationId || (userLocations[0] ? userLocations[0].id : null) || null
   };
 
   // Preserve the custom human-readable code (e.g. "MY-Z9UGC") when present.
@@ -331,6 +339,8 @@ function deserializeCloudRow(row) {
   return {
     id: row.id,
     user_id: row.user_id,
+    organization_id: row.organization_id || null,
+    location_id: row.location_id || null,
     // Provide both legacy and new field names for maximum compatibility
     label: itemName,
     name: itemName,
@@ -457,7 +467,9 @@ const ALLOWED_COLUMNS = [
   'updated_at',
   'prep_date',
   'container_capacity',
-  'container_type'
+  'container_type',
+  'organization_id',
+  'location_id'
 ];
 
 // --- Defensive Key Mapping ---
@@ -734,12 +746,15 @@ export async function syncItemsWithCloud() {
       return { synced: false, reason: 'guest' };
     }
 
-    // 1) FETCH ONLY — supabase.from('items').select('*') filtered by user.
+    // 1) FETCH ONLY — filtered by current organization (multi-tenant) or user
     //    IMPORTANT: do NOT push/upsert local state during page mount/fetch.
-    const { data: cloudRows, error: fetchError } = await supabaseClient
-      .from('items')
-      .select('*')
-      .eq('user_id', user.id);
+    let query = supabaseClient.from('items').select('*');
+    if (currentOrganizationId) {
+      query = query.eq('organization_id', currentOrganizationId);
+    } else {
+      query = query.eq('user_id', user.id);
+    }
+    const { data: cloudRows, error: fetchError } = await query;
     if (fetchError) throw fetchError;
     // Deserialize and filter out any null results
     const cloudItems = (cloudRows || [])
@@ -777,6 +792,164 @@ export async function syncItemsWithCloud() {
 // Backward-compatible alias (older code referenced syncLocalWithCloud).
 export async function syncLocalWithCloud() {
   return syncItemsWithCloud();
+}
+
+// Setters for context
+export function setCurrentOrganizationId(orgId) {
+  currentOrganizationId = orgId;
+}
+
+export function setCurrentLocationId(locId) {
+  currentLocationId = locId === 'all' ? null : locId;
+}
+
+// Load current user's organizations and locations
+export async function loadOrganizationContext() {
+  if (!supabaseClient) return { onboardingNeeded: false };
+  const { data: { user } } = await supabaseClient.auth.getUser();
+  if (!user) return { onboardingNeeded: false };
+
+  // Fetch memberships with organization details
+  const { data: memberships, error: memError } = await supabaseClient
+    .from('organization_members')
+    .select('role, organization_id, organizations(id, name, slug, logo_url, settings)')
+    .eq('user_id', user.id);
+
+  if (memError) {
+    console.error('Failed to fetch memberships:', memError);
+    return { onboardingNeeded: false };
+  }
+
+  if (!memberships || memberships.length === 0) {
+    // Onboarding is needed for this user
+    userOrganizations = [];
+    userLocations = [];
+    currentOrganizationId = null;
+    currentLocationId = null;
+    return { onboardingNeeded: true };
+  }
+
+  // Map organizations
+  userOrganizations = memberships.map(m => ({
+    id: m.organizations.id,
+    name: m.organizations.name,
+    slug: m.organizations.slug,
+    logo_url: m.organizations.logo_url,
+    settings: m.organizations.settings || { enable_sales: false, enable_racks: false, enable_supplies: false },
+    role: m.role
+  }));
+
+  // Set default organization if none selected
+  if (!currentOrganizationId || !userOrganizations.find(o => o.id === currentOrganizationId)) {
+    currentOrganizationId = userOrganizations[0].id;
+  }
+
+  // Fetch locations for current organization
+  const { data: locations, error: locError } = await supabaseClient
+    .from('locations')
+    .select('*')
+    .eq('organization_id', currentOrganizationId);
+
+  if (locError) {
+    console.error('Failed to fetch locations:', locError);
+    userLocations = [];
+  } else {
+    userLocations = locations || [];
+  }
+
+  return { onboardingNeeded: false };
+}
+
+// Create organization and assign default owner member and default Location
+export async function createOrganization(name, slug, logoUrl, settings = null) {
+  if (!supabaseClient) throw new Error('Supabase not configured.');
+  const { data: { user } } = await supabaseClient.auth.getUser();
+  if (!user) throw new Error('Not logged in.');
+
+  // 1. Create Organization
+  const insertPayload = { name, slug, logo_url: logoUrl };
+  if (settings) {
+    insertPayload.settings = settings;
+  }
+
+  const { data: org, error: orgError } = await supabaseClient
+    .from('organizations')
+    .insert(insertPayload)
+    .select()
+    .single();
+
+  if (orgError) throw orgError;
+
+  // 2. Create Member (owner)
+  const { error: memError } = await supabaseClient
+    .from('organization_members')
+    .insert({
+      organization_id: org.id,
+      user_id: user.id,
+      role: 'owner'
+    });
+
+  if (memError) throw memError;
+
+  // 3. Create Default Location "Main Facility"
+  const { data: loc, error: locError } = await supabaseClient
+    .from('locations')
+    .insert({
+      organization_id: org.id,
+      name: 'Main Facility'
+    })
+    .select()
+    .single();
+
+  if (locError) throw locError;
+
+  // Set as current context
+  currentOrganizationId = org.id;
+  currentLocationId = loc.id;
+
+  // Reload context
+  await loadOrganizationContext();
+
+  return { organization: org, location: loc };
+}
+
+// Update organization settings
+export async function updateOrganizationSettings(orgId, settings) {
+  if (!supabaseClient) throw new Error('Supabase not configured.');
+  
+  const { error } = await supabaseClient
+    .from('organizations')
+    .update({ settings })
+    .eq('id', orgId);
+
+  if (error) throw error;
+  
+  // Update the local cache
+  const org = userOrganizations.find(o => o.id === orgId);
+  if (org) {
+    org.settings = settings;
+  }
+}
+
+// Create new location
+export async function createLocation(name) {
+  if (!supabaseClient) throw new Error('Supabase not configured.');
+  if (!currentOrganizationId) throw new Error('No active organization.');
+
+  const { data, error } = await supabaseClient
+    .from('locations')
+    .insert({
+      organization_id: currentOrganizationId,
+      name
+    })
+    .select()
+    .single();
+
+  if (error) throw error;
+
+  // Reload organization context to pull the new location list
+  await loadOrganizationContext();
+  return data;
 }
 
 // --- Auth helpers (Email & Password) ---

@@ -201,9 +201,18 @@
     <!-- Header & Action Bar -->
     <header class="border-b border-slate-700 pb-4 space-y-4">
       <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div>
-          <h1 class="text-2xl font-bold text-emerald-400">🍄 Sierra Myco Lab</h1>
-          <p class="text-xs text-slate-400">Workflow, Lineage, Bulk PC Prep & Audit System</p>
+        <div class="flex flex-col sm:flex-row sm:items-center gap-4">
+          <div>
+            <h1 class="text-2xl font-bold text-emerald-400">🍄 Sierra Myco Lab</h1>
+            <p class="text-xs text-slate-400">Workflow, Lineage, Bulk PC Prep & Audit System</p>
+          </div>
+          <!-- Location selector dropdown -->
+          <div id="header-location-container" class="hidden flex items-center gap-2 bg-slate-800/60 border border-slate-700/60 rounded-xl px-3 py-1.5 self-start sm:self-center">
+            <span class="text-xs">📍</span>
+            <select id="header-location-select" class="bg-transparent text-xs text-slate-200 font-bold focus:outline-none cursor-pointer">
+              <option value="all" class="bg-slate-900">All Locations</option>
+            </select>
+          </div>
         </div>
         <div class="flex flex-wrap gap-2">
           <button onclick="openBatchModal()" class="bg-amber-600 hover:bg-amber-500 text-slate-950 px-3 py-1.5 rounded text-xs font-bold transition">📋 PC Batch Log</button>
@@ -216,13 +225,15 @@
           <button onclick="openRecipeCalcModal()" class="bg-teal-600 hover:bg-teal-500 px-3 py-1.5 rounded text-xs font-bold transition flex items-center gap-1">🧮 Recipe Calc</button>
           <button onclick="openFeedbackModal()" class="bg-fuchsia-600 hover:bg-fuchsia-500 px-3 py-1.5 rounded text-xs font-bold transition flex items-center gap-1">💡 Request Feature</button>
           <button onclick="openBillingSettings()" class="bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 px-3 py-1.5 rounded text-xs font-bold transition flex items-center gap-1">💳 Billing</button>
+          <button id="setup-wizard-header-btn" onclick="window.location.hash = '#onboarding/setup'" class="hidden bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 px-3 py-1.5 rounded text-xs font-bold transition flex items-center gap-1 shadow-lg shadow-emerald-500/10">🚀 Setup Wizard</button>
+          <button onclick="openOrgSettings()" class="bg-slate-700 hover:bg-slate-600 px-3 py-1.5 rounded text-xs font-bold transition flex items-center gap-1">🏢 Org Settings</button>
           <button onclick="openAuthModal()" class="bg-slate-700 hover:bg-slate-600 px-3 py-1.5 rounded text-xs font-bold transition flex items-center gap-1">👤 Account / Sync</button>
           <span id="cloud-sync-status" class="hidden items-center gap-1 text-[10px] font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-700/60 px-2 py-1 rounded-full self-center whitespace-nowrap">☁️ Cloud Synced</span>
         </div>
       </div>
 
       <!-- Dashboard Stats -->
-      <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
+      <div id="dashboard-stats" class="grid grid-cols-2 md:grid-cols-5 gap-4">
         <div class="bg-slate-800 p-3 rounded border border-slate-700">
           <div class="text-xs text-slate-400">Total Containers</div>
           <div id="stat-total" class="text-xl font-bold text-white">0</div>
@@ -260,12 +271,45 @@
       </div>
     </header>
 
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- ONBOARDING CHECKLIST / SETUP WIZARD VIEW -->
+    <div id="onboarding-checklist-view" class="hidden bg-slate-900 border border-slate-800 rounded-2xl p-6 md:p-8 space-y-6 shadow-2xl animate-fade-in mb-6">
+      <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-slate-800 pb-6">
+        <div>
+          <h2 class="text-xl md:text-2xl font-bold text-white flex items-center gap-2">
+            <span>🚀</span> Onboarding Setup Wizard
+          </h2>
+          <p class="text-sm text-slate-400 mt-1">Complete these active tasks to set up your new organization for success.</p>
+        </div>
+        <button onclick="window.location.hash = ''" class="bg-slate-850 hover:bg-slate-800 border border-slate-700 text-slate-200 font-bold px-4 py-2 rounded-xl transition text-xs flex items-center gap-1">
+          <span>⬅️</span> Back to Dashboard
+        </button>
+      </div>
+
+      <!-- Completion Tracker Progress Bar -->
+      <div class="bg-slate-950 border border-slate-800/80 rounded-xl p-4 md:p-5 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div class="space-y-1 w-full md:w-auto">
+          <div class="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Overall Progress</div>
+          <div id="onboarding-progress-text" class="text-lg font-bold text-emerald-400">Loading steps...</div>
+        </div>
+        <div class="w-full md:max-w-md flex-grow">
+          <div class="w-full bg-slate-850 rounded-full h-3 overflow-hidden border border-slate-800">
+            <div id="onboarding-progress-bar" class="bg-emerald-500 h-full rounded-full transition-all duration-500" style="width: 0%"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Checklist Task List -->
+      <div id="onboarding-steps-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <!-- Dynamically loaded via JS -->
+      </div>
+    </div>
+
+    <div id="dashboard-grid" class="grid grid-cols-1 lg:grid-cols-3 gap-6">
       <!-- Forms Section -->
       <div class="space-y-6">
         
         <!-- BULK PC PREP FORM -->
-        <div class="bg-slate-900 p-6 rounded-xl border border-slate-800 shadow-xl space-y-5 transition-all duration-150 hover:border-slate-700">
+        <div id="supplies-module-container" class="bg-slate-900 p-6 rounded-xl border border-slate-800 shadow-xl space-y-5 transition-all duration-150 hover:border-slate-700">
           <div class="flex justify-between items-center pb-2 border-b border-slate-800/80">
             <h2 class="text-lg font-bold font-display-custom text-amber-400 tracking-tight">🔥 Bulk PC Prep</h2>
             <span class="text-[10px] bg-amber-500/10 text-amber-300 font-semibold font-mono-custom px-2 py-0.5 rounded border border-amber-500/20">Sterilization Run</span>
@@ -375,6 +419,50 @@
               ⚡ Generate & Print Labels
             </button>
           </form>
+        </div>
+
+        <!-- SALES & CUSTOMERS MODULE -->
+        <div id="sales-module-container" class="hidden bg-slate-900 p-6 rounded-xl border border-slate-800 shadow-xl space-y-4 transition-all duration-150 hover:border-slate-700">
+          <div class="flex justify-between items-center pb-2 border-b border-slate-800/80">
+            <h2 class="text-lg font-bold text-emerald-400">💵 Sales & Customers</h2>
+            <span class="text-[10px] bg-emerald-500/10 text-emerald-300 font-semibold px-2 py-0.5 rounded border border-emerald-500/20">Active</span>
+          </div>
+          <div class="space-y-3">
+            <div class="flex justify-between items-center text-xs text-slate-400">
+              <span>Total Sales</span>
+              <span class="font-bold text-white font-mono">$1,450.00</span>
+            </div>
+            <div class="flex justify-between items-center text-xs text-slate-400">
+              <span>Active Invoices</span>
+              <span class="font-bold text-white font-mono">3 Pending</span>
+            </div>
+            <div class="grid grid-cols-2 gap-2">
+              <button onclick="showToast('Sales Module is active!', 'success')" class="bg-slate-850 hover:bg-slate-800 border border-slate-700 text-xs text-slate-200 py-2 rounded transition">🧾 Create Invoice</button>
+              <button onclick="showToast('Customer Directory is active!', 'success')" class="bg-slate-850 hover:bg-slate-800 border border-slate-700 text-xs text-slate-200 py-2 rounded transition">👥 Customers</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- RACK TRACKING MODULE -->
+        <div id="racks-module-container" class="hidden bg-slate-900 p-6 rounded-xl border border-slate-800 shadow-xl space-y-4 transition-all duration-150 hover:border-slate-700">
+          <div class="flex justify-between items-center pb-2 border-b border-slate-800/80">
+            <h2 class="text-lg font-bold text-blue-400">🗺️ Rack Tracking</h2>
+            <span class="text-[10px] bg-blue-500/10 text-blue-300 font-semibold px-2 py-0.5 rounded border border-blue-500/20">Active</span>
+          </div>
+          <div class="space-y-3">
+            <div class="flex justify-between items-center text-xs text-slate-400">
+              <span>Cultivation Rooms</span>
+              <span class="font-bold text-white">Room A, Room B</span>
+            </div>
+            <div class="flex justify-between items-center text-xs text-slate-400">
+              <span>Occupied Shelves</span>
+              <span class="font-bold text-white">12 / 20 Shelves</span>
+            </div>
+            <div class="grid grid-cols-2 gap-2">
+              <button onclick="showToast('Rack Layout active!', 'success')" class="bg-slate-850 hover:bg-slate-800 border border-slate-700 text-xs text-slate-200 py-2 rounded transition">🌐 Visual Layout</button>
+              <button onclick="showToast('Location setup active!', 'success')" class="bg-slate-850 hover:bg-slate-800 border border-slate-700 text-xs text-slate-200 py-2 rounded transition">📍 Edit Addresses</button>
+            </div>
+          </div>
         </div>
 
         <!-- UNIFIED LOG ACTIVE INOCULATIONS MODULE -->
@@ -1088,6 +1176,105 @@
             <!-- Rendered dynamically -->
           </div>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Organization Onboarding Modal -->
+  <div id="onboarding-modal" class="fixed inset-0 bg-black/95 backdrop-blur-md hidden items-center justify-center p-4 z-[95] animate-fade-in">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md shadow-2xl auth-modal-glow overflow-hidden">
+      <div class="p-6 space-y-6">
+        <div class="text-center space-y-2">
+          <span class="text-4xl" id="onboarding-modal-icon">🏢</span>
+          <h2 class="text-xl font-bold text-white" id="onboarding-modal-title">Create Your Organization</h2>
+          <p class="text-xs text-slate-400" id="onboarding-modal-subtitle">Set up your workspace to manage multi-tenant cultivation, inventory, and locations.</p>
+        </div>
+
+        <form id="onboarding-form">
+          <!-- Step 1 Container -->
+          <div id="onboarding-step-1" class="space-y-4">
+            <!-- Org Name -->
+            <div>
+              <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Organization Name</label>
+              <input type="text" id="onboarding-name" placeholder="e.g., Sierra High Mushrooms" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-emerald-500/60">
+            </div>
+
+            <!-- Org Slug -->
+            <div>
+              <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Slug (Auto-Generated)</label>
+              <input type="text" id="onboarding-slug" placeholder="e.g., sierra-high-mushrooms" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-emerald-500/60">
+            </div>
+
+            <!-- Org Logo -->
+            <div class="mb-6">
+              <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Organization Logo</label>
+              <div class="flex items-center gap-3">
+                <div class="w-12 h-12 rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center overflow-hidden shrink-0">
+                  <span id="onboarding-logo-placeholder" class="text-xl text-slate-500">📷</span>
+                  <img id="onboarding-logo-preview" class="hidden w-full h-full object-cover">
+                </div>
+                <input type="file" id="onboarding-logo-file" accept="image/*" class="hidden">
+                <button type="button" id="onboarding-upload-btn" class="px-3 py-1.5 rounded bg-slate-850 hover:bg-slate-800 border border-slate-700 text-xs font-semibold text-slate-300 transition">
+                  Upload Image
+                </button>
+              </div>
+            </div>
+
+            <button type="button" id="onboarding-next-btn" class="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold py-2.5 rounded-lg transition text-sm shadow-lg shadow-emerald-500/20">
+              Continue
+            </button>
+          </div>
+
+          <!-- Step 2 Container (What does your farm do?) -->
+          <div id="onboarding-step-2" class="hidden space-y-5 animate-fade-in">
+            <p class="text-xs text-slate-400 border-b border-slate-800 pb-3">Select the features you want to enable for your farm. You can change these at any time in settings.</p>
+            
+            <!-- Toggle 1: Sales -->
+            <div class="flex items-start justify-between bg-slate-950 p-3.5 rounded-xl border border-slate-800">
+              <div class="space-y-0.5 pr-4">
+                <label class="text-sm font-bold text-white block">Sales and customers</label>
+                <span class="text-xs text-slate-400 block">Invoicing, customers, and payment tracking.</span>
+              </div>
+              <label class="relative inline-flex items-center cursor-pointer mt-1 shrink-0">
+                <input type="checkbox" id="onboarding-enable-sales" class="sr-only peer">
+                <div class="w-11 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-slate-900 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-slate-450 after:border-slate-450 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500 peer-checked:after:bg-slate-950 peer-checked:after:border-slate-950"></div>
+              </label>
+            </div>
+
+            <!-- Toggle 2: Racks -->
+            <div class="flex items-start justify-between bg-slate-950 p-3.5 rounded-xl border border-slate-800">
+              <div class="space-y-0.5 pr-4">
+                <label class="text-sm font-bold text-white block">Rack tracking</label>
+                <span class="text-xs text-slate-400 block">Room, rack, and shelf location addresses.</span>
+              </div>
+              <label class="relative inline-flex items-center cursor-pointer mt-1 shrink-0">
+                <input type="checkbox" id="onboarding-enable-racks" class="sr-only peer">
+                <div class="w-11 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-slate-900 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-slate-450 after:border-slate-450 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500 peer-checked:after:bg-slate-950 peer-checked:after:border-slate-950"></div>
+              </label>
+            </div>
+
+            <!-- Toggle 3: Supplies -->
+            <div class="flex items-start justify-between bg-slate-950 p-3.5 rounded-xl border border-slate-800">
+              <div class="space-y-0.5 pr-4">
+                <label class="text-sm font-bold text-white block">Supplies and prepared media</label>
+                <span class="text-xs text-slate-400 block">Grain, sawdust, raw media, and sterilization lots.</span>
+              </div>
+              <label class="relative inline-flex items-center cursor-pointer mt-1 shrink-0">
+                <input type="checkbox" id="onboarding-enable-supplies" class="sr-only peer">
+                <div class="w-11 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-slate-900 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-slate-450 after:border-slate-450 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500 peer-checked:after:bg-slate-950 peer-checked:after:border-slate-950"></div>
+              </label>
+            </div>
+
+            <div class="flex gap-2.5 pt-2">
+              <button type="button" id="onboarding-back-btn" class="flex-1 bg-slate-850 hover:bg-slate-800 border border-slate-700 text-slate-200 font-bold py-2.5 rounded-lg transition text-sm">
+                Back
+              </button>
+              <button type="submit" class="flex-[2] bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold py-2.5 rounded-lg transition text-sm shadow-lg shadow-emerald-500/20">
+                Save & Continue
+              </button>
+            </div>
+          </div>
+        </form>
       </div>
     </div>
   </div>

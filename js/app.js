@@ -2,7 +2,7 @@
 // Imports all modules, wires up global event listeners, exposes the functions
 // referenced by inline onclick handlers, and initializes the UI.
 
-import { db, saveItems, setRefreshCallback, getCustomContainers, addCustomContainer, addCustomContainerPreset, addCustomMediumPreset, getCustomContainerPresets, initCloudSync, setSyncStatusCallback, setSyncErrorCallback, isSupabaseConfigured, getSession, onAuthStateChange, isContainerLimitError, uploadItemsToCloud, syncItemsWithCloud, clearLegacyStorage, clearPendingImportStorage, checkAndClearStaleCache, loadCustomPresetsFromCloud } from './db.js';
+import { db, saveItems, setRefreshCallback, getCustomContainers, addCustomContainer, addCustomContainerPreset, addCustomMediumPreset, getCustomContainerPresets, initCloudSync, setSyncStatusCallback, setSyncErrorCallback, isSupabaseConfigured, getSession, onAuthStateChange, isContainerLimitError, uploadItemsToCloud, syncItemsWithCloud, clearLegacyStorage, clearPendingImportStorage, checkAndClearStaleCache, loadCustomPresetsFromCloud, userOrganizations, userLocations, currentOrganizationId, currentLocationId, setCurrentOrganizationId, setCurrentLocationId, loadOrganizationContext, createOrganization } from './db.js';
 import {
   generateId,
   formatMMDDYY,
@@ -98,7 +98,11 @@ import {
   openBillingSettings,
   closeBillingSettings,
   initiateTierCheckout,
-  refreshBillingInfo
+  refreshBillingInfo,
+  openOrgSettings,
+  closeOrgSettings,
+  switchOrgTab,
+  saveOrgSettings
 } from './modals.js';
 import { startScanner, stopScanner, startG2GCameraScan, stopG2GCameraScan } from './camera.js';
 import { STAGES, CONTAINER_STAGES } from './config.js';
@@ -106,6 +110,25 @@ import { STAGES, CONTAINER_STAGES } from './config.js';
 // --- Module-level UI state ---
 let currentFilter = 'All';
 let scannedItemId = null;
+
+// Apply feature toggles dynamically
+function applyFeatureToggles(settings) {
+  const finalSettings = settings || { enable_sales: false, enable_racks: false, enable_supplies: false };
+  
+  const salesContainer = document.getElementById('sales-module-container');
+  const racksContainer = document.getElementById('racks-module-container');
+  const suppliesContainer = document.getElementById('supplies-module-container');
+  
+  if (salesContainer) {
+    salesContainer.classList.toggle('hidden', !finalSettings.enable_sales);
+  }
+  if (racksContainer) {
+    racksContainer.classList.toggle('hidden', !finalSettings.enable_racks);
+  }
+  if (suppliesContainer) {
+    suppliesContainer.classList.toggle('hidden', !finalSettings.enable_supplies);
+  }
+}
 
 // --- Dashboard stats ---
 function updateDashboard() {
@@ -456,6 +479,12 @@ function render() {
   let filtered = currentFilter === 'All' ? db.items : db.items.filter(i => i.stage === currentFilter);
   if (scannedItemId) {
     filtered = db.items.filter(i => i.id === scannedItemId);
+  }
+
+  // Location Selector filter
+  const locSelect = document.getElementById('header-location-select');
+  if (locSelect && locSelect.value && locSelect.value !== 'all') {
+    filtered = filtered.filter(i => i.location_id === locSelect.value);
   }
 
   const grid = document.getElementById('items-grid');
@@ -888,9 +917,331 @@ document.getElementById('item-form').addEventListener('submit', (e) => {
   }
 });
 
+// --- Setup Wizard Onboarding Steps ---
+const ONBOARDING_STEPS = [
+  {
+    id: 'step-strains',
+    title: 'Add Genetic Strains',
+    desc: 'Add your first genetic strain or spore lot to begin inoculating and tracking batches.',
+    cta: 'Add Strain',
+    action: () => {
+      window.location.hash = '';
+      setTimeout(() => {
+        const input = document.getElementById('input-strain');
+        if (input) {
+          input.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          input.focus();
+          input.classList.add('ring-2', 'ring-emerald-500');
+          setTimeout(() => input.classList.remove('ring-2', 'ring-emerald-500'), 3000);
+          showToast('Enter your strain name here to start!', 'info');
+        }
+      }, 300);
+    }
+  },
+  {
+    id: 'step-media',
+    title: 'Define Growing Media (Substrates)',
+    desc: 'Define your custom bulk media, liquid culture recipes, or agar formulations.',
+    cta: 'Define Substrates',
+    dependency: 'enable_supplies',
+    action: () => {
+      openCustomPresetModal('medium');
+    }
+  },
+  {
+    id: 'step-locations',
+    title: 'Add Physical Locations (Rooms)',
+    desc: 'Configure your cultivation rooms, incubation closets, or lab facilities.',
+    cta: 'Add Room',
+    dependency: 'enable_racks',
+    action: () => {
+      const roomName = prompt('Enter a new Room or Location name (e.g., Fruiting Room A):');
+      if (roomName && roomName.trim()) {
+        addNewLocationDirectly(roomName.trim());
+      }
+    }
+  },
+  {
+    id: 'step-racks',
+    title: 'Set Up Rack Positions',
+    desc: 'Set up specific rack, row, and shelf addresses for precise physical inventory locations.',
+    cta: 'Edit Addresses',
+    dependency: 'enable_racks',
+    action: () => {
+      window.location.hash = '';
+      setTimeout(() => {
+        const container = document.getElementById('racks-module-container');
+        if (container) {
+          container.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          container.classList.add('ring-2', 'ring-blue-500');
+          setTimeout(() => container.classList.remove('ring-2', 'ring-blue-500'), 3000);
+          showToast('Use Rack Layout or Edit Addresses to set up rack positions!', 'info');
+        }
+      }, 300);
+    }
+  },
+  {
+    id: 'step-supplies',
+    title: 'Track Supplies & Sterilization Lots',
+    desc: 'Log and monitor pressure cooker sterilization run times, grain lots, and bulk media supplies.',
+    cta: 'Log Sterilization Run',
+    dependency: 'enable_supplies',
+    action: () => {
+      window.location.hash = '';
+      setTimeout(() => {
+        const container = document.getElementById('supplies-module-container');
+        if (container) {
+          container.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          container.classList.add('ring-2', 'ring-amber-500');
+          setTimeout(() => container.classList.remove('ring-2', 'ring-amber-500'), 3000);
+          showToast('Use Bulk PC Prep to log a sterilization run and track supplies!', 'info');
+        }
+      }, 300);
+    }
+  },
+  {
+    id: 'step-labels',
+    title: 'Configure Label / QR Code Size',
+    desc: 'Customize your layout and offsets to print perfect QR labels for jars, bags, and plates.',
+    cta: 'Configure Print Settings',
+    action: () => {
+      openPrintSettingsModal();
+    }
+  },
+  {
+    id: 'step-customer',
+    title: 'Add First Customer',
+    desc: 'Register customer profiles and set up billing defaults for quick invoice creation.',
+    cta: 'Add Customer',
+    dependency: 'enable_sales',
+    action: () => {
+      window.location.hash = '';
+      setTimeout(() => {
+        const container = document.getElementById('sales-module-container');
+        if (container) {
+          container.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          container.classList.add('ring-2', 'ring-emerald-500');
+          setTimeout(() => container.classList.remove('ring-2', 'ring-emerald-500'), 3000);
+          showToast('Use the Sales & Customers module to manage customers!', 'info');
+        }
+      }, 300);
+    }
+  },
+  {
+    id: 'step-team',
+    title: 'Invite Team Members',
+    desc: 'Invite growers, lab technicians, and managers to collaborate in your multi-tenant workspace.',
+    cta: 'Manage Workspace',
+    action: () => {
+      openOrgSettings();
+    }
+  },
+  {
+    id: 'step-create-item',
+    title: 'Create First Tracked Item',
+    desc: 'Inoculate or scan your very first cultivation batch container to begin tracking live stages.',
+    cta: 'Inoculate Container',
+    action: () => {
+      window.location.hash = '';
+      setTimeout(() => {
+        const container = document.getElementById('item-form');
+        if (container) {
+          container.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          const parent = container.parentElement;
+          parent.classList.add('ring-2', 'ring-emerald-500');
+          setTimeout(() => parent.classList.remove('ring-2', 'ring-emerald-500'), 3000);
+          showToast('Fill out this form to inoculate your first container!', 'info');
+        }
+      }, 300);
+    }
+  }
+];
+
+// Toggle visibility of onboarding view vs standard dashboard
+function toggleOnboardingView(show) {
+  const stats = document.getElementById('dashboard-stats');
+  const grid = document.getElementById('dashboard-grid');
+  const view = document.getElementById('onboarding-checklist-view');
+  
+  if (show) {
+    if (stats) stats.classList.add('hidden');
+    if (grid) grid.classList.add('hidden');
+    if (view) {
+      view.classList.remove('hidden');
+      renderOnboardingChecklist();
+    }
+  } else {
+    if (stats) stats.classList.remove('hidden');
+    if (grid) grid.classList.remove('hidden');
+    if (view) view.classList.add('hidden');
+  }
+}
+
+// Render onboarding setup wizard
+function renderOnboardingChecklist() {
+  const container = document.getElementById('onboarding-steps-container');
+  if (!container) return;
+  
+  const activeOrg = userOrganizations.find(o => o.id === currentOrganizationId);
+  if (!activeOrg) {
+    container.innerHTML = `<div class="col-span-full text-center text-slate-400 py-8">Please select or create an organization first.</div>`;
+    return;
+  }
+  
+  const settings = activeOrg.settings || { enable_sales: false, enable_racks: false, enable_supplies: false };
+  const completedSteps = settings.completed_onboarding_steps || [];
+  
+  // Filter steps dynamically based on organization settings
+  const visibleSteps = ONBOARDING_STEPS.filter(step => {
+    if (!step.dependency) return true;
+    return Boolean(settings[step.dependency]);
+  });
+  
+  const completedCount = visibleSteps.filter(step => completedSteps.includes(step.id)).length;
+  const totalCount = visibleSteps.length;
+  const percent = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
+  
+  const progressText = document.getElementById('onboarding-progress-text');
+  const progressBar = document.getElementById('onboarding-progress-bar');
+  if (progressText) {
+    progressText.innerText = `${completedCount} of ${totalCount} steps completed (${percent}%)`;
+  }
+  if (progressBar) {
+    progressBar.style.width = `${percent}%`;
+  }
+  
+  container.innerHTML = visibleSteps.map(step => {
+    const isCompleted = completedSteps.includes(step.id);
+    const cardBorderClass = isCompleted ? 'border-emerald-500/50 bg-slate-900/80 shadow-emerald-950/5' : 'border-slate-800/80 bg-slate-900/40';
+    const checkBgClass = isCompleted ? 'bg-emerald-500 border-emerald-500 text-slate-950' : 'bg-slate-950 border-slate-700 text-transparent';
+    const statusLabel = isCompleted ? 'Completed' : 'Pending';
+    const statusBadgeClass = isCompleted ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-slate-800 text-slate-400 border-slate-700';
+    
+    return `
+      <div class="border ${cardBorderClass} p-5 rounded-xl flex flex-col justify-between gap-4 transition duration-200 hover:border-slate-700/80 shadow-md">
+        <div class="space-y-3">
+          <!-- Checkbox + Title -->
+          <div class="flex items-start gap-3">
+            <button onclick="window.toggleOnboardingStep('${step.id}')" class="w-5 h-5 rounded border flex items-center justify-center shrink-0 mt-0.5 transition duration-150 ${checkBgClass} focus:outline-none focus:ring-1 focus:ring-emerald-500">
+              <svg class="w-3.5 h-3.5 stroke-[3]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path>
+              </svg>
+            </button>
+            <div>
+              <h3 class="font-bold text-white text-sm tracking-wide leading-tight">${step.title}</h3>
+              <div class="flex items-center gap-2 mt-1">
+                <span class="text-[9px] px-1.5 py-0.5 rounded border font-semibold tracking-wider uppercase ${statusBadgeClass}">${statusLabel}</span>
+              </div>
+            </div>
+          </div>
+          <!-- Description -->
+          <p class="text-xs text-slate-400 leading-relaxed pl-8">${step.desc}</p>
+        </div>
+
+        <!-- Action Button -->
+        <div class="pl-8 pt-1">
+          <button onclick="window.executeOnboardingCTA('${step.id}')" class="w-full bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold py-2 px-3 rounded-lg text-xs transition flex items-center justify-center gap-1.5 border border-slate-700 hover:border-slate-600">
+            <span>⚡</span> ${step.cta}
+          </button>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+// Toggle manual completion of setup wizard steps
+async function toggleOnboardingStep(stepId) {
+  const activeOrg = userOrganizations.find(o => o.id === currentOrganizationId);
+  if (!activeOrg) return;
+  
+  const settings = activeOrg.settings || { enable_sales: false, enable_racks: false, enable_supplies: false };
+  settings.completed_onboarding_steps = settings.completed_onboarding_steps || [];
+  
+  const index = settings.completed_onboarding_steps.indexOf(stepId);
+  if (index === -1) {
+    settings.completed_onboarding_steps.push(stepId);
+  } else {
+    settings.completed_onboarding_steps.splice(index, 1);
+  }
+  
+  try {
+    const { updateOrganizationSettings } = await import('./db.js');
+    await updateOrganizationSettings(activeOrg.id, settings);
+    
+    if (index === -1) {
+      showToast('Task marked as completed! 🎉', 'success');
+    }
+    
+    renderOnboardingChecklist();
+  } catch (err) {
+    console.error('Failed to toggle onboarding step:', err);
+    showToast('Failed to save progress: ' + err.message, 'error');
+  }
+}
+
+// Run step CTA and auto-complete task
+async function executeOnboardingCTA(stepId, actionFn) {
+  if (typeof actionFn === 'function') {
+    actionFn();
+  }
+  
+  const activeOrg = userOrganizations.find(o => o.id === currentOrganizationId);
+  if (activeOrg) {
+    const settings = activeOrg.settings || { enable_sales: false, enable_racks: false, enable_supplies: false };
+    settings.completed_onboarding_steps = settings.completed_onboarding_steps || [];
+    if (!settings.completed_onboarding_steps.includes(stepId)) {
+      settings.completed_onboarding_steps.push(stepId);
+      try {
+        const { updateOrganizationSettings } = await import('./db.js');
+        await updateOrganizationSettings(activeOrg.id, settings);
+      } catch (err) {
+        console.error('Auto-complete failed:', err);
+      }
+    }
+  }
+}
+
+// Add new location (Room) directly from CTA prompt
+async function addNewLocationDirectly(roomName) {
+  try {
+    const { createLocation } = await import('./db.js');
+    showToast('Creating room: ' + roomName + '...', 'info');
+    await createLocation(roomName);
+    showToast('✓ Room created successfully!', 'success');
+    
+    const select = document.getElementById('header-location-select');
+    if (select) {
+      const { userLocations, currentLocationId } = await import('./db.js');
+      select.innerHTML = '<option value="all" class="bg-slate-900">All Locations</option>' +
+        userLocations.map(l => `<option value="${l.id}" class="bg-slate-900" ${currentLocationId === l.id ? 'selected' : ''}>${l.name}</option>`).join('');
+    }
+    render();
+  } catch (err) {
+    console.error('Failed to create location:', err);
+    showToast('Failed to create room: ' + err.message, 'error');
+  }
+}
+
+// Expose onboarding helpers globally
+window.toggleOnboardingStep = toggleOnboardingStep;
+window.executeOnboardingCTA = (stepId) => {
+  const step = ONBOARDING_STEPS.find(s => s.id === stepId);
+  if (step) {
+    executeOnboardingCTA(step.id, step.action);
+  }
+};
+
 // --- URL Hash & Path Handling ---
 function handleURLHash() {
   const hash = window.location.hash;
+  const path = window.location.pathname;
+  
+  const isOnboardingRoute = (hash === '#onboarding/setup' || hash === '#/onboarding/setup' || path === '/onboarding/setup');
+  toggleOnboardingView(isOnboardingRoute);
+  
+  if (isOnboardingRoute) {
+    return;
+  }
   
   // Handle /settings/billing route (via #settings/billing or #/settings/billing)
   if (hash && (hash === '#settings/billing' || hash === '#/settings/billing')) {
@@ -1066,12 +1417,21 @@ Object.assign(window, {
   closeBillingSettings,
   initiateTierCheckout,
   refreshBillingInfo,
+  // Org Settings
+  openOrgSettings,
+  closeOrgSettings,
+  switchOrgTab,
+  saveOrgSettings,
   // camera.js
   startScanner,
   stopScanner,
   startG2GCameraScan,
-  stopG2GCameraScan
+  stopG2GCameraScan,
+  applyFeatureToggles
 });
+
+// Set global function reference for modal interaction
+window.applyFeatureToggles = applyFeatureToggles;
 
 // --- Register UI refresh callback for the storage layer ---
 setRefreshCallback(() => {
@@ -1143,6 +1503,7 @@ async function initAppRouting() {
   const session = await getSession();
   if (session) {
     showAppDashboard();
+    handleMultiTenantInit();
   } else {
     showLandingPage();
   }
@@ -1156,14 +1517,235 @@ onAuthStateChange((event) => {
   if (event === 'SIGNED_IN') {
     showAppDashboard();
     updateContainerUsageUI();
+    handleMultiTenantInit();
   } else if (event === 'USER_UPDATED') {
     updateContainerUsageUI();
   } else if (event === 'SIGNED_OUT') {
     showLandingPage();
+    const locContainer = document.getElementById('header-location-container');
+    if (locContainer) locContainer.classList.add('hidden');
   }
 });
 
 initAppRouting();
+
+// --- Multi-Tenant Context and Onboarding Handlers ---
+async function handleMultiTenantInit() {
+  if (!isSupabaseConfigured()) return;
+  const session = await getSession();
+  if (!session) {
+    const locContainer = document.getElementById('header-location-container');
+    if (locContainer) locContainer.classList.add('hidden');
+    return;
+  }
+
+  try {
+    const context = await loadOrganizationContext();
+    if (context.onboardingNeeded) {
+      // Reset onboarding steps to Step 1 when opened
+      const step1 = document.getElementById('onboarding-step-1');
+      const step2 = document.getElementById('onboarding-step-2');
+      if (step1 && step2) {
+        step1.classList.remove('hidden');
+        step2.classList.add('hidden');
+      }
+      const icon = document.getElementById('onboarding-modal-icon');
+      const title = document.getElementById('onboarding-modal-title');
+      const subtitle = document.getElementById('onboarding-modal-subtitle');
+      if (icon) icon.innerText = '🏢';
+      if (title) title.innerText = 'Create Your Organization';
+      if (subtitle) subtitle.innerText = 'Set up your workspace to manage multi-tenant cultivation, inventory, and locations.';
+
+      const modal = document.getElementById('onboarding-modal');
+      if (modal) {
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+      }
+      return;
+    }
+
+    // Show/hide Setup Wizard button in header depending on active organization context
+    const setupBtn = document.getElementById('setup-wizard-header-btn');
+    if (setupBtn) {
+      setupBtn.classList.toggle('hidden', !currentOrganizationId);
+    }
+
+    // Apply features toggles upon login / multi-tenant initialization
+    const activeOrg = userOrganizations.find(o => o.id === currentOrganizationId);
+    applyFeatureToggles(activeOrg ? activeOrg.settings : null);
+
+    // Populate Location selector dropdown
+    const select = document.getElementById('header-location-select');
+    if (select) {
+      select.innerHTML = '<option value="all" class="bg-slate-900">All Locations</option>' +
+        userLocations.map(l => `<option value="${l.id}" class="bg-slate-900" ${currentLocationId === l.id ? 'selected' : ''}>${l.name}</option>`).join('');
+      
+      const locContainer = document.getElementById('header-location-container');
+      if (locContainer) locContainer.classList.remove('hidden');
+    }
+
+    await syncItemsWithCloud();
+    render();
+  } catch (err) {
+    console.error('Multi-tenant init failed:', err);
+  }
+}
+
+function autoGenerateSlug() {
+  const nameInput = document.getElementById('onboarding-name');
+  const slugInput = document.getElementById('onboarding-slug');
+  if (nameInput && slugInput) {
+    slugInput.value = nameInput.value
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/(^-|-$)/g, '');
+  }
+}
+
+let onboardingLogoBase64 = null;
+function handleOnboardingLogoChange() {
+  const fileInput = document.getElementById('onboarding-logo-file');
+  const preview = document.getElementById('onboarding-logo-preview');
+  const placeholder = document.getElementById('onboarding-logo-placeholder');
+  if (fileInput && fileInput.files && fileInput.files[0]) {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      onboardingLogoBase64 = e.target.result;
+      if (preview) {
+        preview.src = onboardingLogoBase64;
+        preview.classList.remove('hidden');
+      }
+      if (placeholder) placeholder.classList.add('hidden');
+    };
+    reader.readAsDataURL(fileInput.files[0]);
+  }
+}
+
+async function handleOnboardingSubmit(e) {
+  e.preventDefault();
+  const name = document.getElementById('onboarding-name').value.trim();
+  const slug = document.getElementById('onboarding-slug').value.trim();
+  
+  if (!name || !slug) {
+    showToast('Organization Name and Slug are required.', 'error');
+    return;
+  }
+
+  const enableSales = document.getElementById('onboarding-enable-sales').checked;
+  const enableRacks = document.getElementById('onboarding-enable-racks').checked;
+  const enableSupplies = document.getElementById('onboarding-enable-supplies').checked;
+
+  const settings = {
+    enable_sales: enableSales,
+    enable_racks: enableRacks,
+    enable_supplies: enableSupplies
+  };
+
+  try {
+    showToast('Creating organization...', 'info');
+    await createOrganization(name, slug, onboardingLogoBase64, settings);
+    showToast('✓ Organization and Main Facility created successfully!', 'success');
+    
+    // Apply toggles right away
+    applyFeatureToggles(settings);
+
+    const modal = document.getElementById('onboarding-modal');
+    if (modal) {
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    }
+    
+    await handleMultiTenantInit();
+  } catch (err) {
+    console.error('Onboarding failed:', err);
+    showToast('Failed to create organization: ' + err.message, 'error', 6000);
+  }
+}
+
+function handleLocationFilterChange() {
+  const select = document.getElementById('header-location-select');
+  if (select) {
+    setCurrentLocationId(select.value);
+    render();
+  }
+}
+
+// Setup event listeners for onboarding and location selector
+function initMultiTenantListeners() {
+  const onboardingForm = document.getElementById('onboarding-form');
+  if (onboardingForm) {
+    onboardingForm.addEventListener('submit', handleOnboardingSubmit);
+  }
+
+  // Handle Onboarding Steps navigation
+  const nextBtn = document.getElementById('onboarding-next-btn');
+  const backBtn = document.getElementById('onboarding-back-btn');
+  const step1 = document.getElementById('onboarding-step-1');
+  const step2 = document.getElementById('onboarding-step-2');
+  const icon = document.getElementById('onboarding-modal-icon');
+  const title = document.getElementById('onboarding-modal-title');
+  const subtitle = document.getElementById('onboarding-modal-subtitle');
+
+  if (nextBtn) {
+    nextBtn.addEventListener('click', () => {
+      const name = document.getElementById('onboarding-name').value.trim();
+      const slug = document.getElementById('onboarding-slug').value.trim();
+      if (!name || !slug) {
+        showToast('Organization Name and Slug are required.', 'warning');
+        return;
+      }
+      if (step1 && step2) {
+        step1.classList.add('hidden');
+        step2.classList.remove('hidden');
+        if (icon) icon.innerText = '🚜';
+        if (title) title.innerText = 'What does your farm do?';
+        if (subtitle) subtitle.innerText = 'Tell us more about your mushroom cultivation and operations.';
+      }
+    });
+  }
+
+  if (backBtn) {
+    backBtn.addEventListener('click', () => {
+      if (step1 && step2) {
+        step2.classList.add('hidden');
+        step1.classList.remove('hidden');
+        if (icon) icon.innerText = '🏢';
+        if (title) title.innerText = 'Create Your Organization';
+        if (subtitle) subtitle.innerText = 'Set up your workspace to manage multi-tenant cultivation, inventory, and locations.';
+      }
+    });
+  }
+
+  const nameInput = document.getElementById('onboarding-name');
+  if (nameInput) {
+    nameInput.addEventListener('input', autoGenerateSlug);
+  }
+
+  const fileInput = document.getElementById('onboarding-logo-file');
+  if (fileInput) {
+    fileInput.addEventListener('change', handleOnboardingLogoChange);
+  }
+
+  const uploadBtn = document.getElementById('onboarding-upload-btn');
+  if (uploadBtn) {
+    uploadBtn.addEventListener('click', () => {
+      const file = document.getElementById('onboarding-logo-file');
+      if (file) file.click();
+    });
+  }
+
+  const locSelect = document.getElementById('header-location-select');
+  if (locSelect) {
+    locSelect.addEventListener('change', handleLocationFilterChange);
+  }
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initMultiTenantListeners);
+} else {
+  initMultiTenantListeners();
+}
 
 // --- Register the service worker for PWA / offline support ---
 if ('serviceWorker' in navigator) {
