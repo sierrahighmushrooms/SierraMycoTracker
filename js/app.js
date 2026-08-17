@@ -3,6 +3,7 @@
 // referenced by inline onclick handlers, and initializes the UI.
 
 import { db, saveItems, setRefreshCallback, getCustomContainers, addCustomContainer, addCustomContainerPreset, addCustomMediumPreset, getCustomContainerPresets, initCloudSync, setSyncStatusCallback, setSyncErrorCallback, isSupabaseConfigured, getSession, onAuthStateChange, isContainerLimitError, uploadItemsToCloud, syncItemsWithCloud, clearLegacyStorage, clearPendingImportStorage, checkAndClearStaleCache, loadCustomPresetsFromCloud, userOrganizations, userLocations, currentOrganizationId, currentLocationId, setCurrentOrganizationId, setCurrentLocationId, loadOrganizationContext, createOrganization, createRack } from './db.js';
+import { fetchCustomers, createCustomer, updateCustomer, deleteCustomer, createOrder, updateOrder, deleteOrder, populateCustomerPicker } from './sales.js';
 
 import {
   generateId,
@@ -116,24 +117,24 @@ import { STAGES, CONTAINER_STAGES } from './config.js';
 let currentFilter = 'All';
 let scannedItemId = null;
 
-// Apply feature toggles dynamically
-function applyFeatureToggles(settings) {
-  const finalSettings = settings || { enable_sales: false, enable_racks: false, enable_supplies: false };
-  
-  const salesContainer = document.getElementById('sales-module-container');
-  const racksContainer = document.getElementById('racks-module-container');
-  const suppliesContainer = document.getElementById('supplies-module-container');
-  
-  if (salesContainer) {
-    salesContainer.classList.toggle('hidden', !finalSettings.enable_sales);
+  // Apply feature toggles dynamically
+  function applyFeatureToggles(settings) {
+    const finalSettings = settings || { enable_sales: true, enable_racks: false, enable_supplies: false };
+    
+    const salesContainer = document.getElementById('sales-module-container');
+    const racksContainer = document.getElementById('racks-module-container');
+    const suppliesContainer = document.getElementById('supplies-module-container');
+    
+    if (salesContainer) {
+      salesContainer.classList.toggle('hidden', !finalSettings.enable_sales);
+    }
+    if (racksContainer) {
+      racksContainer.classList.toggle('hidden', !finalSettings.enable_racks);
+    }
+    if (suppliesContainer) {
+      suppliesContainer.classList.toggle('hidden', !finalSettings.enable_supplies);
+    }
   }
-  if (racksContainer) {
-    racksContainer.classList.toggle('hidden', !finalSettings.enable_racks);
-  }
-  if (suppliesContainer) {
-    suppliesContainer.classList.toggle('hidden', !finalSettings.enable_supplies);
-  }
-}
 
 // --- Dashboard stats ---
 function updateDashboard() {
@@ -947,6 +948,30 @@ document.getElementById('item-form').addEventListener('submit', (e) => {
     printBulkLabels(generatedItems);
   }
 });
+
+// --- Sales Tab Switching ---
+function switchSalesTab(tab) {
+  const customersTab = document.getElementById('customers-tab');
+  const ordersTab = document.getElementById('orders-tab');
+  const customersBtn = document.querySelector('#sales-module-container button:nth-child(1)');
+  const ordersBtn = document.querySelector('#sales-module-container button:nth-child(2)');
+  
+  if (tab === 'customers') {
+    customersTab.classList.remove('hidden');
+    ordersTab.classList.add('hidden');
+    customersBtn.classList.add('border-emerald-500', 'text-emerald-400');
+    customersBtn.classList.remove('border-transparent', 'text-slate-400');
+    ordersBtn.classList.add('border-transparent', 'text-slate-400');
+    ordersBtn.classList.remove('border-emerald-500', 'text-emerald-400');
+  } else {
+    customersTab.classList.add('hidden');
+    ordersTab.classList.remove('hidden');
+    ordersBtn.classList.add('border-emerald-500', 'text-emerald-400');
+    ordersBtn.classList.remove('border-transparent', 'text-slate-400');
+    customersBtn.classList.add('border-transparent', 'text-slate-400');
+    customersBtn.classList.remove('border-emerald-500', 'text-emerald-400');
+  }
+}
 
 // --- Setup Wizard Onboarding Steps ---
 const ONBOARDING_STEPS = [
