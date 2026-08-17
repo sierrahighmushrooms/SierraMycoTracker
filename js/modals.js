@@ -54,6 +54,36 @@ import {
 // --- Module-level modal state ---
 let activeItemId = null;
 let g2gScannedIds = [];
+
+// --- Authentication Modal ---
+export function openAuthModal(tab = 'signin') {
+  const modal = document.getElementById('auth-modal');
+  if (!modal) return;
+  
+  // Set active tab if needed
+  // Add your tab switching logic here
+  
+  showModal(modal);
+}
+
+export function closeAuthModal() {
+  const modal = document.getElementById('auth-modal');
+  if (modal) hideModal(modal);
+}
+
+function isValidUrl(url) {
+  try {
+    new URL(url);
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+// Make functions available globally for HTML onclick handlers
+window.openAuthModal = openAuthModal;
+window.closeAuthModal = closeAuthModal;
+
 let printerType = localStorage.getItem(APP_CONFIG.STORAGE_KEYS.PRINTER_TYPE) || APP_CONFIG.DEFAULT_PRINTER_TYPE;
 let labelModel = localStorage.getItem(APP_CONFIG.STORAGE_KEYS.LABEL_MODEL) || APP_CONFIG.DEFAULT_LABEL_MODEL;
 let printOffset = parseInt(localStorage.getItem(APP_CONFIG.STORAGE_KEYS.PRINT_OFFSET)) || APP_CONFIG.DEFAULT_PRINT_OFFSET;
@@ -1878,6 +1908,11 @@ export async function updateAuthModalUI() {
 
   let user = null;
   try {
+    const authUrl = getAuthUrl(); // Assume this function exists or replace with actual URL source
+    if (!isValidUrl(authUrl)) {
+      console.error('Invalid auth URL:', authUrl);
+      return;
+    }
     user = await getCurrentUser();
   } catch (e) { /* treat as signed out */ }
 
