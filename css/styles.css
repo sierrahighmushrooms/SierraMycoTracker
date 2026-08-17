@@ -66,6 +66,16 @@
   animation: fadeIn 0.2s ease-out;
 }
 
+/* Slide-in-right entrance for slide-over panels (e.g. Add Location modal) */
+@keyframes slideInRight {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+.animate-slide-in-right {
+  animation: slideInRight 0.25s ease-out;
+}
+
+
 /* --- CVG Recipe Calculator results ---
    Uses tabular numerals so values align cleanly in the result grid. */
 .recipe-result-value {

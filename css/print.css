@@ -123,8 +123,55 @@
     gap: 10px;
     padding: 10px;
   }
-  
+
+  /* Dynamic Hardware-Configurable Layout (driven by CSS custom properties
+     set via applyTemplateCSSVars() in js/modals.js based on the resolved
+     label template from js/config.js). Inline styles set directly on the
+     element by executePrint() take precedence, but these rules provide a
+     consistent fallback/base so the CSS vars are the source of truth. */
+  #bulk-print-section.layout-dynamic {
+    display: grid !important;
+    grid-template-columns: repeat(var(--label-cols, 1), var(--label-width, 2.625in));
+    grid-auto-rows: var(--label-height, 1in);
+    column-gap: var(--label-col-gap, 0in);
+    row-gap: var(--label-row-gap, 0in);
+    padding-top: var(--page-margin-top, 0.5in);
+    padding-bottom: var(--page-margin-bottom, 0.5in);
+    padding-left: var(--page-margin-left, 0.1875in);
+    padding-right: var(--page-margin-right, 0.1875in);
+    width: var(--page-width, 8.5in);
+    height: var(--page-height, 11in);
+  }
+
+  .layout-dynamic .print-card {
+    width: var(--label-width, 2.625in);
+    height: var(--label-height, 1in);
+    padding: 0.05in 0.1in;
+    gap: 0.1in;
+  }
+
+  .layout-dynamic .print-placeholder {
+    width: var(--label-width, 2.625in);
+    height: var(--label-height, 1in);
+  }
+
+  .layout-dynamic .print-qr-container {
+    width: calc(var(--label-height, 1in) * 0.7);
+    height: calc(var(--label-height, 1in) * 0.7);
+  }
+
+  .layout-dynamic .print-id,
+  .layout-dynamic .print-strain {
+    font-size: 8.5pt;
+  }
+
+  .layout-dynamic .print-date,
+  .layout-dynamic .print-extra {
+    font-size: 7pt;
+  }
+
   .print-card {
+
     box-sizing: border-box;
     display: flex !important;
     flex-direction: row !important;

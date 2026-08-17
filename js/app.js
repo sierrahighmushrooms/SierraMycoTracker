@@ -2,7 +2,8 @@
 // Imports all modules, wires up global event listeners, exposes the functions
 // referenced by inline onclick handlers, and initializes the UI.
 
-import { db, saveItems, setRefreshCallback, getCustomContainers, addCustomContainer, addCustomContainerPreset, addCustomMediumPreset, getCustomContainerPresets, initCloudSync, setSyncStatusCallback, setSyncErrorCallback, isSupabaseConfigured, getSession, onAuthStateChange, isContainerLimitError, uploadItemsToCloud, syncItemsWithCloud, clearLegacyStorage, clearPendingImportStorage, checkAndClearStaleCache, loadCustomPresetsFromCloud, userOrganizations, userLocations, currentOrganizationId, currentLocationId, setCurrentOrganizationId, setCurrentLocationId, loadOrganizationContext, createOrganization } from './db.js';
+import { db, saveItems, setRefreshCallback, getCustomContainers, addCustomContainer, addCustomContainerPreset, addCustomMediumPreset, getCustomContainerPresets, initCloudSync, setSyncStatusCallback, setSyncErrorCallback, isSupabaseConfigured, getSession, onAuthStateChange, isContainerLimitError, uploadItemsToCloud, syncItemsWithCloud, clearLegacyStorage, clearPendingImportStorage, checkAndClearStaleCache, loadCustomPresetsFromCloud, userOrganizations, userLocations, currentOrganizationId, currentLocationId, setCurrentOrganizationId, setCurrentLocationId, loadOrganizationContext, createOrganization, createRack } from './db.js';
+
 import {
   generateId,
   formatMMDDYY,
@@ -46,6 +47,9 @@ import {
   closePrintSettingsModal,
   onPrintLayoutChange,
   onPrintOffsetChange,
+  onPrinterTypeChange,
+  onLabelModelChange,
+  applyCustomLabelDims,
   applyOrExecutePrintSettings,
   printBulkLabels,
   printSingleLabel,
@@ -66,6 +70,7 @@ import {
   deleteSelectedItems,
   getBatchItems,
   initStageFormListener,
+
   toggleAIDrawer,
   closeAIDrawer,
   sendChatMessage,
@@ -768,9 +773,35 @@ document.getElementById('bulk-form').addEventListener('submit', (e) => {
 
   saveItems();
   printBulkLabels(generatedItems);
+
+  // --- Onboarding Auto-Complete Handler ---
+  // If the user arrived here via the onboarding Step 7 (Prepared Media) CTA,
+  // mark that step complete and route them back to the setup checklist.
+  if (window.isOnboardingMediaStep) {
+    window.isOnboardingMediaStep = false;
+    (async () => {
+      try {
+        const activeOrg = userOrganizations.find(o => o.id === currentOrganizationId);
+        if (activeOrg) {
+          const { updateOrganizationSettings } = await import('./db.js');
+          const settings = activeOrg.settings || { enable_sales: false, enable_racks: false, enable_supplies: false };
+          settings.completed_onboarding_steps = settings.completed_onboarding_steps || [];
+          if (!settings.completed_onboarding_steps.includes('step-media')) {
+            settings.completed_onboarding_steps.push('step-media');
+          }
+          await updateOrganizationSettings(activeOrg.id, settings);
+        }
+      } catch (err) {
+        console.error('Failed to save onboarding progress:', err);
+      }
+      showToast('✓ Prepared media logged! Setup checklist updated.', 'success');
+      window.location.hash = '#onboarding/setup';
+    })();
+  }
 });
 
 // --- Quick Add Source Form Submit ---
+
 document.getElementById('quick-add-form').addEventListener('submit', (e) => {
   e.preventDefault();
   const label = document.getElementById('qa-label').value;
@@ -941,45 +972,36 @@ const ONBOARDING_STEPS = [
   {
     id: 'step-media',
     title: 'Define Growing Media (Substrates)',
-    desc: 'Define your custom bulk media, liquid culture recipes, or agar formulations.',
-    cta: 'Define Substrates',
+    desc: 'Log your first sterilized media lot using the Bulk PC Prep tool.',
+    cta: 'Log Prepared Media',
     dependency: 'enable_supplies',
     action: () => {
-      openCustomPresetModal('medium');
+      window.isOnboardingMediaStep = true;
+      window.location.hash = '#bulk-pc';
     }
   },
   {
     id: 'step-locations',
     title: 'Add Physical Locations (Rooms)',
     desc: 'Configure your cultivation rooms, incubation closets, or lab facilities.',
-    cta: 'Add Room',
+    cta: 'Add Location',
     dependency: 'enable_racks',
     action: () => {
-      const roomName = prompt('Enter a new Room or Location name (e.g., Fruiting Room A):');
-      if (roomName && roomName.trim()) {
-        addNewLocationDirectly(roomName.trim());
-      }
+      openAddLocationModal();
     }
   },
+
   {
     id: 'step-racks',
     title: 'Set Up Rack Positions',
     desc: 'Set up specific rack, row, and shelf addresses for precise physical inventory locations.',
-    cta: 'Edit Addresses',
+    cta: 'Add Rack / Shelving',
     dependency: 'enable_racks',
     action: () => {
-      window.location.hash = '';
-      setTimeout(() => {
-        const container = document.getElementById('racks-module-container');
-        if (container) {
-          container.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          container.classList.add('ring-2', 'ring-blue-500');
-          setTimeout(() => container.classList.remove('ring-2', 'ring-blue-500'), 3000);
-          showToast('Use Rack Layout or Edit Addresses to set up rack positions!', 'info');
-        }
-      }, 300);
+      openAddRackModal();
     }
   },
+
   {
     id: 'step-supplies',
     title: 'Track Supplies & Sterilization Lots',
@@ -1201,8 +1223,94 @@ async function executeOnboardingCTA(stepId, actionFn) {
   }
 }
 
+// --- Add Location Modal (Step 4: Locations) ---
+function openAddLocationModal() {
+  const modal = document.getElementById('add-location-modal');
+  const input = document.getElementById('add-location-name');
+  const presetBtns = document.querySelectorAll('.preset-location-btn');
+  if (input) input.value = '';
+  presetBtns.forEach(btn => btn.classList.remove('border-emerald-500', 'text-emerald-400'));
+  if (modal) {
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+  }
+  if (input) setTimeout(() => input.focus(), 100);
+}
+
+function closeAddLocationModal() {
+  const modal = document.getElementById('add-location-modal');
+  if (modal) {
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+  }
+}
+
+function selectLocationPreset(name) {
+  const input = document.getElementById('add-location-name');
+  if (input) input.value = name;
+  document.querySelectorAll('.preset-location-btn').forEach(btn => {
+    if (btn.dataset.preset === name) {
+      btn.classList.add('border-emerald-500', 'text-emerald-400');
+    } else {
+      btn.classList.remove('border-emerald-500', 'text-emerald-400');
+    }
+  });
+}
+
+async function handleAddLocationSubmit(e) {
+  if (e && e.preventDefault) e.preventDefault();
+
+  const input = document.getElementById('add-location-name');
+  const name = input ? input.value.trim() : '';
+  if (!name) {
+    showToast('Please enter a location name.', 'error');
+    return;
+  }
+  const categorySelect = document.getElementById('add-location-category');
+  const category = categorySelect ? categorySelect.value : 'Other';
+
+  try {
+    const { createLocation, updateOrganizationSettings } = await import('./db.js');
+    showToast('Creating location: ' + name + '...', 'info');
+    await createLocation(name, category);
+
+    showToast('✓ Location created successfully!', 'success');
+
+    // Refresh header location selector
+    const select = document.getElementById('header-location-select');
+    if (select) {
+      const { userLocations: refreshedLocations, currentLocationId: activeLocId } = await import('./db.js');
+      select.innerHTML = '<option value="all" class="bg-slate-900">All Locations</option>' +
+        refreshedLocations.map(l => `<option value="${l.id}" class="bg-slate-900" ${activeLocId === l.id ? 'selected' : ''}>${l.name}</option>`).join('');
+    }
+
+    closeAddLocationModal();
+
+    // Mark the onboarding step complete and re-render without reloading the page
+    const activeOrg = userOrganizations.find(o => o.id === currentOrganizationId);
+    if (activeOrg) {
+      const settings = activeOrg.settings || { enable_sales: false, enable_racks: false, enable_supplies: false };
+      settings.completed_onboarding_steps = settings.completed_onboarding_steps || [];
+      if (!settings.completed_onboarding_steps.includes('step-locations')) {
+        settings.completed_onboarding_steps.push('step-locations');
+      }
+      try {
+        await updateOrganizationSettings(activeOrg.id, settings);
+      } catch (err) {
+        console.error('Failed to save onboarding progress:', err);
+      }
+    }
+
+    renderOnboardingChecklist();
+  } catch (err) {
+    console.error('Failed to create location:', err);
+    showToast('Failed to create location: ' + err.message, 'error');
+  }
+}
+
 // Add new location (Room) directly from CTA prompt
 async function addNewLocationDirectly(roomName) {
+
   try {
     const { createLocation } = await import('./db.js');
     showToast('Creating room: ' + roomName + '...', 'info');
@@ -1222,8 +1330,120 @@ async function addNewLocationDirectly(roomName) {
   }
 }
 
+// Add Rack / Shelving modal (Step 5: Racks & Shelving)
+function openAddRackModal() {
+  const modal = document.getElementById('add-rack-modal');
+  if (!modal) return;
+
+  const nameInput = document.getElementById('add-rack-name');
+  const shelvesInput = document.getElementById('add-rack-shelves');
+  const capacityInput = document.getElementById('add-rack-capacity');
+  if (nameInput) nameInput.value = '';
+  if (shelvesInput) shelvesInput.value = 4;
+  if (capacityInput) capacityInput.value = '';
+
+  document.querySelectorAll('.preset-rack-btn').forEach(btn => {
+    btn.classList.remove('border-emerald-500', 'text-emerald-400');
+  });
+
+  const locSelect = document.getElementById('add-rack-location');
+  if (locSelect) {
+    if (!userLocations || userLocations.length === 0) {
+      locSelect.innerHTML = '<option value="">No locations available — add one first</option>';
+    } else {
+      locSelect.innerHTML = userLocations.map(l => `<option value="${l.id}">${l.name}</option>`).join('');
+    }
+  }
+
+  modal.classList.remove('hidden');
+  modal.classList.add('flex');
+  setTimeout(() => {
+    if (nameInput) nameInput.focus();
+  }, 100);
+}
+
+function closeAddRackModal() {
+  const modal = document.getElementById('add-rack-modal');
+  if (!modal) return;
+  modal.classList.add('hidden');
+  modal.classList.remove('flex');
+}
+
+function selectRackPreset(name, shelfCount) {
+  const nameInput = document.getElementById('add-rack-name');
+  const shelvesInput = document.getElementById('add-rack-shelves');
+  if (nameInput && !nameInput.value.trim()) nameInput.value = name;
+  if (shelvesInput) shelvesInput.value = shelfCount;
+
+  document.querySelectorAll('.preset-rack-btn').forEach(btn => {
+    if (btn.dataset.preset === name) {
+      btn.classList.add('border-emerald-500', 'text-emerald-400');
+    } else {
+      btn.classList.remove('border-emerald-500', 'text-emerald-400');
+    }
+  });
+}
+
+async function handleAddRackSubmit(e) {
+  if (e && e.preventDefault) e.preventDefault();
+
+  const locationSelect = document.getElementById('add-rack-location');
+  const locationId = locationSelect ? locationSelect.value : '';
+  if (!locationId) {
+    showToast('Please select a location.', 'error');
+    return;
+  }
+
+  const nameInput = document.getElementById('add-rack-name');
+  const name = nameInput ? nameInput.value.trim() : '';
+  if (!name) {
+    showToast('Please enter a rack/unit name.', 'error');
+    return;
+  }
+
+  const shelvesInput = document.getElementById('add-rack-shelves');
+  const shelfCount = parseInt(shelvesInput ? shelvesInput.value : '4', 10) || 4;
+
+  const capacityInput = document.getElementById('add-rack-capacity');
+  const capacity = capacityInput ? capacityInput.value.trim() : '';
+
+  let preset = null;
+  const activePresetBtn = document.querySelector('.preset-rack-btn.border-emerald-500');
+  if (activePresetBtn) preset = activePresetBtn.dataset.preset;
+
+  try {
+    showToast('Creating rack: ' + name + '...', 'info');
+    await createRack(locationId, name, preset, shelfCount, capacity);
+    showToast('✓ Rack created successfully!', 'success');
+
+    closeAddRackModal();
+
+    const activeOrg = userOrganizations.find(o => o.id === currentOrganizationId);
+    if (activeOrg) {
+      const { updateOrganizationSettings } = await import('./db.js');
+      const settings = activeOrg.settings || { enable_sales: false, enable_racks: false, enable_supplies: false };
+      settings.completed_onboarding_steps = settings.completed_onboarding_steps || [];
+      if (!settings.completed_onboarding_steps.includes('step-racks')) {
+        settings.completed_onboarding_steps.push('step-racks');
+      }
+      try {
+        await updateOrganizationSettings(activeOrg.id, settings);
+      } catch (err) {
+        console.error('Failed to save onboarding progress:', err);
+      }
+    }
+
+    renderOnboardingChecklist();
+    render();
+  } catch (err) {
+    console.error('Failed to create rack:', err);
+    showToast('Failed to create rack: ' + err.message, 'error');
+  }
+}
+
 // Expose onboarding helpers globally
 window.toggleOnboardingStep = toggleOnboardingStep;
+
 window.executeOnboardingCTA = (stepId) => {
   const step = ONBOARDING_STEPS.find(s => s.id === stepId);
   if (step) {
@@ -1235,9 +1455,17 @@ window.executeOnboardingCTA = (stepId) => {
 function handleURLHash() {
   const hash = window.location.hash;
   const path = window.location.pathname;
+
+  // Deep-link support: convert /onboarding/setup path to hash route so the
+  // setup checklist renders seamlessly regardless of how the user arrived.
+  if (path === '/onboarding/setup' && hash !== '#onboarding/setup' && hash !== '#/onboarding/setup') {
+    window.location.hash = '#onboarding/setup';
+    return;
+  }
   
   const isOnboardingRoute = (hash === '#onboarding/setup' || hash === '#/onboarding/setup' || path === '/onboarding/setup');
   toggleOnboardingView(isOnboardingRoute);
+
   
   if (isOnboardingRoute) {
     return;
@@ -1246,6 +1474,23 @@ function handleURLHash() {
   // Handle /settings/billing route (via #settings/billing or #/settings/billing)
   if (hash && (hash === '#settings/billing' || hash === '#/settings/billing')) {
     openBillingSettings();
+    return;
+  }
+
+  // Handle #bulk-pc route: scroll to the Bulk PC Prep tool, and if arriving
+  // via onboarding Step 7 (Prepared Media), show the context banner.
+  if (hash && (hash === '#bulk-pc' || hash === '#/bulk-pc')) {
+    setTimeout(() => {
+      const suppliesContainer = document.getElementById('supplies-module-container');
+      const banner = document.getElementById('bulk-pc-onboarding-banner');
+      if (window.isOnboardingMediaStep && banner) {
+        banner.classList.remove('hidden');
+        banner.classList.add('flex');
+      }
+      if (suppliesContainer) {
+        suppliesContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }, 200);
     return;
   }
   
@@ -1272,6 +1517,16 @@ function handleURLHash() {
     }
   }
 }
+
+function dismissBulkPcOnboardingBanner() {
+  const banner = document.getElementById('bulk-pc-onboarding-banner');
+  if (banner) {
+    banner.classList.add('hidden');
+    banner.classList.remove('flex');
+  }
+  window.isOnboardingMediaStep = false;
+}
+window.dismissBulkPcOnboardingBanner = dismissBulkPcOnboardingBanner;
 
 // Handle path-based routing for /container/{id} URLs
 function handleContainerPath() {
@@ -1328,12 +1583,25 @@ Object.assign(window, {
   exportJSON,
   importJSON,
   exportCSV,
+  // Add Location modal (Step 4: Locations)
+  openAddLocationModal,
+  closeAddLocationModal,
+  selectLocationPreset,
+  handleAddLocationSubmit,
+  // Add Rack / Shelving modal (Step 5: Racks & Shelving)
+  openAddRackModal,
+  closeAddRackModal,
+  selectRackPreset,
+  handleAddRackSubmit,
+
+
   // Bulk PC Prep smart dropdowns & custom presets
   handleBulkMediumChange,
   handleBulkContainerChange,
   openCustomPresetModal,
   closeCustomPresetModal,
   handleCustomPresetSubmit,
+  dismissBulkPcOnboardingBanner,
   // utils.js
   toggleLCMedium,
   updateBatchCodeAuto,
@@ -1364,6 +1632,9 @@ Object.assign(window, {
   closePrintSettingsModal,
   onPrintLayoutChange,
   onPrintOffsetChange,
+  onPrinterTypeChange,
+  onLabelModelChange,
+  applyCustomLabelDims,
   applyOrExecutePrintSettings,
   printBulkLabels,
   printSingleLabel,
@@ -1384,6 +1655,7 @@ Object.assign(window, {
   deleteSelectedItems,
   getBatchItems,
   // AI Assistant Drawer
+
   toggleAIDrawer,
   closeAIDrawer,
   sendChatMessage,
@@ -1739,10 +2011,16 @@ function initMultiTenantListeners() {
   if (locSelect) {
     locSelect.addEventListener('change', handleLocationFilterChange);
   }
+
+  const addRackForm = document.getElementById('add-rack-form');
+  if (addRackForm) {
+    addRackForm.addEventListener('submit', handleAddRackSubmit);
+  }
 }
 
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', initMultiTenantListeners);
+
 } else {
   initMultiTenantListeners();
 }

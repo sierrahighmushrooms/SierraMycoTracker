@@ -304,7 +304,217 @@
       </div>
     </div>
 
+    <!-- Add Location Slide-Over / Modal (Step 4: Locations) -->
+    <div id="add-location-modal" class="fixed inset-0 bg-black/70 backdrop-blur-sm hidden items-center justify-end z-[96] animate-fade-in">
+      <div class="bg-slate-900 border-l border-slate-800 w-full max-w-md h-full shadow-2xl overflow-y-auto animate-slide-in-right">
+        <div class="p-6 space-y-6">
+          <div class="flex justify-between items-center border-b border-slate-800 pb-4">
+            <h2 class="text-lg font-bold text-white flex items-center gap-2"><span>📍</span> Add Location</h2>
+            <button type="button" onclick="closeAddLocationModal()" class="text-slate-400 hover:text-white text-xl leading-none">✕</button>
+          </div>
+
+          <form id="add-location-form" class="space-y-5">
+            <div>
+              <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Quick Presets</label>
+              <div class="grid grid-cols-3 gap-2">
+                <button type="button" onclick="selectLocationPreset('Lab')" class="preset-location-btn px-2 py-2 rounded-lg bg-slate-850 border border-slate-700 text-xs font-semibold text-slate-300 hover:border-emerald-500 hover:text-emerald-400 transition" data-preset="Lab">🧪 Lab</button>
+                <button type="button" onclick="selectLocationPreset('Incubation Room')" class="preset-location-btn px-2 py-2 rounded-lg bg-slate-850 border border-slate-700 text-xs font-semibold text-slate-300 hover:border-emerald-500 hover:text-emerald-400 transition" data-preset="Incubation Room">🌡️ Incubation Room</button>
+                <button type="button" onclick="selectLocationPreset('Fruiting Room')" class="preset-location-btn px-2 py-2 rounded-lg bg-slate-850 border border-slate-700 text-xs font-semibold text-slate-300 hover:border-emerald-500 hover:text-emerald-400 transition" data-preset="Fruiting Room">🍄 Fruiting Room</button>
+              </div>
+            </div>
+
+            <div>
+              <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Location Name</label>
+              <input type="text" id="add-location-name" placeholder="e.g., Fruiting Room B" required class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-emerald-500/60">
+            </div>
+
+            <div>
+              <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Category</label>
+              <select id="add-location-category" required class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-500/60">
+                <option value="Lab / Clean Room">Lab / Clean Room</option>
+                <option value="Incubation">Incubation</option>
+                <option value="Fruiting">Fruiting</option>
+                <option value="Storage">Storage</option>
+                <option value="Processing">Processing</option>
+                <option value="Other" selected>Other</option>
+              </select>
+            </div>
+=======REPLACE_END_MARKER_UNUSED
+
+
+            <div class="flex gap-2.5 pt-2">
+              <button type="button" onclick="closeAddLocationModal()" class="flex-1 bg-slate-850 hover:bg-slate-800 border border-slate-700 text-slate-200 font-bold py-2.5 rounded-lg transition text-sm">
+                Cancel
+              </button>
+              <button type="submit" class="flex-1 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold py-2.5 rounded-lg transition text-sm shadow-lg shadow-emerald-500/20">
+                Save Location
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- Add Rack / Shelving Slide-Over (Step 5: Racks & Shelving) -->
+    <div id="add-rack-modal" class="fixed inset-0 bg-black/70 backdrop-blur-sm hidden items-center justify-end z-[96] animate-fade-in">
+      <div class="bg-slate-900 border-l border-slate-800 w-full max-w-md h-full shadow-2xl overflow-y-auto animate-slide-in-right">
+        <div class="p-6 space-y-6">
+          <div class="flex justify-between items-center border-b border-slate-800 pb-4">
+            <h2 class="text-lg font-bold text-white flex items-center gap-2"><span>🗄️</span> Add Rack / Shelving Unit</h2>
+            <button type="button" onclick="closeAddRackModal()" class="text-slate-400 hover:text-white text-xl leading-none">✕</button>
+          </div>
+
+          <form id="add-rack-form" class="space-y-5">
+            <div>
+              <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Location</label>
+              <select id="add-rack-location" required class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-500/60">
+                <!-- Populated dynamically from userLocations -->
+              </select>
+            </div>
+
+            <div>
+              <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Rack / Unit Name</label>
+              <input type="text" id="add-rack-name" placeholder="e.g., Rack A, Main Wire Rack 1" required class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-emerald-500/60">
+            </div>
+
+            <div>
+              <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Quick Presets</label>
+              <div class="grid grid-cols-1 gap-2">
+                <button type="button" onclick="selectRackPreset('Standard 4-Tier Metal Rack', 4)" class="preset-rack-btn px-2.5 py-2 rounded-lg bg-slate-850 border border-slate-700 text-xs font-semibold text-slate-300 hover:border-emerald-500 hover:text-emerald-400 transition text-left" data-preset="Standard 4-Tier Metal Rack">🗄️ Standard 4-Tier Metal Rack (4 shelves)</button>
+                <button type="button" onclick="selectRackPreset('Heavy Duty 5-Shelf Unit', 5)" class="preset-rack-btn px-2.5 py-2 rounded-lg bg-slate-850 border border-slate-700 text-xs font-semibold text-slate-300 hover:border-emerald-500 hover:text-emerald-400 transition text-left" data-preset="Heavy Duty 5-Shelf Unit">🏗️ Heavy Duty 5-Shelf Unit (5 shelves)</button>
+                <button type="button" onclick="selectRackPreset('Custom Shelf', 1)" class="preset-rack-btn px-2.5 py-2 rounded-lg bg-slate-850 border border-slate-700 text-xs font-semibold text-slate-300 hover:border-emerald-500 hover:text-emerald-400 transition text-left" data-preset="Custom Shelf">🔧 Custom Shelf</button>
+              </div>
+            </div>
+
+            <div>
+              <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Number of Shelves</label>
+              <input type="number" id="add-rack-shelves" min="1" max="20" value="4" required class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-sm text-slate-100 font-mono-custom focus:outline-none focus:ring-2 focus:ring-emerald-500/60">
+            </div>
+
+            <div>
+              <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Shelving Capacity <span class="text-slate-600 normal-case font-normal">(optional, max bags/blocks per shelf)</span></label>
+              <input type="text" id="add-rack-capacity" placeholder="e.g., 12 bags" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-emerald-500/60">
+            </div>
+
+            <div class="flex gap-2.5 pt-2">
+              <button type="button" onclick="closeAddRackModal()" class="flex-1 bg-slate-850 hover:bg-slate-800 border border-slate-700 text-slate-200 font-bold py-2.5 rounded-lg transition text-sm">
+                Cancel
+              </button>
+              <button type="submit" class="flex-1 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold py-2.5 rounded-lg transition text-sm shadow-lg shadow-emerald-500/20">
+                Save Rack
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- Add Supply Slide-Over (Step 6: Supplies & Inventory) -->
+    <div id="add-supply-modal" class="fixed inset-0 bg-black/70 backdrop-blur-sm hidden items-center justify-end z-[96] animate-fade-in">
+      <div class="bg-slate-900 border-l border-slate-800 w-full max-w-md h-full shadow-2xl overflow-y-auto animate-slide-in-right">
+        <div class="p-6 space-y-6">
+          <div class="flex justify-between items-center border-b border-slate-800 pb-4">
+            <h2 class="text-lg font-bold text-white flex items-center gap-2"><span>📦</span> Add Supply / Inventory Item</h2>
+            <button type="button" onclick="closeAddSupplyModal()" class="text-slate-400 hover:text-white text-xl leading-none">✕</button>
+          </div>
+
+          <form id="add-supply-form" class="space-y-5">
+            <div>
+              <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Name *</label>
+              <input type="text" id="add-supply-name" placeholder="e.g., Rye Berries, Filter Patches" required class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-emerald-500/60">
+            </div>
+
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Category</label>
+                <select id="add-supply-category" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-500/60">
+                  <option value="Grain">Grain</option>
+                  <option value="Substrate">Substrate</option>
+                  <option value="Agar & Petri">Agar & Petri</option>
+                  <option value="Liquid Culture">Liquid Culture</option>
+                  <option value="Packaging">Packaging</option>
+                  <option value="Sanitization">Sanitization</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+              <div class="flex flex-col gap-2 justify-center">
+                <label class="flex items-center gap-2 text-xs font-semibold text-slate-300 cursor-pointer">
+                  <input type="checkbox" id="add-supply-dry" class="rounded border-slate-700 bg-slate-950 text-emerald-500 focus:ring-emerald-500/60">
+                  Dry Ingredient?
+                </label>
+                <label class="flex items-center gap-2 text-xs font-semibold text-slate-300 cursor-pointer">
+                  <input type="checkbox" id="add-supply-non-depleting" class="rounded border-slate-700 bg-slate-950 text-emerald-500 focus:ring-emerald-500/60">
+                  Non-Depleting?
+                </label>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Quantity On Hand *</label>
+                <input type="number" step="any" id="add-supply-quantity" required class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-sm text-slate-100 font-mono-custom focus:outline-none focus:ring-2 focus:ring-emerald-500/60">
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Unit of Measure *</label>
+                <input type="text" id="add-supply-unit" value="lbs" required class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-emerald-500/60">
+              </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Package Size</label>
+                <input type="text" id="add-supply-package-size" placeholder="e.g., 50" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-emerald-500/60">
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Package Cost ($)</label>
+                <input type="number" step="0.01" id="add-supply-package-cost" placeholder="e.g., 25.00" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-sm text-slate-100 font-mono-custom placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-emerald-500/60">
+              </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Reorder Threshold</label>
+                <input type="number" step="any" id="add-supply-reorder-threshold" placeholder="Alert when quantity falls below this" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-sm text-slate-100 font-mono-custom placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-emerald-500/60">
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Reorder URL</label>
+                <input type="url" id="add-supply-reorder-url" placeholder="https://..." class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-emerald-500/60">
+              </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Supplier</label>
+                <input type="text" id="add-supply-supplier" placeholder="e.g., Local Mill" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-emerald-500/60">
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Product Code</label>
+                <input type="text" id="add-supply-product-code" placeholder="SKU" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-emerald-500/60">
+              </div>
+            </div>
+
+            <div>
+              <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Notes</label>
+              <textarea id="add-supply-notes" rows="3" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-emerald-500/60"></textarea>
+            </div>
+
+            <div class="flex gap-2.5 pt-2">
+              <button type="button" onclick="closeAddSupplyModal()" class="flex-1 bg-slate-850 hover:bg-slate-800 border border-slate-700 text-slate-200 font-bold py-2.5 rounded-lg transition text-sm">
+                Cancel
+              </button>
+              <button type="submit" class="flex-1 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold py-2.5 rounded-lg transition text-sm shadow-lg shadow-emerald-500/20">
+                Save Supply
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+
     <div id="dashboard-grid" class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+
       <!-- Forms Section -->
       <div class="space-y-6">
         
@@ -1030,18 +1240,49 @@
           ⚠️ Notice: You are printing labels from a dev environment. Ensure your Base URL points to your live deployment so printed QR codes work permanently.
         </div>
 
-        <!-- Layout Selection -->
+        <!-- Printer Type Selection -->
         <div>
-          <label class="block text-xs font-medium text-slate-400 mb-1">Label Sheet Layout</label>
-          <select id="print-layout-select" onchange="onPrintLayoutChange()" class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-sm text-slate-100">
-            <option value="30-up">Standard 30-Up Sheet (2.625" x 1" - 3x10 grid)</option>
-            <option value="10-up">Large 10-Up Sheet (4" x 2" - 2x5 grid)</option>
-            <option value="20-up">Medium 20-Up Sheet (4" x 1" - 2x10 grid)</option>
-            <option value="80-up">Mini Slant/Vial 80-Up Sheet (1.75" x 0.5" - 4x20 grid)</option>
-            <option value="single">Continuous Roll / Single Label</option>
+          <label class="block text-xs font-medium text-slate-400 mb-1">Printer Type</label>
+          <select id="printer-type-select" onchange="onPrinterTypeChange()" class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-sm text-slate-100">
+            <option value="sheet">Sheet Printer (Laser/Inkjet)</option>
+            <option value="thermal">Thermal Label Printer</option>
           </select>
-          <p class="text-[11px] text-slate-400 mt-1">Select the format matching your physical labels.</p>
         </div>
+
+        <!-- Label Model Selection -->
+        <div>
+          <label class="block text-xs font-medium text-slate-400 mb-1">Label Model</label>
+          <select id="label-model-select" onchange="onLabelModelChange()" class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-sm text-slate-100">
+            <!-- Dynamically populated options -->
+          </select>
+          <p class="text-[11px] text-slate-400 mt-1">Select the exact label product matching your physical sheet/roll.</p>
+        </div>
+
+        <!-- Custom Dimensions Panel (shown only when 'Custom Dimensions...' is selected) -->
+        <div id="custom-label-dims-panel" class="hidden bg-slate-900/60 border border-slate-700 rounded-lg p-3 space-y-2">
+          <p class="text-[11px] text-slate-400 mb-1">Enter custom label & page dimensions (inches).</p>
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="block text-[10px] text-slate-400 mb-0.5">Label Width</label>
+              <input type="number" id="custom-label-width" step="0.01" min="0.1" class="w-full bg-slate-800 border border-slate-700 rounded p-1.5 text-sm text-slate-100">
+            </div>
+            <div>
+              <label class="block text-[10px] text-slate-400 mb-0.5">Label Height</label>
+              <input type="number" id="custom-label-height" step="0.01" min="0.1" class="w-full bg-slate-800 border border-slate-700 rounded p-1.5 text-sm text-slate-100">
+            </div>
+            <div>
+              <label class="block text-[10px] text-slate-400 mb-0.5">Grid Columns</label>
+              <input type="number" id="custom-label-cols" step="1" min="1" value="1" class="w-full bg-slate-800 border border-slate-700 rounded p-1.5 text-sm text-slate-100">
+            </div>
+            <div>
+              <label class="block text-[10px] text-slate-400 mb-0.5">Grid Rows</label>
+              <input type="number" id="custom-label-rows" step="1" min="1" value="1" class="w-full bg-slate-800 border border-slate-700 rounded p-1.5 text-sm text-slate-100">
+            </div>
+          </div>
+          <button type="button" onclick="applyCustomLabelDims()" class="w-full bg-slate-700 hover:bg-slate-600 text-slate-100 text-xs font-bold py-1.5 rounded transition">Apply Custom Dimensions</button>
+        </div>
+=======REPLACE_MARKER_UNUSED
+
 
         <!-- Optional Container Details Toggle on Labels -->
         <div class="flex items-center gap-2 py-1">

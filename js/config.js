@@ -192,15 +192,139 @@ export const APP_CONFIG = {
     PRINT_LAYOUT: 'myco_print_layout',
     PRINT_OFFSET: 'myco_print_offset',
     PRINT_INCLUDE_CONTAINER: 'myco_print_include_container',
+    PRINTER_TYPE: 'myco_printer_type',
+    LABEL_MODEL: 'myco_label_model',
+    CUSTOM_LABEL_DIMS: 'myco_custom_label_dims',
     FEEDBACK: 'myco_feedback',
     AI_CHAT: 'myco_ai_chat',
     VERSION_TAG: 'myco_version_tag'
   },
   DEFAULT_PRINT_LAYOUT: '30-up',
   DEFAULT_PRINT_OFFSET: 1,
+  DEFAULT_PRINTER_TYPE: 'sheet',
+  DEFAULT_LABEL_MODEL: 'avery-5160',
   MAX_G2G_TRANSFER_QTY: 4,
   DRY_YIELD_RATIO: 0.1 // ~10% estimated dry weight from wet weight
 };
+
+// --- Label Printing Hardware Configuration Matrix ---
+// Defines every supported "Printer Type" + "Label Model" combination with the
+// physical dimensions, margins, and grid layout needed to generate correct
+// CSS @page rules and PDF/print coordinates. Dimensions are in inches.
+export const PRINTER_TYPES = {
+  SHEET: 'sheet',
+  THERMAL: 'thermal'
+};
+
+export const LABEL_TEMPLATES = {
+  'avery-5160': {
+    name: 'Avery 5160 — 30-Up Address Labels (2.625" x 1")',
+    printerType: PRINTER_TYPES.SHEET,
+    page: { width: 8.5, height: 11 },
+    margin: { top: 0.5, bottom: 0.5, left: 0.1875, right: 0.1875 },
+    label: { width: 2.625, height: 1.0 },
+    grid: { cols: 3, rows: 10 },
+    gap: { col: 0.125, row: 0 },
+    slots: 30
+  },
+  'avery-5163': {
+    name: 'Avery 5163 — 10-Up Shipping Labels (4" x 2")',
+    printerType: PRINTER_TYPES.SHEET,
+    page: { width: 8.5, height: 11 },
+    margin: { top: 0.5, bottom: 0.5, left: 0.15625, right: 0.15625 },
+    label: { width: 4.0, height: 2.0 },
+    grid: { cols: 2, rows: 5 },
+    gap: { col: 0.1875, row: 0 },
+    slots: 10
+  },
+  'generic-20-up': {
+    name: 'Generic 20-Up Sheet (4" x 1")',
+    printerType: PRINTER_TYPES.SHEET,
+    page: { width: 8.5, height: 11 },
+    margin: { top: 0.5, bottom: 0.5, left: 0.175, right: 0.175 },
+    label: { width: 4.0, height: 1.0 },
+    grid: { cols: 2, rows: 10 },
+    gap: { col: 0.15, row: 0 },
+    slots: 20
+  },
+  'generic-80-up': {
+    name: 'Generic 80-Up Mini Sheet (1.75" x 0.5")',
+    printerType: PRINTER_TYPES.SHEET,
+    page: { width: 8.5, height: 11 },
+    margin: { top: 0.5, bottom: 0.5, left: 0.6, right: 0.6 },
+    label: { width: 1.75, height: 0.5 },
+    grid: { cols: 4, rows: 20 },
+    gap: { col: 0.1, row: 0 },
+    slots: 80
+  },
+  'dymo-30321': {
+    name: 'DYMO 30321 — Thermal Roll (2-1/8" x 4")',
+    printerType: PRINTER_TYPES.THERMAL,
+    page: { width: 2.125, height: 4.0 },
+    margin: { top: 0, bottom: 0, left: 0, right: 0 },
+    label: { width: 2.125, height: 4.0 },
+    grid: { cols: 1, rows: 1 },
+    gap: { col: 0, row: 0 },
+    slots: 1,
+    continuous: true
+  },
+  'dymo-30336': {
+    name: 'DYMO 30336 — Thermal Roll (1" x 2-1/8")',
+    printerType: PRINTER_TYPES.THERMAL,
+    page: { width: 1.0, height: 2.125 },
+    margin: { top: 0, bottom: 0, left: 0, right: 0 },
+    label: { width: 2.125, height: 1.0 },
+    grid: { cols: 1, rows: 1 },
+    gap: { col: 0, row: 0 },
+    slots: 1,
+    continuous: true
+  },
+  'thermal-continuous': {
+    name: 'Generic Continuous Roll / Single Label',
+    printerType: PRINTER_TYPES.THERMAL,
+    page: { width: 4.0, height: 1.0 },
+    margin: { top: 0, bottom: 0, left: 0, right: 0 },
+    label: { width: 4.0, height: 1.0 },
+    grid: { cols: 1, rows: 1 },
+    gap: { col: 0, row: 0 },
+    slots: 1,
+    continuous: true
+  },
+  'custom': {
+    name: 'Custom Dimensions…',
+    printerType: null, // works for either printer type — dims supplied manually
+    custom: true
+  }
+};
+
+// Backwards-compatible mapping from the legacy hardcoded layout keys
+// (used before the Printer Type / Label Model hardware matrix existed)
+// to the new label template keys, so existing saved user settings keep working.
+export const LEGACY_LAYOUT_MAP = {
+  '30-up': 'avery-5160',
+  '10-up': 'avery-5163',
+  '20-up': 'generic-20-up',
+  '80-up': 'generic-80-up',
+  'single': 'thermal-continuous'
+};
+
+// Resolve a label template by key, following the legacy map and falling back
+// to the default sheet template if the key is unknown.
+export function resolveLabelTemplate(key) {
+  if (key && LABEL_TEMPLATES[key]) return LABEL_TEMPLATES[key];
+  if (key && LEGACY_LAYOUT_MAP[key] && LABEL_TEMPLATES[LEGACY_LAYOUT_MAP[key]]) {
+    return LABEL_TEMPLATES[LEGACY_LAYOUT_MAP[key]];
+  }
+  return LABEL_TEMPLATES[APP_CONFIG.DEFAULT_LABEL_MODEL];
+}
+
+// Get the list of label models available for a given printer type (always
+// includes the 'custom' option as a manual-override fallback).
+export function getLabelModelsForPrinterType(printerType) {
+  return Object.entries(LABEL_TEMPLATES)
+    .filter(([key, tmpl]) => tmpl.printerType === printerType || tmpl.custom)
+    .map(([key, tmpl]) => ({ key, name: tmpl.name }));
+}
 
 // Supabase credentials (configure before enabling cloud sync)
 export const SUPABASE_URL = 'https://wsalxxsjnxptoeduwfqw.supabase.co';

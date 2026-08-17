@@ -44,15 +44,21 @@ import {
   SUBSTRATE_STAGES,
   GRAIN_STAGES,
   getAppBaseUrl,
-  isUsingTemporaryBaseUrl
+  isUsingTemporaryBaseUrl,
+  PRINTER_TYPES,
+  LABEL_TEMPLATES,
+  resolveLabelTemplate,
+  getLabelModelsForPrinterType
 } from './config.js';
 
 // --- Module-level modal state ---
 let activeItemId = null;
 let g2gScannedIds = [];
-let printLayout = localStorage.getItem(APP_CONFIG.STORAGE_KEYS.PRINT_LAYOUT) || APP_CONFIG.DEFAULT_PRINT_LAYOUT;
+let printerType = localStorage.getItem(APP_CONFIG.STORAGE_KEYS.PRINTER_TYPE) || APP_CONFIG.DEFAULT_PRINTER_TYPE;
+let labelModel = localStorage.getItem(APP_CONFIG.STORAGE_KEYS.LABEL_MODEL) || APP_CONFIG.DEFAULT_LABEL_MODEL;
 let printOffset = parseInt(localStorage.getItem(APP_CONFIG.STORAGE_KEYS.PRINT_OFFSET)) || APP_CONFIG.DEFAULT_PRINT_OFFSET;
 let pendingPrintItems = null;
+
 
 // Expose the active item id for other modules (e.g. app.js) without a circular import.
 export function getActiveItemId() {
@@ -886,37 +892,70 @@ export function calculateCVG() {
 }
 
 // --- Label Print Settings & Custom Layouts Logic ---
-function getLayoutConfig(layout) {
-  switch (layout) {
-    case '10-up': return { slots: 10, cols: 2 };
-    case '20-up': return { slots: 20, cols: 2 };
-    case '80-up': return { slots: 80, cols: 4 };
-    case '30-up':
-    default: return { slots: 30, cols: 3 };
+// Returns the active label template, applying any saved custom dims when
+// the 'custom' label model is selected.
+function getActiveTemplate() {
+  const tmpl = resolveLabelTemplate(labelModel);
+  if (labelModel === 'custom' || tmpl.custom) {
+    const stored = JSON.parse(localStorage.getItem(APP_CONFIG.STORAGE_KEYS.CUSTOM_LABEL_DIMS) || 'null');
+    if (stored) {
+      return {
+        name: 'Custom Dimensions',
+        printerType: printerType,
+        page: stored.page || { width: stored.width, height: stored.height },
+        margin: stored.margin || { top: 0, bottom: 0, left: 0, right: 0 },
+        label: { width: stored.width, height: stored.height },
+        grid: { cols: stored.cols || 1, rows: stored.rows || 1 },
+        gap: stored.gap || { col: 0, row: 0 },
+        slots: (stored.cols || 1) * (stored.rows || 1),
+        continuous: printerType === PRINTER_TYPES.THERMAL
+      };
+    }
   }
+  return tmpl;
+}
+
+function getLayoutConfig(tmpl) {
+  const t = tmpl || getActiveTemplate();
+  return { slots: t.slots || 1, cols: (t.grid && t.grid.cols) || 1 };
+}
+
+// Apply the resolved template's physical metrics as CSS custom properties so
+// css/print.css can consume them in @page and grid layout rules.
+function applyTemplateCSSVars(tmpl) {
+  const root = document.documentElement;
+  if (!tmpl) return;
+  root.style.setProperty('--label-width', `${tmpl.label.width}in`);
+  root.style.setProperty('--label-height', `${tmpl.label.height}in`);
+  root.style.setProperty('--page-width', `${tmpl.page.width}in`);
+  root.style.setProperty('--page-height', `${tmpl.page.height}in`);
+  root.style.setProperty('--page-margin-top', `${tmpl.margin.top}in`);
+  root.style.setProperty('--page-margin-bottom', `${tmpl.margin.bottom}in`);
+  root.style.setProperty('--page-margin-left', `${tmpl.margin.left}in`);
+  root.style.setProperty('--page-margin-right', `${tmpl.margin.right}in`);
+  root.style.setProperty('--label-cols', `${tmpl.grid.cols}`);
+  root.style.setProperty('--label-col-gap', `${tmpl.gap.col}in`);
+  root.style.setProperty('--label-row-gap', `${tmpl.gap.row}in`);
 }
 
 export function openPrintSettingsModal(itemList = null) {
   pendingPrintItems = itemList;
 
   // Load stored configurations
-  printLayout = localStorage.getItem(APP_CONFIG.STORAGE_KEYS.PRINT_LAYOUT) || APP_CONFIG.DEFAULT_PRINT_LAYOUT;
+  printerType = localStorage.getItem(APP_CONFIG.STORAGE_KEYS.PRINTER_TYPE) || APP_CONFIG.DEFAULT_PRINTER_TYPE;
+  labelModel = localStorage.getItem(APP_CONFIG.STORAGE_KEYS.LABEL_MODEL) || APP_CONFIG.DEFAULT_LABEL_MODEL;
   printOffset = parseInt(localStorage.getItem(APP_CONFIG.STORAGE_KEYS.PRINT_OFFSET)) || APP_CONFIG.DEFAULT_PRINT_OFFSET;
 
   // Update UI elements to match stored configurations
-  const layoutSelect = document.getElementById('print-layout-select');
-  const offsetSelect = document.getElementById('print-offset-select');
-  if (layoutSelect) layoutSelect.value = printLayout;
+  const printerTypeSelect = document.getElementById('printer-type-select');
+  if (printerTypeSelect) printerTypeSelect.value = printerType;
 
-  const config = getLayoutConfig(printLayout);
+  populateLabelModelSelect(printerType, labelModel);
+
+  const config = getLayoutConfig();
   if (printOffset > config.slots) {
     printOffset = 1;
     localStorage.setItem(APP_CONFIG.STORAGE_KEYS.PRINT_OFFSET, printOffset);
-  }
-
-  if (offsetSelect) {
-    offsetSelect.innerHTML = Array.from({ length: config.slots }, (_, i) => `<option value="${i + 1}">${i + 1}</option>`).join('');
-    offsetSelect.value = printOffset;
   }
 
   const includeContainerCheckbox = document.getElementById('print-include-container');
@@ -934,7 +973,7 @@ export function openPrintSettingsModal(itemList = null) {
     }
   }
 
-  onPrintLayoutChange(false); // Update preview layout view (suppress automatic save)
+  refreshPrintSettingsUI(false); // Update preview layout view (suppress automatic save)
 
   const modal = document.getElementById('print-settings-modal');
   if (modal) {
@@ -961,23 +1000,84 @@ export function closePrintSettingsModal() {
   pendingPrintItems = null;
 }
 
-export function onPrintLayoutChange(shouldSave = true) {
-  const layoutSelect = document.getElementById('print-layout-select');
-  if (layoutSelect) {
-    printLayout = layoutSelect.value;
-    if (shouldSave) {
-      localStorage.setItem(APP_CONFIG.STORAGE_KEYS.PRINT_LAYOUT, printLayout);
-    }
+// Populate the Label Model <select> with options valid for the given printer type.
+function populateLabelModelSelect(pType, selectedKey) {
+  const select = document.getElementById('label-model-select');
+  if (!select) return;
+  const models = getLabelModelsForPrinterType(pType);
+  select.innerHTML = models.map(m => `<option value="${m.key}">${m.name}</option>`).join('');
+  if (models.some(m => m.key === selectedKey)) {
+    select.value = selectedKey;
+  } else if (models.length) {
+    select.value = models[0].key;
+    labelModel = models[0].key;
+  }
+}
+
+export function onPrinterTypeChange() {
+  const select = document.getElementById('printer-type-select');
+  if (select) {
+    printerType = select.value;
+    localStorage.setItem(APP_CONFIG.STORAGE_KEYS.PRINTER_TYPE, printerType);
+  }
+  // Reset to the first valid label model for the new printer type
+  const models = getLabelModelsForPrinterType(printerType);
+  labelModel = models.length ? models[0].key : APP_CONFIG.DEFAULT_LABEL_MODEL;
+  localStorage.setItem(APP_CONFIG.STORAGE_KEYS.LABEL_MODEL, labelModel);
+  populateLabelModelSelect(printerType, labelModel);
+  refreshPrintSettingsUI(true);
+}
+
+export function onLabelModelChange() {
+  const select = document.getElementById('label-model-select');
+  if (select) {
+    labelModel = select.value;
+    localStorage.setItem(APP_CONFIG.STORAGE_KEYS.LABEL_MODEL, labelModel);
+  }
+  refreshPrintSettingsUI(true);
+}
+
+export function applyCustomLabelDims() {
+  const width = parseFloat(document.getElementById('custom-label-width').value);
+  const height = parseFloat(document.getElementById('custom-label-height').value);
+  const cols = parseInt(document.getElementById('custom-label-cols').value) || 1;
+  const rows = parseInt(document.getElementById('custom-label-rows').value) || 1;
+
+  if (!width || !height || width <= 0 || height <= 0) {
+    alert('Please enter valid label width and height (inches).');
+    return;
   }
 
-  const offsetContainer = document.getElementById('print-offset-container');
-  if (offsetContainer) {
-    if (printLayout !== 'single') {
-      offsetContainer.classList.remove('hidden');
+  const customDims = {
+    width,
+    height,
+    cols,
+    rows,
+    page: { width: width * cols, height: height * rows },
+    margin: { top: 0, bottom: 0, left: 0, right: 0 },
+    gap: { col: 0, row: 0 }
+  };
+  localStorage.setItem(APP_CONFIG.STORAGE_KEYS.CUSTOM_LABEL_DIMS, JSON.stringify(customDims));
+  refreshPrintSettingsUI(true);
+  alert('Custom label dimensions applied.');
+}
 
-      // Dynamically populate offset select options
-      const config = getLayoutConfig(printLayout);
-      const offsetSelect = document.getElementById('print-offset-select');
+// Refresh the layout-dependent portions of the print settings modal:
+// custom dims panel visibility, offset select options, and the preview grid.
+export function refreshPrintSettingsUI(shouldSave = true) {
+  const customPanel = document.getElementById('custom-label-dims-panel');
+  if (customPanel) {
+    customPanel.classList.toggle('hidden', labelModel !== 'custom');
+  }
+
+  const tmpl = getActiveTemplate();
+  const config = getLayoutConfig(tmpl);
+
+  const offsetContainer = document.getElementById('print-offset-container');
+  const offsetSelect = document.getElementById('print-offset-select');
+  if (offsetContainer) {
+    if (!tmpl.continuous) {
+      offsetContainer.classList.remove('hidden');
       if (offsetSelect) {
         if (printOffset > config.slots) {
           printOffset = 1;
@@ -986,12 +1086,16 @@ export function onPrintLayoutChange(shouldSave = true) {
         offsetSelect.innerHTML = Array.from({ length: config.slots }, (_, i) => `<option value="${i + 1}">${i + 1}</option>`).join('');
         offsetSelect.value = printOffset;
       }
-
       renderPreviewGrid();
     } else {
       offsetContainer.classList.add('hidden');
     }
   }
+}
+
+// Backwards-compatible alias retained for any external callers.
+export function onPrintLayoutChange(shouldSave = true) {
+  refreshPrintSettingsUI(shouldSave);
 }
 
 export function onPrintOffsetChange() {
@@ -1008,7 +1112,7 @@ export function renderPreviewGrid() {
   if (!grid) return;
   grid.innerHTML = '';
 
-  const config = getLayoutConfig(printLayout);
+  const config = getLayoutConfig();
   grid.style.gridTemplateColumns = `repeat(${config.cols}, minmax(0, 1fr))`;
 
   const numItems = pendingPrintItems ? pendingPrintItems.length : 1;
@@ -1043,15 +1147,24 @@ export function renderPreviewGrid() {
 }
 
 export function applyOrExecutePrintSettings() {
-  printLayout = document.getElementById('print-layout-select').value;
-  localStorage.setItem(APP_CONFIG.STORAGE_KEYS.PRINT_LAYOUT, printLayout);
+  const printerTypeSelect = document.getElementById('printer-type-select');
+  if (printerTypeSelect) {
+    printerType = printerTypeSelect.value;
+    localStorage.setItem(APP_CONFIG.STORAGE_KEYS.PRINTER_TYPE, printerType);
+  }
+  const labelModelSelect = document.getElementById('label-model-select');
+  if (labelModelSelect) {
+    labelModel = labelModelSelect.value;
+    localStorage.setItem(APP_CONFIG.STORAGE_KEYS.LABEL_MODEL, labelModel);
+  }
 
   const includeContainerCheckbox = document.getElementById('print-include-container');
   if (includeContainerCheckbox) {
     localStorage.setItem(APP_CONFIG.STORAGE_KEYS.PRINT_INCLUDE_CONTAINER, includeContainerCheckbox.checked ? 'true' : 'false');
   }
 
-  if (printLayout !== 'single') {
+  const tmpl = getActiveTemplate();
+  if (!tmpl.continuous) {
     printOffset = parseInt(document.getElementById('print-offset-select').value) || 1;
     localStorage.setItem(APP_CONFIG.STORAGE_KEYS.PRINT_OFFSET, printOffset);
   }
@@ -1059,7 +1172,7 @@ export function applyOrExecutePrintSettings() {
   if (pendingPrintItems && pendingPrintItems.length > 0) {
     const itemsToPrint = pendingPrintItems;
     closePrintSettingsModal();
-    executePrint(itemsToPrint, printLayout, printOffset);
+    executePrint(itemsToPrint, labelModel, printOffset);
   } else {
     alert('Print configurations saved successfully.');
     closePrintSettingsModal();
@@ -1076,20 +1189,38 @@ export function printSingleLabel() {
   if (item) printBulkLabels([item]);
 }
 
-export function executePrint(itemList, layout, offset) {
+export function executePrint(itemList, layoutKey, offset) {
   const section = document.getElementById('bulk-print-section');
   if (!section) return;
   section.innerHTML = '';
 
-  // Apply layout class to container
-  if (layout !== 'single') {
-    section.className = `layout-${layout}`;
+  const tmpl = getActiveTemplate();
+  applyTemplateCSSVars(tmpl);
+
+  const cols = (tmpl.grid && tmpl.grid.cols) || 1;
+  const rows = (tmpl.grid && tmpl.grid.rows) || 1;
+  const totalSlots = cols * rows;
+
+  // Apply layout class to container (retain legacy class names for CSS fallback)
+  if (!tmpl.continuous) {
+    section.className = 'layout-dynamic';
+    section.style.gridTemplateColumns = `repeat(${cols}, ${tmpl.label.width}in)`;
+    section.style.gridAutoRows = `${tmpl.label.height}in`;
+    section.style.columnGap = `${tmpl.gap.col}in`;
+    section.style.rowGap = `${tmpl.gap.row}in`;
+    section.style.paddingTop = `${tmpl.margin.top}in`;
+    section.style.paddingBottom = `${tmpl.margin.bottom}in`;
+    section.style.paddingLeft = `${tmpl.margin.left}in`;
+    section.style.paddingRight = `${tmpl.margin.right}in`;
+    section.style.display = 'grid';
 
     // Render empty invisible placeholder cards before first active label
-    const skippedCount = offset - 1;
+    const skippedCount = Math.max(0, (offset || 1) - 1);
     for (let s = 0; s < skippedCount; s++) {
       const placeholder = document.createElement('div');
       placeholder.className = 'print-placeholder';
+      placeholder.style.width = `${tmpl.label.width}in`;
+      placeholder.style.height = `${tmpl.label.height}in`;
       section.appendChild(placeholder);
     }
   } else {
@@ -1102,6 +1233,8 @@ export function executePrint(itemList, layout, offset) {
   itemList.forEach((item) => {
     const card = document.createElement('div');
     card.className = 'print-card';
+    card.style.width = `${tmpl.label.width}in`;
+    card.style.height = `${tmpl.label.height}in`;
 
     let containerElement = '';
     if (includeContainer && item.containerType) {
@@ -1131,7 +1264,7 @@ export function executePrint(itemList, layout, offset) {
 
     // Render QR Code in background
     setTimeout(() => {
-      const size = layout === '10-up' ? 140 : layout === '80-up' ? 38 : 70;
+      const size = Math.round(Math.min(tmpl.label.width, tmpl.label.height) * 96 * 0.6);
       const qrPayload = `${getAppBaseUrl()}/container/${item.id}`;
       new QRCode(document.getElementById(`print-qr-${item.id}`), {
         text: qrPayload,
@@ -1147,6 +1280,7 @@ export function executePrint(itemList, layout, offset) {
     window.print();
   }, 350);
 }
+
 
 // --- Dashboard Bulk Selection ---
 export function toggleSelectAll(selectAllInput) {

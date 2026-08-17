@@ -932,7 +932,7 @@ export async function updateOrganizationSettings(orgId, settings) {
 }
 
 // Create new location
-export async function createLocation(name) {
+export async function createLocation(name, category = 'Other') {
   if (!supabaseClient) throw new Error('Supabase not configured.');
   if (!currentOrganizationId) throw new Error('No active organization.');
 
@@ -940,10 +940,12 @@ export async function createLocation(name) {
     .from('locations')
     .insert({
       organization_id: currentOrganizationId,
-      name
+      name,
+      category
     })
     .select()
     .single();
+
 
   if (error) throw error;
 
@@ -952,7 +954,65 @@ export async function createLocation(name) {
   return data;
 }
 
+// Create new rack / shelving unit
+export async function createRack(locationId, name, preset, shelfCount = 4, capacityPerShelf = '') {
+  if (!supabaseClient) throw new Error('Supabase not configured.');
+  if (!currentOrganizationId) throw new Error('No active organization.');
+  if (!locationId) throw new Error('A location is required.');
+
+  const { data, error } = await supabaseClient
+    .from('racks')
+    .insert({
+      organization_id: currentOrganizationId,
+      location_id: locationId,
+      name,
+      preset: preset || null,
+      shelf_count: shelfCount,
+      capacity_per_shelf: capacityPerShelf || null
+    })
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+// Create new supply / inventory item (Step 6: Supplies & Inventory)
+export async function createSupply(supplyData) {
+  if (!supabaseClient) throw new Error('Supabase not configured.');
+  if (!currentOrganizationId) throw new Error('No active organization.');
+  if (!supplyData || !supplyData.name) throw new Error('A supply name is required.');
+
+  const payload = {
+    organization_id: currentOrganizationId,
+    name: supplyData.name,
+    category: supplyData.category || 'Other',
+    is_dry_ingredient: Boolean(supplyData.isDryIngredient),
+    is_non_depleting: Boolean(supplyData.isNonDepleting),
+    quantity_on_hand: supplyData.quantityOnHand != null ? Number(supplyData.quantityOnHand) : 0,
+    unit_of_measure: supplyData.unitOfMeasure || 'lbs',
+    package_size: supplyData.packageSize || null,
+    package_cost: supplyData.packageCost != null && supplyData.packageCost !== '' ? Number(supplyData.packageCost) : null,
+    reorder_threshold: supplyData.reorderThreshold != null && supplyData.reorderThreshold !== '' ? Number(supplyData.reorderThreshold) : null,
+    reorder_url: supplyData.reorderUrl || null,
+    supplier: supplyData.supplier || null,
+    product_code: supplyData.productCode || null,
+    notes: supplyData.notes || null
+  };
+
+  const { data, error } = await supabaseClient
+    .from('supplies')
+    .insert(payload)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
 // --- Auth helpers (Email & Password) ---
+
+
 export async function getCurrentUser() {
   if (!supabaseClient) return null;
   const { data: { user } } = await supabaseClient.auth.getUser();
