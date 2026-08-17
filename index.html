@@ -55,7 +55,7 @@
         <a href="#" onclick="openFeedbackModal(); return false;" class="hover:text-white transition">Roadmap</a>
       </div>
       <div class="flex items-center gap-2">
-        <button onclick="openAuthModal('signin')" class="px-4 py-2 rounded-lg text-sm font-semibold text-slate-200 border border-slate-700 hover:border-slate-500 hover:text-white transition">Sign In</button>
+        <button onclick="window.openAuthModal('signin')" class="px-4 py-2 rounded-lg text-sm font-semibold text-slate-200 border border-slate-700 hover:border-slate-500 hover:text-white transition">Sign In</button>
         <button onclick="openAuthModal('signup')" class="px-4 py-2 rounded-lg text-sm font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 transition shadow-lg shadow-amber-500/25">Get Started Free</button>
       </div>
     </nav>
@@ -191,6 +191,19 @@
         <a href="privacy.html" class="text-slate-400 hover:text-amber-400 underline transition">Privacy Policy</a>
       </p>
     </footer>
+  </div>
+
+  <!-- Authentication Modal -->
+  <div id="auth-modal" class="fixed inset-0 z-50 hidden bg-black/70 backdrop-blur-sm items-center justify-center">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 w-full max-w-md">
+      <div class="flex justify-between items-center pb-4 border-b border-slate-800">
+        <h2 class="text-xl font-bold text-white">Sign In</h2>
+        <button onclick="closeAuthModal()" class="text-slate-400 hover:text-white text-xl leading-none">✕</button>
+      </div>
+      <div class="mt-4">
+        <p class="text-slate-400 text-sm">Authentication modal content will go here.</p>
+      </div>
+    </div>
   </div>
 
   <!-- ==================== APP DASHBOARD (authenticated shell) ==================== -->

@@ -1,4 +1,4 @@
-ps// Modal rendering & interaction logic for Sierra Myco Lab.
+// Modal rendering & interaction logic for Sierra Myco Lab.
 
 import {
   db,

@@ -3,8 +3,20 @@
 Thumbs.db
 desktop.ini
 
+# --- Environment & API Keys (CRITICAL SECURITY) ---
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+cline_mcp_settings.json
+.cline/
+
 # --- Logs & temp ---
 *.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 *.tmp
 
 # --- Dependencies / build artifacts ---
@@ -13,6 +25,12 @@ dist/
 build/
 .next/
 out/
+
+# --- Testing & MCP Output Artifacts ---
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
 
 # --- Local data exports & backups ---
 *.sqlite
@@ -23,4 +41,10 @@ export*.json
 
 # --- Editors ---
 .vscode/
+!.vscode/settings.json
 .idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
