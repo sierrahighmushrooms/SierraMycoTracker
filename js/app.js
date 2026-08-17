@@ -2,6 +2,66 @@
 // Imports all modules, wires up global event listeners, exposes the functions
 // referenced by inline onclick handlers, and initializes the UI.
 
+// Explicitly attach auth-related functions to window for inline HTML handlers
+window.openAuthModal = (tab = 'signin') => {
+  const modal = document.getElementById('auth-modal');
+  if (modal) {
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+    if (tab) {
+      const tabEl = document.getElementById(`auth-tab-${tab}`);
+      if (tabEl) tabEl.click();
+    }
+  }
+};
+
+window.closeAuthModal = () => {
+  const modal = document.getElementById('auth-modal');
+  if (modal) {
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+  }
+};
+
+window.handleAuthSubmit = async () => {
+  const activeTab = document.querySelector('.auth-tab.active')?.id?.replace('auth-tab-', '');
+  if (activeTab === 'signup') return window.handleAuthSignUp();
+  return window.handleAuthSignIn();
+};
+
+window.handleAuthSignIn = async () => {
+  try {
+    const email = document.getElementById('auth-email')?.value?.trim();
+    const password = document.getElementById('auth-password')?.value;
+    if (!email || !password) return;
+    
+    await signInWithEmail(email, password);
+    document.getElementById('auth-password').value = '';
+    await syncItemsWithCloud();
+    closeAuthModal();
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+};
+
+window.handleAuthSignUp = async () => {
+  try {
+    const email = document.getElementById('auth-email')?.value?.trim();
+    const password = document.getElementById('auth-password')?.value;
+    if (!email || !password) return;
+    
+    const data = await signUpWithEmail(email, password);
+    if (data.session) {
+      await syncItemsWithCloud();
+      closeAuthModal();
+    } else {
+      showToast('Check your email for verification link', 'info');
+    }
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+};
+
 import { db, saveItems, setRefreshCallback, getCustomContainers, addCustomContainer, addCustomContainerPreset, addCustomMediumPreset, getCustomContainerPresets, initCloudSync, setSyncStatusCallback, setSyncErrorCallback, isSupabaseConfigured, getSession, onAuthStateChange, isContainerLimitError, uploadItemsToCloud, syncItemsWithCloud, clearLegacyStorage, clearPendingImportStorage, checkAndClearStaleCache, loadCustomPresetsFromCloud, userOrganizations, userLocations, currentOrganizationId, currentLocationId, setCurrentOrganizationId, setCurrentLocationId, loadOrganizationContext, createOrganization, createRack } from './db.js';
 import { fetchCustomers, createCustomer, updateCustomer, deleteCustomer, createOrder, updateOrder, deleteOrder, populateCustomerPicker } from './sales.js';
 
@@ -116,6 +176,25 @@ import { STAGES, CONTAINER_STAGES } from './config.js';
 // --- Module-level UI state ---
 let currentFilter = 'All';
 let scannedItemId = null;
+
+// Initialize optional sub-modules with error handling
+try {
+  if (document.getElementById('sales-module-container')) {
+    fetchCustomers();
+    populateCustomerPicker();
+  }
+} catch (err) {
+  console.error('Failed to initialize sales module:', err);
+}
+
+// Initialize onboarding helpers if present
+try {
+  if (document.getElementById('onboarding-checklist-view')) {
+    loadOrganizationContext();
+  }
+} catch (err) {
+  console.error('Failed to initialize onboarding helpers:', err);
+}
 
   // Apply feature toggles dynamically
   function applyFeatureToggles(settings) {
