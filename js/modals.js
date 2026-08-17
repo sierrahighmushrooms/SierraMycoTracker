@@ -1,4 +1,4 @@
-// Modal rendering & interaction logic for Sierra Myco Lab.
+ps// Modal rendering & interaction logic for Sierra Myco Lab.
 
 import {
   db,
@@ -56,22 +56,11 @@ let activeItemId = null;
 let g2gScannedIds = [];
 
 // --- Authentication Modal ---
-export function openAuthModal(tab = 'signin') {
-  const modal = document.getElementById('auth-modal');
-  if (!modal) return;
-  
-  // Set active tab if needed
-  // Add your tab switching logic here
-  
-  showModal(modal);
-}
-
-export function closeAuthModal() {
-  const modal = document.getElementById('auth-modal');
-  if (modal) hideModal(modal);
-}
+// openAuthModal and closeAuthModal are defined later in this file
+// (see "Modern SaaS Auth Modal" section) and exposed on window there.
 
 function isValidUrl(url) {
+
   try {
     new URL(url);
     return true;
@@ -79,10 +68,6 @@ function isValidUrl(url) {
     return false;
   }
 }
-
-// Make functions available globally for HTML onclick handlers
-window.openAuthModal = openAuthModal;
-window.closeAuthModal = closeAuthModal;
 
 let printerType = localStorage.getItem(APP_CONFIG.STORAGE_KEYS.PRINTER_TYPE) || APP_CONFIG.DEFAULT_PRINTER_TYPE;
 let labelModel = localStorage.getItem(APP_CONFIG.STORAGE_KEYS.LABEL_MODEL) || APP_CONFIG.DEFAULT_LABEL_MODEL;
@@ -1838,7 +1823,7 @@ export function initFeedbackFormListener() {
 // --- Modern SaaS Auth Modal (Sign In / Sign Up + Google OAuth) ---
 let activeAuthTab = 'signin';
 
-export function openAuthModal(tab = 'signin') {
+window.openAuthModal = function(tab = 'signin') {
   showModal(document.getElementById('auth-modal'));
   switchAuthTab(tab);
   updateAuthModalUI();
@@ -1847,6 +1832,8 @@ export function openAuthModal(tab = 'signin') {
 export function closeAuthModal() {
   hideModal(document.getElementById('auth-modal'));
 }
+
+window.closeAuthModal = closeAuthModal;
 
 // Toggle between the [ Sign In ] and [ Sign Up ] segments.
 export function switchAuthTab(tab) {
