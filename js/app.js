@@ -165,6 +165,7 @@ import {
   closeBillingSettings,
   initiateTierCheckout,
   refreshBillingInfo,
+  openOrgSettings,
   closeOrgSettings,
   switchOrgTab,
   saveOrgSettings

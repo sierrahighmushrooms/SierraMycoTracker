@@ -2599,6 +2599,10 @@ export async function refreshBillingInfo() {
   updateContainerUsageUI();
 }
 
+// Open organization settings modal
+export function openOrgSettings() {
+  showModal(document.getElementById('org-settings-modal'));
+}
 
 // Close organization settings modal
 export function closeOrgSettings() {
