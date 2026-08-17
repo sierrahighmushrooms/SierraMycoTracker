@@ -72,6 +72,7 @@ export function deleteOrder(id) {
 
 // --- Customer Picker for Order Modal ---
 export function populateCustomerPicker(selectElement, selectedId = null) {
+  if (!selectElement) return; // Add this null check
   const customers = fetchCustomers();
   
   let html = '<option value="">Select Customer...</option>';
