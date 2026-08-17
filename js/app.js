@@ -1103,10 +1103,20 @@ function toggleOnboardingView(show) {
 function renderOnboardingChecklist() {
   const container = document.getElementById('onboarding-steps-container');
   if (!container) return;
-  
+
+  // Auto-select first organization if none is selected
+  if (!currentOrganizationId && userOrganizations.length > 0) {
+    currentOrganizationId = userOrganizations[0].id;
+  }
+
   const activeOrg = userOrganizations.find(o => o.id === currentOrganizationId);
   if (!activeOrg) {
-    container.innerHTML = `<div class="col-span-full text-center text-slate-400 py-8">Please select or create an organization first.</div>`;
+    // No organizations exist - redirect to create organization modal
+    if (userOrganizations.length === 0) {
+      window.location.hash = '#create-org-modal';
+      return;
+    }
+    container.innerHTML = '<div class="text-center text-slate-400 py-8">Loading steps...</div>';
     return;
   }
   
