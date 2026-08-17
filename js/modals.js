@@ -1823,7 +1823,7 @@ export function initFeedbackFormListener() {
 // --- Modern SaaS Auth Modal (Sign In / Sign Up + Google OAuth) ---
 let activeAuthTab = 'signin';
 
-window.openAuthModal = function(tab = 'signin') {
+export function openAuthModal(tab = 'signin') {
   showModal(document.getElementById('auth-modal'));
   switchAuthTab(tab);
   updateAuthModalUI();
@@ -1833,7 +1833,6 @@ export function closeAuthModal() {
   hideModal(document.getElementById('auth-modal'));
 }
 
-window.closeAuthModal = closeAuthModal;
 
 // Toggle between the [ Sign In ] and [ Sign Up ] segments.
 export function switchAuthTab(tab) {
@@ -2600,122 +2599,6 @@ export async function refreshBillingInfo() {
   updateContainerUsageUI();
 }
 
-// Open organization settings modal
-export async function openOrgSettings() {
-  const modalId = 'org-settings-modal';
-  let modal = document.getElementById(modalId);
-  if (modal) modal.remove();
-
-  modal = document.createElement('div');
-  modal.id = modalId;
-  modal.className = 'fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-[96] animate-fade-in';
-  document.body.appendChild(modal);
-
-  // Get current active organization from database context
-  const { userOrganizations, currentOrganizationId } = await import('./db.js');
-  const activeOrg = userOrganizations.find(o => o.id === currentOrganizationId);
-
-  if (!activeOrg) {
-    modal.innerHTML = `
-      <div class="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md p-6 text-center space-y-4">
-        <p class="text-slate-300">No active organization selected.</p>
-        <button onclick="closeOrgSettings()" class="bg-slate-850 hover:bg-slate-800 px-4 py-2 rounded text-xs font-bold transition border border-slate-700">Close</button>
-      </div>
-    `;
-    return;
-  }
-
-  const settings = activeOrg.settings || { enable_sales: false, enable_racks: false, enable_supplies: false };
-
-  modal.innerHTML = `
-    <div class="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden">
-      <div class="p-6 space-y-6">
-        <!-- Header -->
-        <div class="flex justify-between items-start border-b border-slate-800 pb-4">
-          <div>
-            <h2 class="text-xl font-bold text-white flex items-center gap-2">
-              <span>🏢</span> Organization Settings
-            </h2>
-            <p class="text-sm text-slate-400 mt-1">${activeOrg.name}</p>
-          </div>
-          <button onclick="closeOrgSettings()" class="text-slate-400 hover:text-white font-bold text-xl">✕</button>
-        </div>
-
-        <!-- Tabs -->
-        <div class="flex gap-1 border-b border-slate-800">
-          <button id="org-tab-general" onclick="switchOrgTab('general')" class="px-4 py-2 text-xs font-bold border-b-2 border-emerald-500 text-emerald-400 transition">General</button>
-          <button id="org-tab-features" onclick="switchOrgTab('features')" class="px-4 py-2 text-xs font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-200 transition">Feature Modules</button>
-        </div>
-
-        <!-- General Settings Panel -->
-        <div id="org-panel-general" class="space-y-4">
-          <div class="space-y-1">
-            <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider">Organization Name</label>
-            <input type="text" id="org-settings-name" value="${activeOrg.name}" readonly class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-sm text-slate-400 focus:outline-none cursor-not-allowed">
-            <p class="text-[10px] text-slate-500">Contact your administrator to change organization name.</p>
-          </div>
-          <div class="space-y-1">
-            <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider">Slug</label>
-            <input type="text" id="org-settings-slug" value="${activeOrg.slug}" readonly class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-sm text-slate-400 focus:outline-none cursor-not-allowed">
-          </div>
-          <div class="flex justify-end pt-4">
-            <button onclick="closeOrgSettings()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold px-4 py-2 rounded-lg transition text-xs">
-              Close
-            </button>
-          </div>
-        </div>
-
-        <!-- Feature Modules Panel -->
-        <div id="org-panel-features" class="hidden space-y-5">
-          <!-- Toggle 1: Sales -->
-          <div class="flex items-start justify-between bg-slate-950 p-3.5 rounded-xl border border-slate-800">
-            <div class="space-y-0.5 pr-4">
-              <label class="text-sm font-bold text-white block">Sales and customers</label>
-              <span class="text-xs text-slate-400 block">Invoicing, customers, and payment tracking.</span>
-            </div>
-            <label class="relative inline-flex items-center cursor-pointer mt-1 shrink-0">
-              <input type="checkbox" id="org-enable-sales" ${settings.enable_sales ? 'checked' : ''} class="sr-only peer">
-              <div class="w-11 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-slate-900 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-slate-450 after:border-slate-450 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500 peer-checked:after:bg-slate-950 peer-checked:after:border-slate-950"></div>
-            </label>
-          </div>
-
-          <!-- Toggle 2: Racks -->
-          <div class="flex items-start justify-between bg-slate-950 p-3.5 rounded-xl border border-slate-800">
-            <div class="space-y-0.5 pr-4">
-              <label class="text-sm font-bold text-white block">Rack tracking</label>
-              <span class="text-xs text-slate-400 block">Room, rack, and shelf location addresses.</span>
-            </div>
-            <label class="relative inline-flex items-center cursor-pointer mt-1 shrink-0">
-              <input type="checkbox" id="org-enable-racks" ${settings.enable_racks ? 'checked' : ''} class="sr-only peer">
-              <div class="w-11 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-slate-900 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-slate-450 after:border-slate-450 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500 peer-checked:after:bg-slate-950 peer-checked:after:border-slate-950"></div>
-            </label>
-          </div>
-
-          <!-- Toggle 3: Supplies -->
-          <div class="flex items-start justify-between bg-slate-950 p-3.5 rounded-xl border border-slate-800">
-            <div class="space-y-0.5 pr-4">
-              <label class="text-sm font-bold text-white block">Supplies and prepared media</label>
-              <span class="text-xs text-slate-400 block">Grain, sawdust, raw media, and sterilization lots.</span>
-            </div>
-            <label class="relative inline-flex items-center cursor-pointer mt-1 shrink-0">
-              <input type="checkbox" id="org-enable-supplies" ${settings.enable_supplies ? 'checked' : ''} class="sr-only peer">
-              <div class="w-11 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-slate-900 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-slate-450 after:border-slate-450 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500 peer-checked:after:bg-slate-950 peer-checked:after:border-slate-950"></div>
-            </label>
-          </div>
-
-          <div class="flex gap-2.5 pt-2">
-            <button onclick="closeOrgSettings()" class="flex-1 bg-slate-850 hover:bg-slate-800 border border-slate-700 text-slate-200 font-bold py-2.5 rounded-lg transition text-sm">
-              Cancel
-            </button>
-            <button onclick="saveOrgSettings()" class="flex-[2] bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold py-2.5 rounded-lg transition text-sm shadow-lg shadow-emerald-500/20">
-              Save Changes
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  `;
-}
 
 // Close organization settings modal
 export function closeOrgSettings() {
