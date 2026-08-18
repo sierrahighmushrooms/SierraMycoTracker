@@ -160,7 +160,7 @@ import {
   closeUpgradeModal,
   selectUpgradePlan,
   showToast,
-  handleContainerLimitError,
+  handleContainerLimitError
   openBillingSettings,
   closeBillingSettings,
   initiateTierCheckout,
@@ -1893,6 +1893,14 @@ async function initAppRouting() {
   } else {
     showLandingPage();
   }
+  
+  // Add listener to handle post-login routing
+  onAuthStateChange((event) => {
+    if (event === 'SIGNED_IN') {
+      // Defer dashboard show to handleMultiTenantInit where session is guaranteed
+      handleMultiTenantInit();
+    }
+  });
 }
 
 // Keep routing in sync with auth events (OAuth redirect returns, logouts…).
@@ -1924,6 +1932,9 @@ async function handleMultiTenantInit() {
     if (locContainer) locContainer.classList.add('hidden');
     return;
   }
+  
+  // Show dashboard now that we have a valid session
+  showAppDashboard();
 
   try {
     const context = await loadOrganizationContext();
