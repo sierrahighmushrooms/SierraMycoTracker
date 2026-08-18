@@ -835,7 +835,7 @@ export async function loadOrganizationContext() {
     name: m.organizations.name,
     slug: m.organizations.slug,
     logo_url: m.organizations.logo_url,
-    settings: m.organizations.settings || { enable_sales: false, enable_racks: false, enable_supplies: false },
+    settings: m.organizations.settings || { enable_sales: true, enable_racks: false, enable_supplies: true, enable_inoculation: true },
     role: m.role
   }));
 

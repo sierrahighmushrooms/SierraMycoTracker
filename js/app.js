@@ -159,11 +159,17 @@ try {
 
   // Apply feature toggles dynamically
   function applyFeatureToggles(settings) {
-    const finalSettings = settings || { enable_sales: true, enable_racks: false, enable_supplies: false };
+    const finalSettings = settings || { enable_sales: true, enable_racks: false, enable_supplies: true, enable_inoculation: true };
     
+    // Force these to be true by default if not explicitly set to false
+    if (finalSettings.enable_sales === undefined) finalSettings.enable_sales = true;
+    if (finalSettings.enable_inoculation === undefined) finalSettings.enable_inoculation = true;
+    if (finalSettings.enable_supplies === undefined) finalSettings.enable_supplies = true;
+
     const salesContainer = document.getElementById('sales-module-container');
     const racksContainer = document.getElementById('racks-module-container');
     const suppliesContainer = document.getElementById('supplies-module-container');
+    const inoculationContainer = document.getElementById('inoculation-module-container');
     
     if (salesContainer) {
       salesContainer.classList.toggle('hidden', !finalSettings.enable_sales);
@@ -173,6 +179,9 @@ try {
     }
     if (suppliesContainer) {
       suppliesContainer.classList.toggle('hidden', !finalSettings.enable_supplies);
+    }
+    if (inoculationContainer) {
+      inoculationContainer.classList.toggle('hidden', !finalSettings.enable_inoculation);
     }
   }
 
@@ -825,7 +834,7 @@ document.getElementById('bulk-form').addEventListener('submit', (e) => {
         const activeOrg = userOrganizations.find(o => o.id === currentOrganizationId);
         if (activeOrg) {
           const { updateOrganizationSettings } = await import('./db.js');
-          const settings = activeOrg.settings || { enable_sales: false, enable_racks: false, enable_supplies: false };
+          const settings = activeOrg.settings || { enable_sales: true, enable_racks: false, enable_supplies: true, enable_inoculation: true };
           settings.completed_onboarding_steps = settings.completed_onboarding_steps || [];
           if (!settings.completed_onboarding_steps.includes('step-media')) {
             settings.completed_onboarding_steps.push('step-media');
@@ -1185,7 +1194,7 @@ function renderOnboardingChecklist() {
     return;
   }
   
-  const settings = activeOrg.settings || { enable_sales: false, enable_racks: false, enable_supplies: false };
+  const settings = activeOrg.settings || { enable_sales: true, enable_racks: false, enable_supplies: true, enable_inoculation: true };
   const completedSteps = settings.completed_onboarding_steps || [];
   
   // Filter steps dynamically based on organization settings
@@ -1251,7 +1260,7 @@ async function toggleOnboardingStep(stepId) {
   const activeOrg = userOrganizations.find(o => o.id === currentOrganizationId);
   if (!activeOrg) return;
   
-  const settings = activeOrg.settings || { enable_sales: false, enable_racks: false, enable_supplies: false };
+  const settings = activeOrg.settings || { enable_sales: true, enable_racks: false, enable_supplies: true, enable_inoculation: true };
   settings.completed_onboarding_steps = settings.completed_onboarding_steps || [];
   
   const index = settings.completed_onboarding_steps.indexOf(stepId);
@@ -1284,7 +1293,7 @@ async function executeOnboardingCTA(stepId, actionFn) {
   
   const activeOrg = userOrganizations.find(o => o.id === currentOrganizationId);
   if (activeOrg) {
-    const settings = activeOrg.settings || { enable_sales: false, enable_racks: false, enable_supplies: false };
+    const settings = activeOrg.settings || { enable_sales: true, enable_racks: false, enable_supplies: true, enable_inoculation: true };
     settings.completed_onboarding_steps = settings.completed_onboarding_steps || [];
     if (!settings.completed_onboarding_steps.includes(stepId)) {
       settings.completed_onboarding_steps.push(stepId);
@@ -1364,7 +1373,7 @@ async function handleAddLocationSubmit(e) {
     // Mark the onboarding step complete and re-render without reloading the page
     const activeOrg = userOrganizations.find(o => o.id === currentOrganizationId);
     if (activeOrg) {
-      const settings = activeOrg.settings || { enable_sales: false, enable_racks: false, enable_supplies: false };
+      const settings = activeOrg.settings || { enable_sales: true, enable_racks: false, enable_supplies: true, enable_inoculation: true };
       settings.completed_onboarding_steps = settings.completed_onboarding_steps || [];
       if (!settings.completed_onboarding_steps.includes('step-locations')) {
         settings.completed_onboarding_steps.push('step-locations');
@@ -1496,7 +1505,7 @@ async function handleAddRackSubmit(e) {
     const activeOrg = userOrganizations.find(o => o.id === currentOrganizationId);
     if (activeOrg) {
       const { updateOrganizationSettings } = await import('./db.js');
-      const settings = activeOrg.settings || { enable_sales: false, enable_racks: false, enable_supplies: false };
+      const settings =
       settings.completed_onboarding_steps = settings.completed_onboarding_steps || [];
       if (!settings.completed_onboarding_steps.includes('step-racks')) {
         settings.completed_onboarding_steps.push('step-racks');
