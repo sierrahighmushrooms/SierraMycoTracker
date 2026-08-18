@@ -1842,8 +1842,8 @@
       <div class="mt-4">
         <!-- Tabs for Sign In / Sign Up -->
         <div class="flex mb-4">
-          <button id="auth-tab-signin" class="flex-1 py-2 font-semibold text-center text-slate-300 border-b-2 border-amber-500">Sign In</button>
-          <button id="auth-tab-signup" class="flex-1 py-2 font-semibold text-center text-slate-400 border-b-2 border-slate-800">Sign Up</button>
+          <button type="button" id="auth-tab-signin" onclick="switchAuthTab('signin')" class="flex-1 py-2 font-semibold text-center text-slate-300 border-b-2 border-amber-500">Sign In</button>
+          <button type="button" id="auth-tab-signup" onclick="switchAuthTab('signup')" class="flex-1 py-2 font-semibold text-center text-slate-400 border-b-2 border-slate-800">Sign Up</button>
         </div>
         
         <!-- Authentication Form -->
@@ -1857,6 +1857,7 @@
               <label for="auth-password" class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Password</label>
               <input type="password" id="auth-password" required class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-sm text-slate-100">
             </div>
+            <div id="auth-message" class="hidden text-xs font-semibold"></div>
             <button type="submit" id="auth-submit-btn" class="w-full bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold py-2.5 rounded-lg transition text-sm">Sign In</button>
           </div>
         </form>

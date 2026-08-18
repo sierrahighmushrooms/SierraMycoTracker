@@ -8,6 +8,7 @@ import {
   upvoteFeature,
   isSupabaseConfigured,
   getCurrentUser,
+  getSession,
   signInWithEmail,
   signUpWithEmail,
   signInWithGoogle,
@@ -1844,9 +1845,9 @@ export function switchAuthTab(tab) {
 
   const apply = (el, isActive) => {
     if (!el) return;
-    el.classList.toggle('bg-slate-950', isActive);
-    el.classList.toggle('text-white', isActive);
-    el.classList.toggle('shadow', isActive);
+    el.classList.toggle('border-amber-500', isActive);
+    el.classList.toggle('text-slate-300', isActive);
+    el.classList.toggle('border-slate-800', !isActive);
     el.classList.toggle('text-slate-400', !isActive);
   };
   apply(signinTab, activeAuthTab === 'signin');
@@ -1951,7 +1952,13 @@ async function handleAuthSignIn() {
   const btn = document.getElementById('auth-submit-btn');
   if (btn) { btn.disabled = true; btn.innerText = 'Signing in…'; }
   try {
+    // Await the Supabase auth request fully before doing anything else.
     await signInWithEmail(email, password);
+    // Confirm an authenticated session actually exists before proceeding.
+    const session = await getSession();
+    if (!session) {
+      throw new Error('Sign in did not establish a session. Please try again.');
+    }
     document.getElementById('auth-password').value = '';
     // Push locally created/edited items FIRST (explicit user action, not a
     // page-load auto-push) so offline guest work isn't wiped out when the

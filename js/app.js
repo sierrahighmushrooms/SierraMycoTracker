@@ -23,45 +23,6 @@ window.closeAuthModal = () => {
   }
 };
 
-window.handleAuthSubmit = async () => {
-  const activeTab = document.querySelector('.auth-tab.active')?.id?.replace('auth-tab-', '');
-  if (activeTab === 'signup') return window.handleAuthSignUp();
-  return window.handleAuthSignIn();
-};
-
-window.handleAuthSignIn = async () => {
-  try {
-    const email = document.getElementById('auth-email')?.value?.trim();
-    const password = document.getElementById('auth-password')?.value;
-    if (!email || !password) return;
-    
-    await signInWithEmail(email, password);
-    document.getElementById('auth-password').value = '';
-    await syncItemsWithCloud();
-    closeAuthModal();
-  } catch (err) {
-    showToast(err.message, 'error');
-  }
-};
-
-window.handleAuthSignUp = async () => {
-  try {
-    const email = document.getElementById('auth-email')?.value?.trim();
-    const password = document.getElementById('auth-password')?.value;
-    if (!email || !password) return;
-    
-    const data = await signUpWithEmail(email, password);
-    if (data.session) {
-      await syncItemsWithCloud();
-      closeAuthModal();
-    } else {
-      showToast('Check your email for verification link', 'info');
-    }
-  } catch (err) {
-    showToast(err.message, 'error');
-  }
-};
-
 import { db, saveItems, setRefreshCallback, getCustomContainers, addCustomContainer, addCustomContainerPreset, addCustomMediumPreset, getCustomContainerPresets, initCloudSync, setSyncStatusCallback, setSyncErrorCallback, isSupabaseConfigured, getSession, onAuthStateChange, isContainerLimitError, uploadItemsToCloud, syncItemsWithCloud, clearLegacyStorage, clearPendingImportStorage, checkAndClearStaleCache, loadCustomPresetsFromCloud, userOrganizations, userLocations, currentOrganizationId, currentLocationId, setCurrentOrganizationId, setCurrentLocationId, loadOrganizationContext, createOrganization, createRack } from './db.js';
 import { fetchCustomers, createCustomer, updateCustomer, deleteCustomer, createOrder, updateOrder, deleteOrder, populateCustomerPicker } from './sales.js';
 
@@ -160,7 +121,7 @@ import {
   closeUpgradeModal,
   selectUpgradePlan,
   showToast,
-  handleContainerLimitError
+  handleContainerLimitError,
   openBillingSettings,
   closeBillingSettings,
   initiateTierCheckout,
@@ -1577,7 +1538,7 @@ function handleURLHash() {
     return;
   }
   
-  const isOnboardingRoute = (hash === '#onboarding/setup' || hash === '#/onboarding/setup' || path === '/onboarding/setup');
+  const isOnboardingRoute = (hash === '#onboarding/setup' || hash === '#/onboarding/setup' || path === '/onboarding/setup' || path === '/onboarding');
   toggleOnboardingView(isOnboardingRoute);
 
   
@@ -1829,6 +1790,19 @@ setRefreshCallback(() => {
 // --- Initialize stage form listener (modal) ---
 initStageFormListener();
 
+// --- Wire up the auth form submit handler ---
+// Prevents the browser's native form submission (which reloaded the homepage
+// before any Supabase auth request could fire) and routes the submit through
+// the modals.js handleAuthSubmit, which awaits signInWithPassword, verifies a
+// session exists, displays errors in the modal, and only then proceeds.
+const authFormEl = document.getElementById('auth-form');
+if (authFormEl) {
+  authFormEl.addEventListener('submit', (e) => {
+    e.preventDefault();
+    handleAuthSubmit();
+  });
+}
+
 // --- Initialize feedback form listener ---
 initFeedbackFormListener();
 
@@ -1895,9 +1869,11 @@ async function initAppRouting() {
   }
   
   // Add listener to handle post-login routing
-  onAuthStateChange((event) => {
-    if (event === 'SIGNED_IN') {
-      // Defer dashboard show to handleMultiTenantInit where session is guaranteed
+  onAuthStateChange((event, session) => {
+    if (event === 'SIGNED_IN' || (session && (event === 'INITIAL_SESSION' || event === 'TOKEN_REFRESHED'))) {
+      // Session is active: hide landing containers, show the dashboard,
+      // then load the tenant context.
+      showAppDashboard();
       handleMultiTenantInit();
     }
   });
@@ -1907,8 +1883,10 @@ async function initAppRouting() {
 // Also refresh the plan/container badge immediately after sign-in or profile
 // updates so database-side plan changes (profiles / app_metadata) appear
 // without waiting for the next data save.
-onAuthStateChange((event) => {
-  if (event === 'SIGNED_IN') {
+onAuthStateChange((event, session) => {
+  if (event === 'SIGNED_IN' || (session && (event === 'INITIAL_SESSION' || event === 'TOKEN_REFRESHED'))) {
+    // A session is active: add `hidden` to the landing page container
+    // (hero, features, pricing) and remove `hidden` from #app-dashboard.
     showAppDashboard();
     updateContainerUsageUI();
     handleMultiTenantInit();
