@@ -1353,12 +1353,12 @@ export async function getSubscriptionTier() {
     
     const { data, error } = await supabaseClient
       .from('profiles')
-      .select('subscription_tier')
+      .select('plan')
       .eq('id', user.id)
       .single();
     
     if (error || !data) return 'free';
-    return data.subscription_tier || 'free';
+    return data.plan || 'free';
   } catch (err) {
     console.warn('Error fetching subscription tier:', err);
     return 'free';
@@ -1390,7 +1390,7 @@ export async function getProfilePlanInfo() {
     let profile = null;
     const { data, error } = await supabaseClient
       .from('profiles')
-      .select('plan, container_limit, role, subscription_tier')
+      .select('plan, container_limit, role')
       .eq('id', user.id)
       .maybeSingle();
     if (!error && data) {
@@ -1408,7 +1408,7 @@ export async function getProfilePlanInfo() {
     }
 
     if (profile) {
-      plan = profile.plan || profile.subscription_tier || null;
+      plan = profile.plan || null;
       role = profile.role || null;
       if (profile.container_limit != null && !isNaN(Number(profile.container_limit))) {
         containerLimit = Number(profile.container_limit);

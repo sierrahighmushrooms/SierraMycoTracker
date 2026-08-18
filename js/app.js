@@ -1804,13 +1804,14 @@ initStageFormListener();
 // before any Supabase auth request could fire) and routes the submit through
 // the modals.js handleAuthSubmit, which awaits signInWithPassword, verifies a
 // session exists, displays errors in the modal, and only then proceeds.
-const authFormEl = document.getElementById('auth-form');
-if (authFormEl) {
-  authFormEl.addEventListener('submit', (e) => {
+// Use event delegation since the form might be dynamically rendered or replaced.
+document.addEventListener('submit', (e) => {
+  if (e.target && e.target.id === 'auth-form') {
     e.preventDefault();
+    e.stopPropagation();
     handleAuthSubmit();
-  });
-}
+  }
+});
 
 // --- Initialize feedback form listener ---
 initFeedbackFormListener();
@@ -1884,8 +1885,14 @@ async function initAppRouting() {
       // then load the tenant context.
       showAppDashboard();
       handleMultiTenantInit();
+      updateAuthModalUI();
     }
   });
+  
+  // Ensure auth modal UI is updated on initial load if session exists
+  if (session) {
+    updateAuthModalUI();
+  }
 }
 
 // Keep routing in sync with auth events (OAuth redirect returns, logouts…).

@@ -1881,44 +1881,43 @@ function restoreSubmitButton() {
 // Refresh the auth modal contents to reflect the current session state.
 export async function updateAuthModalUI() {
   const setupNotice = document.getElementById('auth-setup-notice');
-  const formView = document.getElementById('auth-form-view');
+  const formView = document.getElementById('auth-form');
   const accountView = document.getElementById('auth-account-view');
+  const tabSwitcher = document.getElementById('auth-tabs');
+  const forgotPassword = document.getElementById('auth-forgot-password');
 
   // Supabase not configured yet: show local-only setup notice.
   if (!isSupabaseConfigured()) {
     if (setupNotice) setupNotice.classList.remove('hidden');
     if (formView) formView.classList.add('hidden');
     if (accountView) accountView.classList.add('hidden');
+    if (tabSwitcher) tabSwitcher.classList.add('hidden');
+    if (forgotPassword) forgotPassword.classList.add('hidden');
     return;
   }
   if (setupNotice) setupNotice.classList.add('hidden');
 
   let user = null;
   try {
-    const authUrl = getAuthUrl(); // Assume this function exists or replace with actual URL source
-    if (!isValidUrl(authUrl)) {
-      console.error('Invalid auth URL:', authUrl);
-      return;
-    }
     user = await getCurrentUser();
   } catch (e) { /* treat as signed out */ }
 
   if (user) {
     // Signed in: show account view with the green cloud-synced indicator.
     if (formView) formView.classList.add('hidden');
+    if (tabSwitcher) tabSwitcher.classList.add('hidden');
+    if (forgotPassword) forgotPassword.classList.add('hidden');
     if (accountView) accountView.classList.remove('hidden');
-    const info = document.getElementById('auth-account-info');
-    if (info) {
-      const status = getSyncStatus();
-      const lastSyncText = status.at ? new Date(status.at).toLocaleString() : 'pending…';
-      info.innerHTML = `
-        <div class="text-xs text-slate-500">Signed in as</div>
-        <div class="text-sm font-bold text-amber-300 break-all">${user.email || user.id}</div>
-        <div class="text-[10px] text-slate-500 mt-1">Last cloud sync: ${lastSyncText}</div>
-      `;
+    
+    const userEmailEl = document.getElementById('auth-user-email');
+    if (userEmailEl) {
+      userEmailEl.innerText = user.email || user.id;
     }
   } else {
+    // Signed out: show form and tabs
     if (formView) formView.classList.remove('hidden');
+    if (tabSwitcher) tabSwitcher.classList.remove('hidden');
+    if (forgotPassword) forgotPassword.classList.remove('hidden');
     if (accountView) accountView.classList.add('hidden');
   }
 }
@@ -1965,7 +1964,9 @@ async function handleAuthSignIn() {
     // fetch-only sync replaces local state with the cloud view.
     await pushLocalChangesToCloud().catch(() => {});
     await syncItemsWithCloud();
-    closeAuthModal();
+    
+    // Update the modal UI to show the account view instead of closing it
+    await updateAuthModalUI();
   } catch (err) {
     showAuthMessage(err.message || 'Sign in failed.');
   } finally {
@@ -1990,7 +1991,9 @@ async function handleAuthSignUp() {
       // Push guest items first (explicit action), then fetch-only sync.
       await pushLocalChangesToCloud().catch(() => {});
       await syncItemsWithCloud();
-      closeAuthModal();
+      
+      // Update the modal UI to show the account view instead of closing it
+      await updateAuthModalUI();
     } else {
       showAuthMessage('Account created! Check your inbox to confirm your email, then sign in.', false);
     }
