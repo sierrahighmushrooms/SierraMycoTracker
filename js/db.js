@@ -13,13 +13,15 @@ import { APP_CONFIG, SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 // stale or corrupted cached arrays from being rendered before the fetch.
 export const db = {
   items: [],
-  pcBatches: []
+  pcBatches: [],
+  customers: [],
+  orders: []
 };
 
 // Multi-tenant organization and location context variables
 export let userOrganizations = [];
 export let userLocations = [];
-export let currentOrganizationId = null;
+export let currentOrganizationId = localStorage.getItem('mycotrack_current_org_id') || null;
 export let currentLocationId = null;
 
 // Optional UI refresh callback registered by app.js so the storage layer can
@@ -57,6 +59,52 @@ export const supabaseClient = (() => {
 
 export function getSupabaseClient() {
   return supabaseClient;
+}
+
+// Wrapper to handle Clock Drift ("JWT issued at future") and expired tokens
+export async function fetchWithAuthRetry(operationFn) {
+  try {
+    let result = await operationFn();
+    
+    // Supabase often returns { data, error } instead of throwing
+    if (result && result.error) {
+      const errorMsg = result.error.message || '';
+      
+      if (errorMsg.includes('JWT issued at future') || errorMsg.includes('jwt issued at future')) {
+        console.warn('Clock drift detected (JWT issued at future). Waiting 1.5s to retry...');
+        await new Promise(resolve => setTimeout(resolve, 1500));
+        return await operationFn();
+      }
+      
+      if (errorMsg.includes('JWT expired') || errorMsg.includes('jwt expired')) {
+        console.warn('JWT expired. Refreshing session and retrying...');
+        if (supabaseClient) {
+          await supabaseClient.auth.refreshSession();
+        }
+        return await operationFn();
+      }
+    }
+    
+    return result;
+  } catch (error) {
+    const errorMsg = error?.message || '';
+    
+    if (errorMsg.includes('JWT issued at future') || errorMsg.includes('jwt issued at future')) {
+      console.warn('Clock drift detected (JWT issued at future). Waiting 1.5s to retry...');
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      return await operationFn();
+    }
+    
+    if (errorMsg.includes('JWT expired') || errorMsg.includes('jwt expired')) {
+      console.warn('JWT expired. Refreshing session and retrying...');
+      if (supabaseClient) {
+        await supabaseClient.auth.refreshSession();
+      }
+      return await operationFn();
+    }
+    
+    throw error;
+  }
 }
 
 // Return the live items array.
@@ -140,6 +188,7 @@ export function purgeAllStorage() {
   db.pcBatches = [];
   pendingCloudIds.clear();
   lastItemsSnapshot = '[]';
+  setCurrentOrganizationId(null);
 }
 
 // Cache-busting / version check. On app launch, if the stored version tag
@@ -388,7 +437,7 @@ export async function pushLocalChangesToCloud() {
   // keyed by the original id.
   const originalIds = itemsToPush.map(i => i.id);
   const rows = itemsToPush.map(item => serializeItemForCloud(item, user.id));
-  const { error } = await supabaseClient.from('items').upsert(rows, { onConflict: 'id' });
+  const { error } = await fetchWithAuthRetry(() => supabaseClient.from('items').upsert(rows, { onConflict: 'id' }));
   if (error) {
     console.warn('Supabase upsert failed:', error.message);
     // Check if this is a container limit error from the trigger
@@ -754,7 +803,7 @@ export async function syncItemsWithCloud() {
     } else {
       query = query.eq('user_id', user.id);
     }
-    const { data: cloudRows, error: fetchError } = await query;
+    const { data: cloudRows, error: fetchError } = await fetchWithAuthRetry(() => query);
     if (fetchError) throw fetchError;
     // Deserialize and filter out any null results
     const cloudItems = (cloudRows || [])
@@ -797,6 +846,11 @@ export async function syncLocalWithCloud() {
 // Setters for context
 export function setCurrentOrganizationId(orgId) {
   currentOrganizationId = orgId;
+  if (orgId) {
+    localStorage.setItem('mycotrack_current_org_id', orgId);
+  } else {
+    localStorage.removeItem('mycotrack_current_org_id');
+  }
 }
 
 export function setCurrentLocationId(locId) {
@@ -810,10 +864,10 @@ export async function loadOrganizationContext() {
   if (!user) return { onboardingNeeded: false };
 
   // Fetch memberships with organization details
-  const { data: memberships, error: memError } = await supabaseClient
+  const { data: memberships, error: memError } = await fetchWithAuthRetry(() => supabaseClient
     .from('organization_members')
     .select('role, organization_id, organizations(id, name, slug, logo_url, settings)')
-    .eq('user_id', user.id);
+    .eq('user_id', user.id));
 
   if (memError) {
     console.error('Failed to fetch memberships:', memError);
@@ -824,7 +878,7 @@ export async function loadOrganizationContext() {
     // Onboarding is needed for this user
     userOrganizations = [];
     userLocations = [];
-    currentOrganizationId = null;
+    setCurrentOrganizationId(null);
     currentLocationId = null;
     return { onboardingNeeded: true };
   }
@@ -840,15 +894,18 @@ export async function loadOrganizationContext() {
   }));
 
   // Set default organization if none selected
-  if (!currentOrganizationId || !userOrganizations.find(o => o.id === currentOrganizationId)) {
-    currentOrganizationId = userOrganizations[0].id;
+  const savedOrgId = localStorage.getItem('mycotrack_current_org_id');
+  if (savedOrgId && userOrganizations.find(o => o.id === savedOrgId)) {
+    currentOrganizationId = savedOrgId;
+  } else if (!currentOrganizationId || !userOrganizations.find(o => o.id === currentOrganizationId)) {
+    setCurrentOrganizationId(userOrganizations[0].id);
   }
 
   // Fetch locations for current organization
-  const { data: locations, error: locError } = await supabaseClient
+  const { data: locations, error: locError } = await fetchWithAuthRetry(() => supabaseClient
     .from('locations')
     .select('*')
-    .eq('organization_id', currentOrganizationId);
+    .eq('organization_id', currentOrganizationId));
 
   if (locError) {
     console.error('Failed to fetch locations:', locError);
@@ -931,6 +988,24 @@ export async function updateOrganizationSettings(orgId, settings) {
   }
 }
 
+// Update organization details (name, address, currency, settings)
+export async function updateOrganization(orgId, updates) {
+  if (!supabaseClient) throw new Error('Supabase not configured.');
+  
+  const { error } = await supabaseClient
+    .from('organizations')
+    .update(updates)
+    .eq('id', orgId);
+
+  if (error) throw error;
+  
+  // Update the local cache
+  const org = userOrganizations.find(o => o.id === orgId);
+  if (org) {
+    Object.assign(org, updates);
+  }
+}
+
 // Create new location
 export async function createLocation(name, category = 'Other') {
   if (!supabaseClient) throw new Error('Supabase not configured.');
@@ -977,6 +1052,27 @@ export async function createRack(locationId, name, preset, shelfCount = 4, capac
   return data;
 }
 
+// --- INVENTORY & SUPPLIES CRUD ---
+
+// Get all supplies for the current organization
+export async function getSupplies() {
+  if (!supabaseClient) throw new Error('Supabase not configured.');
+  console.log('currentOrganizationId:', currentOrganizationId);
+  if (!currentOrganizationId) throw new Error('No active organization.');
+
+  const { data, error } = await supabaseClient
+    .from('supplies')
+    .select('*')
+    .eq('organization_id', currentOrganizationId)
+    .order('name', { ascending: true });
+
+  if (error) {
+    console.error('Error fetching supplies:', error);
+    throw error;
+  }
+  return data || [];
+}
+
 // Create new supply / inventory item (Step 6: Supplies & Inventory)
 export async function createSupply(supplyData) {
   if (!supabaseClient) throw new Error('Supabase not configured.');
@@ -1008,6 +1104,44 @@ export async function createSupply(supplyData) {
 
   if (error) throw error;
   return data;
+}
+
+// Update an existing supply
+export async function updateSupply(id, updates) {
+  if (!supabaseClient) throw new Error('Supabase not configured.');
+  if (!currentOrganizationId) throw new Error('No active organization.');
+
+  const { data, error } = await supabaseClient
+    .from('supplies')
+    .update(updates)
+    .eq('id', id)
+    .eq('organization_id', currentOrganizationId)
+    .select()
+    .single();
+
+  if (error) {
+    console.error('Error updating supply:', error);
+    throw error;
+  }
+  return data;
+}
+
+// Delete a supply
+export async function deleteSupply(id) {
+  if (!supabaseClient) throw new Error('Supabase not configured.');
+  if (!currentOrganizationId) throw new Error('No active organization.');
+
+  const { error } = await supabaseClient
+    .from('supplies')
+    .delete()
+    .eq('id', id)
+    .eq('organization_id', currentOrganizationId);
+
+  if (error) {
+    console.error('Error deleting supply:', error);
+    throw error;
+  }
+  return true;
 }
 
 // --- Auth helpers (Email & Password) ---
@@ -1323,9 +1457,9 @@ export async function getContainerUsage() {
     const { data: { user } } = await supabaseClient.auth.getUser();
     if (!user) return null;
     
-    const { data, error } = await supabaseClient.rpc('get_container_usage', {
+    const { data, error } = await fetchWithAuthRetry(() => supabaseClient.rpc('get_container_usage', {
       user_uuid: user.id
-    });
+    }));
     
     if (error) {
       console.warn('Failed to fetch container usage:', error.message);
@@ -1388,22 +1522,22 @@ export async function getProfilePlanInfo() {
 
     // 1) public.profiles — direct read of the plan columns.
     let profile = null;
-    const { data, error } = await supabaseClient
+    const { data, error } = await fetchWithAuthRetry(() => supabaseClient
       .from('profiles')
       .select('plan, container_limit, role')
       .eq('id', user.id)
-      .maybeSingle();
+      .maybeSingle());
     if (!error && data) {
       profile = data;
     } else if (error) {
       // The explicit columns may not exist on older schemas — retry with a
       // tolerant select('*') so the lookup never hard-fails.
       console.warn('profiles plan lookup failed, retrying with select(*):', error.message);
-      const fallback = await supabaseClient
+      const fallback = await fetchWithAuthRetry(() => supabaseClient
         .from('profiles')
         .select('*')
         .eq('id', user.id)
-        .maybeSingle();
+        .maybeSingle());
       if (!fallback.error && fallback.data) profile = fallback.data;
     }
 
@@ -1478,7 +1612,7 @@ export async function getSubscriptionTiers() {
   if (!supabaseClient) return null;
   
   try {
-    const { data, error } = await supabaseClient.rpc('get_subscription_tiers');
+    const { data, error } = await fetchWithAuthRetry(() => supabaseClient.rpc('get_subscription_tiers'));
     
     if (error) {
       console.warn('Failed to fetch subscription tiers:', error.message);

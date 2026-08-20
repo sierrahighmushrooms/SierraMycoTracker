@@ -25,7 +25,10 @@ import {
   getBillingInfo,
   getSubscriptionTiers,
   createLemonSqueezyCheckout,
-  deleteItemsFromCloud
+  deleteItemsFromCloud,
+  userOrganizations,
+  currentOrganizationId,
+  setCurrentOrganizationId
 } from './db.js';
 import { callGeminiAPI, extractActiveBatchContext, saveChatMessage, loadChatHistory, hasApiKey, getStoredApiKey, saveApiKey, clearApiKey, processAIResponseActions } from './ai.js';
 import {
@@ -83,6 +86,10 @@ export function getActiveItemId() {
 
 // --- Generic modal open/close helpers ---
 function showModal(element) {
+  if (!element) {
+    console.error("showModal: Element not found");
+    return;
+  }
   element.classList.remove('hidden');
   element.classList.add('flex');
 }
@@ -1988,6 +1995,17 @@ async function handleAuthSignUp() {
     if (data.session) {
       // Email confirmation disabled: session created, sync right away.
       document.getElementById('auth-password').value = '';
+      
+      // Automatically create a default organization for the new user
+      try {
+        const { createOrganization } = await import('./db.js');
+        const defaultOrgName = email.split('@')[0] + "'s Organization";
+        const defaultSlug = email.split('@')[0].replace(/[^a-z0-9]+/g, '-') + '-' + Math.random().toString(36).substring(2, 7);
+        await createOrganization(defaultOrgName, defaultSlug, null);
+      } catch (orgErr) {
+        console.error('Failed to auto-create organization:', orgErr);
+      }
+
       // Push guest items first (explicit action), then fetch-only sync.
       await pushLocalChangesToCloud().catch(() => {});
       await syncItemsWithCloud();
@@ -2609,15 +2627,58 @@ export async function refreshBillingInfo() {
   updateContainerUsageUI();
 }
 
-// Open organization settings modal
-export function openOrgSettings() {
-  showModal(document.getElementById('org-settings-modal'));
-}
+    // Populate organization settings inputs
+    export function populateOrgSettings() {
+      if (!currentOrganizationId && userOrganizations.length > 0) {
+        setCurrentOrganizationId(userOrganizations[0].id);
+      }
+      const org = userOrganizations.find(o => o.id === currentOrganizationId);
+
+      if (org) {
+        const nameInput = document.getElementById('org-settings-name');
+        const addressInput = document.getElementById('org-settings-address');
+        const currencySelect = document.getElementById('org-settings-currency');
+
+        if (nameInput) nameInput.value = org.name || '';
+        if (addressInput) addressInput.value = org.address || '';
+        if (currencySelect) currencySelect.value = org.currency || 'USD';
+
+        if (org.settings) {
+          const enableSales = document.getElementById('org-enable-sales');
+          const enableRacks = document.getElementById('org-enable-racks');
+          const enableSupplies = document.getElementById('org-enable-supplies');
+
+          if (enableSales) enableSales.checked = org.settings.enable_sales !== false;
+          if (enableRacks) enableRacks.checked = org.settings.enable_racks !== false;
+          if (enableSupplies) enableSupplies.checked = org.settings.enable_supplies !== false;
+        }
+      }
+    }
+
+    // Attach to window for app.js to call
+    window.populateOrgSettings = populateOrgSettings;
+
+    // Open organization settings modal
+    export function openOrgSettings() {
+      const modal = document.getElementById('org-settings-modal');
+      if (!modal) {
+        console.error("openOrgSettings: 'org-settings-modal' element not found in the DOM.");
+        return;
+      }
+
+      if (!currentOrganizationId && userOrganizations.length > 0) {
+        setCurrentOrganizationId(userOrganizations[0].id);
+      }
+
+      populateOrgSettings();
+
+      showModal(modal);
+    }
 
 // Close organization settings modal
 export function closeOrgSettings() {
   const modal = document.getElementById('org-settings-modal');
-  if (modal) modal.remove();
+  if (modal) hideModal(modal);
 }
 
 // Switch between organization tabs
@@ -2644,32 +2705,56 @@ export function switchOrgTab(tab) {
 
 // Save organization settings
 export async function saveOrgSettings() {
+  const nameInput = document.getElementById('org-settings-name');
+  const addressInput = document.getElementById('org-settings-address');
+  const currencySelect = document.getElementById('org-settings-currency');
+  
   const enableSales = document.getElementById('org-enable-sales').checked;
   const enableRacks = document.getElementById('org-enable-racks').checked;
   const enableSupplies = document.getElementById('org-enable-supplies').checked;
 
-  const { updateOrganizationSettings, currentOrganizationId } = await import('./db.js');
+  const { updateOrganization, currentOrganizationId } = await import('./db.js');
 
   try {
-    showToast('Saving feature modules...', 'info');
-    
+    showToast('Saving organization settings...', 'info');
+
     const settings = {
       enable_sales: enableSales,
       enable_racks: enableRacks,
       enable_supplies: enableSupplies
     };
 
-    await updateOrganizationSettings(currentOrganizationId, settings);
-    showToast('✓ Feature modules updated successfully!', 'success');
+    const updates = {
+      settings
+    };
     
+    if (nameInput && nameInput.value.trim()) {
+      updates.name = nameInput.value.trim();
+    }
+    if (addressInput) {
+      updates.address = addressInput.value.trim();
+    }
+    if (currencySelect) {
+      updates.currency = currencySelect.value;
+    }
+
+    await updateOrganization(currentOrganizationId, updates);
+    showToast('✓ Organization settings updated successfully!', 'success');
+
     // Trigger dynamic toggle of sidebar/app sections based on these active boolean flags
     if (typeof window.applyFeatureToggles === 'function') {
       window.applyFeatureToggles(settings);
     }
     
+    // Update UI elements that show the org name
+    const orgNameDisplay = document.getElementById('current-org-name');
+    if (orgNameDisplay && updates.name) {
+      orgNameDisplay.innerText = updates.name;
+    }
+
     closeOrgSettings();
   } catch (err) {
     console.error('Failed to save organization settings:', err);
-    showToast('Failed to update feature modules: ' + err.message, 'error');
+    showToast('Failed to update settings: ' + err.message, 'error');
   }
 }

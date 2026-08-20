@@ -138,11 +138,105 @@ import { STAGES, CONTAINER_STAGES } from './config.js';
 let currentFilter = 'All';
 let scannedItemId = null;
 
+// --- Inventory & Supplies UI Logic ---
+let currentSupplies = [];
+
+window.renderInventoryList = async function() {
+  const listEl = document.getElementById('inventory-list');
+  if (!listEl) return;
+
+  try {
+    const { getSupplies, currentOrganizationId } = await import('./db.js');
+    
+    if (!currentOrganizationId) {
+      listEl.innerHTML = `<tr><td colspan="5" class="px-4 py-4 text-center text-slate-500">Please select an organization to view inventory.</td></tr>`;
+      return;
+    }
+
+    currentSupplies = await getSupplies();
+    const searchTerm = (document.getElementById('inventory-search')?.value || '').toLowerCase();
+    
+    const filteredSupplies = currentSupplies.filter(s => 
+      s.name.toLowerCase().includes(searchTerm) || 
+      (s.category && s.category.toLowerCase().includes(searchTerm))
+    );
+
+    if (filteredSupplies.length === 0) {
+      listEl.innerHTML = `<tr><td colspan="5" class="px-4 py-4 text-center text-slate-500">No supplies found.</td></tr>`;
+      return;
+    }
+
+    listEl.innerHTML = filteredSupplies.map(supply => {
+      const isLow = supply.reorder_threshold != null && supply.quantity_on_hand <= supply.reorder_threshold;
+      const statusHtml = isLow 
+        ? `<span class="text-[10px] bg-red-500/20 text-red-400 px-2 py-1 rounded font-bold">Low Stock</span>`
+        : `<span class="text-[10px] bg-emerald-500/20 text-emerald-400 px-2 py-1 rounded font-bold">In Stock</span>`;
+
+     // Escape HTML to prevent XSS
+const escapeHtml = (unsafe) => {
+  return (unsafe || '').toString()
+       .replace(/&/g, "&amp;")
+       .replace(/</g, "&lt;")
+       .replace(/>/g, "&gt;")
+       .replace(/"/g, "&quot;")
+       .replace(/'/g, "&#039;");
+};
+
+      return `
+        <tr class="border-b border-slate-800/50 hover:bg-slate-800/30 transition">
+          <td class="px-4 py-3 font-medium text-slate-200">${escapeHtml(supply.name)}</td>
+          <td class="px-4 py-3 text-slate-400">${escapeHtml(supply.category || '-')}</td>
+          <td class="px-4 py-3 font-mono text-slate-300">${supply.quantity_on_hand} ${escapeHtml(supply.unit_of_measure || '')}</td>
+          <td class="px-4 py-3">${statusHtml}</td>
+          <td class="px-4 py-3">
+            <button onclick="deleteInventorySupply('${supply.id}')" class="text-red-400 hover:text-red-300 text-xs font-bold px-2 py-1 rounded hover:bg-red-400/10 transition">Delete</button>
+          </td>
+        </tr>
+      `;
+    }).join('');
+  } catch (err) {
+    console.error('Failed to render inventory:', err);
+    listEl.innerHTML = `<tr><td colspan="5" class="px-4 py-4 text-center text-red-400">Error loading inventory.</td></tr>`;
+  }
+};
+
+window.deleteInventorySupply = async function(id) {
+  if (!confirm('Are you sure you want to delete this supply item?')) return;
+  try {
+    const { deleteSupply } = await import('./db.js');
+    await deleteSupply(id);
+    showToast('Supply deleted successfully', 'success');
+    renderInventoryList();
+  } catch (err) {
+    showToast('Failed to delete supply: ' + err.message, 'error');
+  }
+};
+
+// --- Add Supply Modal ---
+function openAddSupplyModal() {
+  const modal = document.getElementById('add-supply-modal');
+  if (modal) {
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+    const input = document.getElementById('add-supply-name');
+    if (input) setTimeout(() => input.focus(), 100);
+  }
+}
+
+function closeAddSupplyModal() {
+  const modal = document.getElementById('add-supply-modal');
+  if (modal) {
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+  }
+}
+
 // Initialize optional sub-modules with error handling
 try {
   if (document.getElementById('sales-module-container')) {
-    fetchCustomers();
-    populateCustomerPicker();
+    fetchCustomers().then(() => {
+      populateCustomerPicker();
+    });
   }
 } catch (err) {
   console.error('Failed to initialize sales module:', err);
@@ -1180,7 +1274,7 @@ function renderOnboardingChecklist() {
 
   // Auto-select first organization if none is selected
   if (!currentOrganizationId && userOrganizations.length > 0) {
-    currentOrganizationId = userOrganizations[0].id;
+    setCurrentOrganizationId(userOrganizations[0].id);
   }
 
   const activeOrg = userOrganizations.find(o => o.id === currentOrganizationId);
@@ -1505,7 +1599,7 @@ async function handleAddRackSubmit(e) {
     const activeOrg = userOrganizations.find(o => o.id === currentOrganizationId);
     if (activeOrg) {
       const { updateOrganizationSettings } = await import('./db.js');
-      const settings =
+      const settings = activeOrg.settings || { enable_sales: true, enable_racks: false, enable_supplies: true, enable_inoculation: true };
       settings.completed_onboarding_steps = settings.completed_onboarding_steps || [];
       if (!settings.completed_onboarding_steps.includes('step-racks')) {
         settings.completed_onboarding_steps.push('step-racks');
@@ -1677,6 +1771,9 @@ Object.assign(window, {
   closeAddRackModal,
   selectRackPreset,
   handleAddRackSubmit,
+  // Add Supply Modal
+  openAddSupplyModal,
+  closeAddSupplyModal,
 
 
   // Bulk PC Prep smart dropdowns & custom presets
@@ -1930,40 +2027,55 @@ async function handleMultiTenantInit() {
   // Show dashboard now that we have a valid session
   showAppDashboard();
 
-  try {
-    const context = await loadOrganizationContext();
-    if (context.onboardingNeeded) {
-      // Reset onboarding steps to Step 1 when opened
-      const step1 = document.getElementById('onboarding-step-1');
-      const step2 = document.getElementById('onboarding-step-2');
-      if (step1 && step2) {
-        step1.classList.remove('hidden');
-        step2.classList.add('hidden');
+    try {
+      const context = await loadOrganizationContext();
+      if (context.onboardingNeeded) {
+        // Reset onboarding steps to Step 1 when opened
+        const step1 = document.getElementById('onboarding-step-1');
+        const step2 = document.getElementById('onboarding-step-2');
+        if (step1 && step2) {
+          step1.classList.remove('hidden');
+          step2.classList.add('hidden');
+        }
+        const icon = document.getElementById('onboarding-modal-icon');
+        const title = document.getElementById('onboarding-modal-title');
+        const subtitle = document.getElementById('onboarding-modal-subtitle');
+        if (icon) icon.innerText = '🏢';
+        if (title) title.innerText = 'Create Your Organization';
+        if (subtitle) subtitle.innerText = 'Set up your workspace to manage multi-tenant cultivation, inventory, and locations.';
+
+        const modal = document.getElementById('onboarding-modal');
+        if (modal) {
+          modal.classList.remove('hidden');
+          modal.classList.add('flex');
+        }
+        return;
       }
-      const icon = document.getElementById('onboarding-modal-icon');
-      const title = document.getElementById('onboarding-modal-title');
-      const subtitle = document.getElementById('onboarding-modal-subtitle');
-      if (icon) icon.innerText = '🏢';
-      if (title) title.innerText = 'Create Your Organization';
-      if (subtitle) subtitle.innerText = 'Set up your workspace to manage multi-tenant cultivation, inventory, and locations.';
 
-      const modal = document.getElementById('onboarding-modal');
-      if (modal) {
-        modal.classList.remove('hidden');
-        modal.classList.add('flex');
-      }
-      return;
-    }
+          // Auto-select first organization if none is selected
+          if (!currentOrganizationId && userOrganizations.length > 0) {
+            setCurrentOrganizationId(userOrganizations[0].id);
+          }
+          
+          // Re-fetch and render customers now that organization context is loaded
+          if (typeof window.renderCustomers === 'function') {
+            window.renderCustomers();
+          }
 
-    // Show/hide Setup Wizard button in header depending on active organization context
-    const setupBtn = document.getElementById('setup-wizard-header-btn');
-    if (setupBtn) {
-      setupBtn.classList.toggle('hidden', !currentOrganizationId);
-    }
+        // Show/hide Setup Wizard button in header depending on active organization context
+        const setupBtn = document.getElementById('setup-wizard-header-btn');
+        if (setupBtn) {
+          setupBtn.classList.toggle('hidden', !currentOrganizationId);
+        }
 
-    // Apply features toggles upon login / multi-tenant initialization
-    const activeOrg = userOrganizations.find(o => o.id === currentOrganizationId);
-    applyFeatureToggles(activeOrg ? activeOrg.settings : null);
+        // Apply features toggles upon login / multi-tenant initialization
+        const activeOrg = userOrganizations.find(o => o.id === currentOrganizationId);
+        applyFeatureToggles(activeOrg ? activeOrg.settings : null);
+        
+        // Populate General tab inputs if openOrgSettings is called later
+        if (typeof window.populateOrgSettings === 'function') {
+            window.populateOrgSettings();
+        }
 
     // Populate Location selector dropdown
     const select = document.getElementById('header-location-select');
@@ -2163,10 +2275,67 @@ window.addEventListener('container-limit-error', (event) => {
 // --- Initialize custom preset form listener ---
 document.getElementById('custom-preset-form').addEventListener('submit', handleCustomPresetSubmit);
 
+// --- Initialize add supply form listener ---
+const addSupplyForm = document.getElementById('add-supply-form');
+if (addSupplyForm) {
+  addSupplyForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const submitBtn = addSupplyForm.querySelector('button[type="submit"]');
+    const originalText = submitBtn.innerHTML;
+    submitBtn.innerHTML = 'Saving...';
+    submitBtn.disabled = true;
+    
+    try {
+      const supplyData = {
+        name: document.getElementById('add-supply-name').value,
+        category: document.getElementById('add-supply-category').value,
+        isDryIngredient: document.getElementById('add-supply-dry').checked,
+        isNonDepleting: document.getElementById('add-supply-non-depleting').checked,
+        quantityOnHand: document.getElementById('add-supply-quantity').value,
+        unitOfMeasure: document.getElementById('add-supply-unit').value,
+        packageSize: document.getElementById('add-supply-package-size').value,
+        packageCost: document.getElementById('add-supply-package-cost').value,
+        reorderThreshold: document.getElementById('add-supply-reorder-threshold').value,
+        reorderUrl: document.getElementById('add-supply-reorder-url').value,
+        supplier: document.getElementById('add-supply-supplier').value,
+        productCode: document.getElementById('add-supply-product-code').value,
+        notes: document.getElementById('add-supply-notes').value
+      };
+      
+      const { createSupply } = await import('./db.js');
+      await createSupply(supplyData);
+      
+      showToast('Supply item added successfully!', 'success');
+      closeAddSupplyModal();
+      addSupplyForm.reset();
+      
+      // Refresh inventory list if visible
+      if (typeof renderInventoryList === 'function') {
+        renderInventoryList();
+      }
+      
+      // If we're in the onboarding wizard, refresh it
+      if (window.location.hash === '#onboarding/setup') {
+        renderOnboardingChecklist();
+      }
+    } catch (err) {
+      console.error('Error adding supply:', err);
+      showToast(err.message || 'Failed to add supply item.', 'error');
+    } finally {
+      submitBtn.innerHTML = originalText;
+      submitBtn.disabled = false;
+    }
+  });
+}
+
 // --- Initialize application ---
 updateDashboard();
 initInoculationsForm();
 initPrepDateInput();
+if (typeof renderInventoryList === 'function') {
+  renderInventoryList();
+}
 
 // When bulk-prep-date changes, update batch code automatically
 const prepDateInput = document.getElementById('bulk-prep-date');

@@ -816,6 +816,38 @@
           </form>
         </div>
 
+    <!-- INVENTORY & SUPPLIES MODULE -->
+    <div id="inventory-module-container" class="bg-slate-900 p-6 rounded-xl border border-slate-800 shadow-xl space-y-4 transition-all duration-150 hover:border-slate-700">
+      <div class="flex justify-between items-center pb-2 border-b border-slate-800/80">
+        <h2 class="text-lg font-bold text-purple-400">📦 Inventory & Supplies</h2>
+        <span class="text-[10px] bg-purple-500/10 text-purple-300 font-semibold px-2 py-0.5 rounded border border-purple-500/20">Active</span>
+      </div>
+      
+      <div class="flex justify-between items-center">
+        <input type="text" id="inventory-search" placeholder="Search supplies..." class="bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-slate-100 w-full max-w-xs" oninput="renderInventoryList()">
+        <button onclick="openAddSupplyModal()" class="bg-purple-600 hover:bg-purple-500 text-slate-950 px-3 py-1.5 rounded text-xs font-bold transition">+ Add Supply</button>
+      </div>
+      
+      <div class="bg-slate-950 border border-slate-800 rounded-lg p-4">
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm text-left text-slate-400">
+            <thead class="text-xs text-slate-300 uppercase bg-slate-900">
+              <tr>
+                <th class="px-4 py-2">Name</th>
+                <th class="px-4 py-2">Category</th>
+                <th class="px-4 py-2">Quantity</th>
+                <th class="px-4 py-2">Status</th>
+                <th class="px-4 py-2">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="inventory-list">
+              <!-- Inventory items will be dynamically loaded here -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
     <!-- SALES & CUSTOMERS MODULE -->
     <div id="sales-module-container" class="bg-slate-900 p-6 rounded-xl border border-slate-800 shadow-xl space-y-4 transition-all duration-150 hover:border-slate-700">
       <div class="flex justify-between items-center pb-2 border-b border-slate-800/80">
@@ -834,11 +866,11 @@
       
       <div id="customers-tab" class="space-y-4">
         <div class="flex justify-between items-center">
-          <input type="text" placeholder="Search customers..." class="bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-slate-100 w-full max-w-xs">
+          <input type="text" placeholder="Search customers..." class="bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-slate-100 w-full max-w-xs" />
           <button onclick="openAddCustomerModal()" class="bg-emerald-600 hover:bg-emerald-500 text-slate-950 px-3 py-1.5 rounded text-xs font-bold transition">+ Add Customer</button>
         </div>
         
-        <div class="bg-slate-950 border border-slate-800 rounded-lg p-4">
+        <div class="bg-slate-950 border border-slate-800 rounded-lg p-4 cursor-default">
           <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" id="customers-list">
             <!-- Customers will be dynamically loaded here -->
           </div>
@@ -1826,6 +1858,76 @@
   </div>
 
   <div id="bulk-print-section" class="hidden"></div>
+
+  <!-- Organization Settings Modal -->
+  <div id="org-settings-modal" class="fixed inset-0 bg-black/80 hidden items-center justify-center p-4 z-[96] animate-fade-in">
+    <div class="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl">
+      <div class="p-6 space-y-6">
+        <div class="flex justify-between items-start border-b border-slate-800 pb-4">
+          <div>
+            <h2 class="text-xl font-bold text-white flex items-center gap-2">
+              <span>🏢</span> Organization Settings
+            </h2>
+            <p class="text-sm text-slate-400 mt-1">Manage your workspace features and modules.</p>
+          </div>
+          <button onclick="closeOrgSettings()" class="text-slate-400 hover:text-white font-bold text-xl">✕</button>
+        </div>
+
+        <div class="flex gap-2 border-b border-slate-800 mb-4">
+          <button id="org-tab-general" onclick="switchOrgTab('general')" class="px-4 py-2 text-xs font-bold border-b-2 border-emerald-500 text-emerald-400 transition">General</button>
+          <button id="org-tab-features" onclick="switchOrgTab('features')" class="px-4 py-2 text-xs font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-200 transition">Feature Modules</button>
+        </div>
+
+        <div id="org-panel-general" class="space-y-4">
+          <div>
+            <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Organization Name</label>
+            <input type="text" id="org-settings-name" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-emerald-500/60">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Address</label>
+            <textarea id="org-settings-address" rows="2" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-emerald-500/60"></textarea>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Currency</label>
+            <select id="org-settings-currency" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-500/60">
+              <option value="USD">USD ($)</option>
+              <option value="EUR">EUR (€)</option>
+              <option value="GBP">GBP (£)</option>
+              <option value="CAD">CAD (£)</option>
+              <option value="AUD">CAD ($)</option>
+            </select>
+          </div>
+        </div>
+
+        <div id="org-panel-features" class="space-y-4 hidden">
+          <div class="bg-slate-800/50 border border-slate-700 rounded-xl p-5 space-y-4">
+            <h3 class="text-sm font-bold text-white">Enable / Disable Modules</h3>
+            <p class="text-xs text-slate-400 mb-4">Toggle the features you want to use in your workspace.</p>
+            
+            <label class="flex items-center gap-3 cursor-pointer">
+              <input type="checkbox" id="org-enable-sales" checked class="w-4 h-4 rounded border-slate-600 text-emerald-500 focus:ring-emerald-500/50 bg-slate-900">
+              <span class="text-sm text-slate-200 font-medium">Sales & Orders Module</span>
+            </label>
+            
+            <label class="flex items-center gap-3 cursor-pointer">
+              <input type="checkbox" id="org-enable-racks" checked class="w-4 h-4 rounded border-slate-600 text-emerald-500 focus:ring-emerald-500/50 bg-slate-900">
+              <span class="text-sm text-slate-200 font-medium">Racks & Shelving Module</span>
+            </label>
+            
+            <label class="flex items-center gap-3 cursor-pointer">
+              <input type="checkbox" id="org-enable-supplies" checked class="w-4 h-4 rounded border-slate-600 text-emerald-500 focus:ring-emerald-500/50 bg-slate-900">
+              <span class="text-sm text-slate-200 font-medium">Supplies & Inventory Module</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="flex justify-end gap-3 pt-4 border-t border-slate-800">
+          <button onclick="closeOrgSettings()" class="px-4 py-2 text-sm font-bold text-slate-300 hover:text-white transition">Cancel</button>
+          <button onclick="saveOrgSettings()" class="bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-bold py-2 px-6 rounded-lg transition shadow-lg shadow-emerald-900/20">Save Settings</button>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <script type="module" src="js/app.js"></script>
   <!-- Authentication Modal -->
