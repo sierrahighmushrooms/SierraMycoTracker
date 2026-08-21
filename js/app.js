@@ -1121,67 +1121,75 @@ document.getElementById('bulk-form').addEventListener('submit', async (e) => {
 
 // --- Quick-Log Parent Asset Form Submit ---
 const qlpForm = document.getElementById('quick-log-parent-form');
+let isSubmittingQlp = false;
 if (qlpForm) {
   qlpForm.addEventListener('submit', async (e) => {
     e.preventDefault();
-    const assetType = document.getElementById('qlp-asset-type').value;
-    const label = document.getElementById('qlp-label').value.trim();
-    const strain = document.getElementById('qlp-strain').value.trim();
-    const dateCreated = document.getElementById('qlp-date-created').value;
+    e.stopImmediatePropagation();
+    if (isSubmittingQlp) return;
+    isSubmittingQlp = true;
 
-    let medium = 'Whole Oats';
-    let containerType = 'Grain Jar / Bag';
-    let volumeMl = null;
-
-    if (assetType === 'Grain Jar') {
-      medium = 'Whole Oats';
-      containerType = 'Quart Mason Jar';
-    } else if (assetType === 'Grain Bag') {
-      medium = 'Whole Oats';
-      containerType = '0T Spawn Bag';
-    } else if (assetType === 'LC') {
-      medium = 'Liquid Culture';
-      containerType = 'Liquid Culture Jar';
-      volumeMl = 500;
-    } else if (assetType === 'Agar Plate') {
-      medium = 'Agar';
-      containerType = 'Petri Dish';
-    }
-
-    const todayStr = dateCreated ? new Date(dateCreated + 'T12:00:00').toLocaleDateString() : new Date().toLocaleDateString();
-
-    const newParentItem = {
-      id: generateId(),
-      label: label || `${strain} - ${assetType}`,
-      name: label || `${strain} - ${assetType}`,
-      strain: strain,
-      medium: medium,
-      medium_type: medium,
-      containerType: containerType,
-      container_type: containerType,
-      volumeMl: volumeMl,
-      pcBatch: 'Quick-Log-Parent',
-      parentItemId: null,
-      parent_id: null,
-      stage: 'Colonizing', // Active status
-      createdAt: todayStr,
-      created_at: dateCreated ? new Date(dateCreated + 'T12:00:00').toISOString() : new Date().toISOString(),
-      prepDate: dateCreated || null,
-      prep_date: dateCreated || null,
-      breakAndShake: null,
-      totalYield: 0,
-      yields: [],
-      contamType: null,
-      contamVector: null,
-      history: [{
-        stage: 'Colonizing',
-        timestamp: new Date().toLocaleString(),
-        notes: `Quick-Logged Parent Asset (${assetType}) created on ${todayStr}`,
-        env: ''
-      }]
-    };
+    const submitBtn = qlpForm.querySelector('button[type="submit"]');
+    if (submitBtn) submitBtn.disabled = true;
 
     try {
+      const assetType = document.getElementById('qlp-asset-type').value;
+      const label = document.getElementById('qlp-label').value.trim();
+      const strain = document.getElementById('qlp-strain').value.trim();
+      const dateCreated = document.getElementById('qlp-date-created').value;
+
+      let medium = 'Whole Oats';
+      let containerType = 'Grain Jar / Bag';
+      let volumeMl = null;
+
+      if (assetType === 'Grain Jar') {
+        medium = 'Whole Oats';
+        containerType = 'Quart Mason Jar';
+      } else if (assetType === 'Grain Bag') {
+        medium = 'Whole Oats';
+        containerType = '0T Spawn Bag';
+      } else if (assetType === 'LC') {
+        medium = 'Liquid Culture';
+        containerType = 'Liquid Culture Jar';
+        volumeMl = 500;
+      } else if (assetType === 'Agar Plate') {
+        medium = 'Agar';
+        containerType = 'Petri Dish';
+      }
+
+      const todayStr = dateCreated ? new Date(dateCreated + 'T12:00:00').toLocaleDateString() : new Date().toLocaleDateString();
+
+      const newParentItem = {
+        id: generateId(),
+        label: label || `${strain} - ${assetType}`,
+        name: label || `${strain} - ${assetType}`,
+        strain: strain,
+        medium: medium,
+        medium_type: medium,
+        containerType: containerType,
+        container_type: containerType,
+        volumeMl: volumeMl,
+        pcBatch: 'Quick-Log-Parent',
+        parentItemId: null,
+        parent_id: null,
+        stage: 'Colonizing', // Active status
+        createdAt: todayStr,
+        created_at: dateCreated ? new Date(dateCreated + 'T12:00:00').toISOString() : new Date().toISOString(),
+        prepDate: dateCreated || null,
+        prep_date: dateCreated || null,
+        breakAndShake: null,
+        totalYield: 0,
+        yields: [],
+        contamType: null,
+        contamVector: null,
+        history: [{
+          stage: 'Colonizing',
+          timestamp: new Date().toLocaleString(),
+          notes: `Quick-Logged Parent Asset (${assetType}) created on ${todayStr}`,
+          env: ''
+        }]
+      };
+
       db.items.unshift(newParentItem);
       saveItems();
 
@@ -1224,180 +1232,297 @@ if (qlpForm) {
     } catch (err) {
       console.error('Failed to quick-log parent asset:', err);
       showToast('Error creating parent asset: ' + err.message, 'error');
+    } finally {
+      setTimeout(() => {
+        isSubmittingQlp = false;
+        if (submitBtn) submitBtn.disabled = false;
+      }, 1000);
     }
   });
 }
 
 // --- Quick Add Source Form Submit ---
+const qaForm = document.getElementById('quick-add-form');
+let isSubmittingQa = false;
+if (qaForm) {
+  qaForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    if (isSubmittingQa) return;
+    isSubmittingQa = true;
 
-document.getElementById('quick-add-form').addEventListener('submit', (e) => {
-  e.preventDefault();
-  const label = document.getElementById('qa-label').value;
-  const strain = document.getElementById('qa-strain').value;
-  const volume = parseInt(document.getElementById('qa-volume').value) || 50;
+    const submitBtn = qaForm.querySelector('button[type="submit"]');
+    if (submitBtn) submitBtn.disabled = true;
 
-  const newSource = {
-    id: generateId(),
-    label: `${label} (${volume} mL)`,
-    strain: strain,
-    medium: 'Liquid Culture',
-    volumeMl: volume,
-    pcBatch: 'Vendor/Quick-Add',
-    parentItemId: null,
-    stage: 'Colonizing',
-    createdAt: new Date().toLocaleDateString(),
-    breakAndShake: null,
-    totalYield: 0,
-    yields: [],
-    contamType: null,
-    contamVector: null,
-    history: [{ stage: 'Colonizing', timestamp: new Date().toLocaleString(), notes: 'Quick Added LC Inoculant Source', env: '' }]
-  };
+    try {
+      const label = document.getElementById('qa-label').value;
+      const strain = document.getElementById('qa-strain').value;
+      const volume = parseInt(document.getElementById('qa-volume').value) || 50;
 
-  db.items.unshift(newSource);
-  saveItems();
-  closeQuickAddModal();
+      const newSource = {
+        id: generateId(),
+        label: `${label} (${volume} mL)`,
+        strain: strain,
+        medium: 'Liquid Culture',
+        volumeMl: volume,
+        pcBatch: 'Vendor/Quick-Add',
+        parentItemId: null,
+        stage: 'Colonizing',
+        createdAt: new Date().toLocaleDateString(),
+        breakAndShake: null,
+        totalYield: 0,
+        yields: [],
+        contamType: null,
+        contamVector: null,
+        history: [{ stage: 'Colonizing', timestamp: new Date().toLocaleString(), notes: 'Quick Added LC Inoculant Source', env: '' }]
+      };
 
-  populateInoculantSources(newSource.id);
-});
+      db.items.unshift(newSource);
+      saveItems();
+      closeQuickAddModal();
+
+      populateInoculantSources(newSource.id);
+      if (typeof render === 'function') render();
+      if (typeof updateDashboard === 'function') updateDashboard();
+    } finally {
+      setTimeout(() => {
+        isSubmittingQa = false;
+        if (submitBtn) submitBtn.disabled = false;
+      }, 1000);
+    }
+  });
+}
 
 // --- Active Inoculation Submission ---
-document.getElementById('item-form').addEventListener('submit', async (e) => {
-  e.preventDefault();
+const itemForm = document.getElementById('item-form');
+let isSubmittingItemForm = false;
+if (itemForm) {
+  itemForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    if (isSubmittingItemForm) return;
+    isSubmittingItemForm = true;
 
-  const strain = document.getElementById('input-strain').value;
-  const medium = document.getElementById('input-medium').value;
-  const inoculantType = document.getElementById('input-inoculant-type').value;
-  let parentId = document.getElementById('input-parent').value || null;
-  const legacySourceDesc = document.getElementById('input-legacy-source')?.value || null;
-  const quantity = parseInt(document.getElementById('input-quantity').value) || 1;
-  
-  if (parentId === 'legacy') {
-    parentId = null;
-  }
-  const shouldPrint = document.getElementById('input-print-toggle').checked;
-  const pcSource = document.querySelector('input[name="pc-source"]:checked').value;
+    const submitBtn = itemForm.querySelector('button[type="submit"]');
+    if (submitBtn) submitBtn.disabled = true;
 
-  let pcBatchCode = 'N/A';
-  let dateObj = new Date();
+    try {
+      const strain = document.getElementById('input-strain').value;
+      const medium = document.getElementById('input-medium').value;
+      const inoculantType = document.getElementById('input-inoculant-type').value;
+      let parentId = document.getElementById('input-parent').value || null;
+      const legacySourceDesc = document.getElementById('input-legacy-source')?.value || null;
+      const quantity = parseInt(document.getElementById('input-quantity').value) || 1;
+      
+      if (parentId === 'legacy') {
+        parentId = null;
+      }
+      const shouldPrint = document.getElementById('input-print-toggle').checked;
+      const pcSource = document.querySelector('input[name="pc-source"]:checked').value;
 
-  if (pcSource === 'existing') {
-    const selectedBatch = document.getElementById('input-pc-select').value;
-    if (selectedBatch) {
-      pcBatchCode = selectedBatch;
-      const matchedBatch = db.pcBatches.find(b => b.batchId === selectedBatch);
-      if (matchedBatch && matchedBatch.date) {
-        dateObj = new Date(matchedBatch.date + ' T12:00:00');
-        if (isNaN(dateObj.getTime())) {
-          dateObj = new Date();
+      let pcBatchCode = 'N/A';
+      let dateObj = new Date();
+
+      if (pcSource === 'existing') {
+        const selectedBatch = document.getElementById('input-pc-select').value;
+        if (selectedBatch) {
+          pcBatchCode = selectedBatch;
+          const matchedBatch = db.pcBatches.find(b => b.batchId === selectedBatch);
+          if (matchedBatch && matchedBatch.date) {
+            dateObj = new Date(matchedBatch.date + ' T12:00:00');
+            if (isNaN(dateObj.getTime())) {
+              dateObj = new Date();
+            }
+          }
+        }
+      } else {
+        const manualDateVal = document.getElementById('input-pc-date').value;
+        if (manualDateVal) {
+          dateObj = new Date(manualDateVal + 'T12:00:00');
+          const formattedDate = formatMMDDYY(dateObj);
+          pcBatchCode = `PC-MAN-${formattedDate}`;
         }
       }
-    }
-  } else {
-    const manualDateVal = document.getElementById('input-pc-date').value;
-    if (manualDateVal) {
-      dateObj = new Date(manualDateVal + 'T12:00:00');
-      const formattedDate = formatMMDDYY(dateObj);
-      pcBatchCode = `PC-MAN-${formattedDate}`;
-    }
-  }
 
-  const mediumInitials = getMediumInitials(medium);
-  const strainInitials = getStrainInitials(strain);
-  const dateStr = formatMMDDYY(dateObj);
-  const prefix = `${mediumInitials}-${strainInitials}-${dateStr}`;
+      const mediumInitials = getMediumInitials(medium);
+      const strainInitials = getStrainInitials(strain);
+      const dateStr = formatMMDDYY(dateObj);
+      const prefix = `${mediumInitials}-${strainInitials}-${dateStr}`;
 
-  const volumePerBag = parseInt(document.getElementById('input-volume-per-bag').value) || 10;
+      const volumePerBag = parseInt(document.getElementById('input-volume-per-bag').value) || 10;
 
-  // Handle Volume Deduction for LC Source
-  let modifiedSrcItem = null;
-  if (inoculantType === 'Liquid Culture' && parentId && parentId !== 'legacy') {
-    const srcItem = db.items.find(i => i.id === parentId);
-    if (srcItem) {
-      const originalVol = srcItem.volumeMl !== undefined && srcItem.volumeMl !== null ? srcItem.volumeMl : 0;
-      srcItem.volumeMl = Math.max(0, originalVol - (quantity * volumePerBag));
-      srcItem.history.unshift({
-        stage: srcItem.stage,
-        timestamp: new Date().toLocaleString(),
-        notes: `Deducted ${quantity * volumePerBag} mL for inoculating ${quantity} container(s).`,
-        env: ''
-      });
-      modifiedSrcItem = srcItem;
-    }
-  }
-
-  const generatedItems = [];
-  const generatedInCurrentRun = [];
-
-  for (let i = 1; i <= quantity; i++) {
-    let suffixNum = 1;
-    let candidateId = '';
-    while (true) {
-      let testId = `${prefix}-${String(suffixNum).padStart(2, '0')}`;
-      if (!db.items.find(item => item.id === testId) && !generatedInCurrentRun.includes(testId)) {
-        candidateId = testId;
-        generatedInCurrentRun.push(testId);
-        break;
+      // Handle Volume Deduction for LC Source
+      let modifiedSrcItem = null;
+      if (inoculantType === 'Liquid Culture' && parentId && parentId !== 'legacy') {
+        const srcItem = db.items.find(i => i.id === parentId);
+        if (srcItem) {
+          const originalVol = srcItem.volumeMl !== undefined && srcItem.volumeMl !== null ? srcItem.volumeMl : 0;
+          srcItem.volumeMl = Math.max(0, originalVol - (quantity * volumePerBag));
+          srcItem.history.unshift({
+            stage: srcItem.stage,
+            timestamp: new Date().toLocaleString(),
+            notes: `Deducted ${quantity * volumePerBag} mL for inoculating ${quantity} container(s).`,
+            env: ''
+          });
+          modifiedSrcItem = srcItem;
+        }
       }
-      suffixNum++;
+
+      const containerTypeVal = document.getElementById('input-container-type').value || '';
+      const containerWeightVal = document.getElementById('input-container-weight').value || '';
+      const stageVal = document.getElementById('input-stage').value || (CONTAINER_STAGES[containerTypeVal] || ['Colonizing'])[0];
+
+      const affectedItems = [];
+
+      // 1. Convert Existing PC Batch Items In-Place if available
+      if (pcSource === 'existing' && pcBatchCode && pcBatchCode !== 'N/A') {
+        const availablePrepContainers = db.items.filter(i => 
+          (i.pcBatch === pcBatchCode || i.batch_code === pcBatchCode) &&
+          (i.stage === 'Preparation' || i.stage === 'Uninoculated' || String(i.stage).toUpperCase() === 'PREPARATION')
+        );
+
+        const convertCount = Math.min(quantity, availablePrepContainers.length);
+
+        for (let i = 0; i < convertCount; i++) {
+          const item = availablePrepContainers[i];
+          const newLabel = `${medium} - ${strain} (#${i + 1}/${quantity})`;
+          item.label = newLabel;
+          item.name = newLabel;
+          item.strain = strain;
+          item.medium = medium;
+          item.medium_type = medium;
+          if (containerTypeVal) {
+            item.containerType = containerTypeVal;
+            item.container_type = containerTypeVal;
+          }
+          if (containerWeightVal) {
+            item.containerWeight = containerWeightVal;
+          }
+          item.parentItemId = parentId;
+          item.parent_id = parentId;
+          item.inoculantType = inoculantType;
+          item.inoculantSourceId = parentId;
+          item.inoculationDate = new Date().toLocaleDateString();
+          item.legacy_source_description = legacySourceDesc;
+          item.stage = stageVal;
+          item.history = item.history || [];
+          item.history.unshift({
+            stage: stageVal,
+            timestamp: new Date().toLocaleString(),
+            notes: `Inoculated with ${strain} via ${inoculantType}${parentId ? ' from ' + parentId : (legacySourceDesc ? ' from ' + legacySourceDesc : '')}.`,
+            env: ''
+          });
+          item.lifecycleHistory = item.lifecycleHistory || [];
+          item.lifecycleHistory.unshift({
+            fromStage: 'Preparation',
+            toStage: stageVal,
+            timestamp: new Date().toLocaleString(),
+            type: 'inoculation',
+            notes: `Inoculated with ${strain} via ${inoculantType}.`
+          });
+          affectedItems.push(item);
+        }
+      }
+
+      // 2. Instantiate new containers only if quantity exceeds available Preparation containers or Manual PC Date
+      const remainingQty = quantity - affectedItems.length;
+      if (remainingQty > 0) {
+        const generatedInCurrentRun = [];
+        const startIndex = affectedItems.length + 1;
+
+        for (let i = 1; i <= remainingQty; i++) {
+          const itemIdx = startIndex + i - 1;
+          let suffixNum = itemIdx;
+          let candidateId = '';
+          while (true) {
+            let testId = `${prefix}-${String(suffixNum).padStart(2, '0')}`;
+            if (!db.items.find(item => item.id === testId) && !generatedInCurrentRun.includes(testId)) {
+              candidateId = testId;
+              generatedInCurrentRun.push(testId);
+              break;
+            }
+            suffixNum++;
+          }
+
+          const newItem = {
+            id: candidateId,
+            label: `${medium} - ${strain} (#${itemIdx}/${quantity})`,
+            name: `${medium} - ${strain} (#${itemIdx}/${quantity})`,
+            strain: strain,
+            medium: medium,
+            medium_type: medium,
+            containerType: containerTypeVal,
+            container_type: containerTypeVal,
+            containerWeight: containerWeightVal,
+            pcBatch: pcBatchCode,
+            batch_code: pcBatchCode,
+            parentItemId: parentId,
+            parent_id: parentId,
+            inoculantType: inoculantType,
+            inoculantSourceId: parentId,
+            inoculationDate: new Date().toLocaleDateString(),
+            legacy_source_description: legacySourceDesc,
+            stage: stageVal,
+            createdAt: new Date().toLocaleDateString(),
+            created_at: new Date().toISOString(),
+            breakAndShake: null,
+            totalYield: 0,
+            yields: [],
+            contamType: null,
+            contamVector: null,
+            history: [{
+              stage: stageVal,
+              timestamp: new Date().toLocaleString(),
+              notes: `Inoculated with ${strain} via ${inoculantType}${parentId ? ' from ' + parentId : (legacySourceDesc ? ' from ' + legacySourceDesc : '')}.`,
+              env: ''
+            }],
+            lifecycleHistory: [{
+              fromStage: 'Preparation',
+              toStage: stageVal,
+              timestamp: new Date().toLocaleString(),
+              type: 'inoculation',
+              notes: `Inoculated with ${strain} via ${inoculantType}.`
+            }]
+          };
+
+          db.items.unshift(newItem);
+          affectedItems.push(newItem);
+        }
+      }
+
+      // Persist state
+      saveItems();
+
+      // If Supabase is configured, sync to cloud
+      if (isSupabaseConfigured()) {
+        const itemsToUpload = modifiedSrcItem ? [modifiedSrcItem, ...affectedItems] : affectedItems;
+        uploadItemsToCloud(itemsToUpload).catch(err => {
+          console.warn('Background cloud upload error for Log Active Inoculations:', err);
+        });
+      }
+
+      // Reset form and refresh UI
+      document.getElementById('item-form').reset();
+      initInoculationsForm();
+      render();
+      updateDashboard();
+      showToast(`✓ Logged ${quantity} inoculation(s) for ${strain}!`, 'success');
+
+      // Open Label Print Modal pre-loaded with affected item IDs
+      if (shouldPrint && affectedItems.length > 0) {
+        printBulkLabels(affectedItems);
+      }
+    } catch (err) {
+      console.error('Inoculation run error:', err);
+      showToast('Error logging inoculation: ' + err.message, 'error');
+    } finally {
+      setTimeout(() => {
+        isSubmittingItemForm = false;
+        if (submitBtn) submitBtn.disabled = false;
+      }, 1000);
     }
-
-    const containerTypeVal = document.getElementById('input-container-type').value || '';
-    const containerWeightVal = document.getElementById('input-container-weight').value || '';
-    const stageVal = document.getElementById('input-stage').value || (CONTAINER_STAGES[containerTypeVal] || ['Preparation'])[0];
-
-    const newItem = {
-      id: candidateId,
-      label: `${medium} - ${strain} (#${i}/${quantity})`,
-      strain: strain,
-      medium: medium,
-      containerType: containerTypeVal,
-      containerWeight: containerWeightVal,
-      pcBatch: pcBatchCode,
-      parentItemId: parentId,
-      legacy_source_description: legacySourceDesc,
-      stage: stageVal,
-      createdAt: new Date().toLocaleDateString(),
-      breakAndShake: null,
-      totalYield: 0,
-      yields: [],
-      contamType: null,
-      contamVector: null,
-      history: [{
-        stage: stageVal,
-        timestamp: new Date().toLocaleString(),
-        notes: `Inoculated with ${strain} via ${inoculantType}${parentId ? ' from ' + parentId : (legacySourceDesc ? ' from ' + legacySourceDesc : '')}.`,
-        env: ''
-      }]
-    };
-
-    db.items.unshift(newItem);
-    generatedItems.push(newItem);
-  }
-
-  // 1. Immediately persist newly created items to local state and trigger cloud sync
-  saveItems();
-
-  // If Supabase is configured, push immediately to items table
-  if (isSupabaseConfigured()) {
-    const itemsToUpload = modifiedSrcItem ? [modifiedSrcItem, ...generatedItems] : generatedItems;
-    uploadItemsToCloud(itemsToUpload).catch(err => {
-      console.warn('Background cloud upload error for Log Active Inoculations:', err);
-    });
-  }
-
-  // 2. Reset form and immediately refresh inventory grid
-  document.getElementById('item-form').reset();
-  initInoculationsForm();
-  render();
-  updateDashboard();
-  showToast(`✓ Logged ${quantity} inoculation(s) for ${strain}!`, 'success');
-
-  // 3. Open Label Print Modal pre-loaded with newly created item IDs AFTER saving to DB
-  if (shouldPrint && generatedItems.length > 0) {
-    printBulkLabels(generatedItems);
-  }
-});
+  });
+}
 
 // --- Sales Tab Switching ---
 function switchSalesTab(tab) {
@@ -1979,17 +2104,17 @@ function handleURLHash() {
     return;
   }
   
-  if (hash && hash.startsWith('#item=')) {
-    const id = hash.split('#item=')[1];
+  if (hash && (hash.startsWith('#container=') || hash.startsWith('#item='))) {
+    const id = hash.startsWith('#container=') ? hash.split('#container=')[1] : hash.split('#item=')[1];
     if (id) {
-      const found = db.items.find(i => i.id === id);
+      const found = db.items.find(i => i.id === id || i.code === id || i.custom_id === id);
       if (found) {
         currentFilter = 'All';
         scannedItemId = null;
         render();
-        openModal(id);
+        openModal(found.id);
         setTimeout(() => {
-          const card = document.getElementById(`card-${id}`);
+          const card = document.getElementById(`card-${found.id}`);
           if (card) {
             card.scrollIntoView({ behavior: 'smooth' });
             card.classList.add('ring-4', 'ring-emerald-400');
@@ -2198,6 +2323,8 @@ Object.assign(window, {
   openOrgSettings,
   closeOrgSettings,
   switchOrgTab,
+  loadOrgSettings,
+  populateOrgSettings,
   saveOrgSettings,
   removeOrgLogo,
   updateOrgLogoPreviewUI,

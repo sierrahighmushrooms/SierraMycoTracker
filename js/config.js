@@ -148,7 +148,7 @@ export function isUnconventionalPair(mediumValue, containerValue) {
 // Priority 3: Current browser origin, unless we're on a temporary dev tunnel.
 // Priority 4: Production fallback domain.
 export const getAppBaseUrl = () => {
-  // Priority 1: Configured production base URL in organization settings
+  // Priority 1: Configured custom scan domain in organization settings
   if (typeof window !== 'undefined') {
     const orgBaseUrl = localStorage.getItem('orgBaseUrl');
     if (orgBaseUrl && orgBaseUrl.trim()) {
@@ -157,20 +157,18 @@ export const getAppBaseUrl = () => {
   }
 
   // Priority 2: Explicit production/environment base URL
-  // Note: optional chaining keeps this safe when the app is served without a
-  // bundler (plain ES modules), where `import.meta.env` is undefined.
   const envUrl =
     (typeof import.meta !== 'undefined' && import.meta.env?.VITE_APP_URL) ||
     (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_APP_URL);
   if (envUrl) {
     return envUrl.replace(/\/$/, '');
   }
-  // Priority 3: Current browser origin (if not on a temporary dev tunnel)
-  if (typeof window !== 'undefined' && !window.location.hostname.includes('devtunnels.ms')) {
+  // Priority 3: Fallback gracefully to window.location.origin
+  if (typeof window !== 'undefined' && window.location && window.location.origin) {
     return window.location.origin;
   }
   // Fallback: Default production domain
-  return 'https://sierramycolab.com'; // Production live domain
+  return 'https://sierramycolab.com';
 };
 
 // Returns true when the app is running from a temporary dev environment

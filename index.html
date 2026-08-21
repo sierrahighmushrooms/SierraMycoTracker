@@ -2074,9 +2074,7 @@
     </div>
   </div>
 
-  <!-- Print Target Container -->
-  <div id="print-mount" class="hidden"></div>
-  <div id="bulk-print-section" class="hidden"></div>
+  <!-- Print Target Container (dynamically mounted via js/modals.js) -->
 
   <!-- Organization Settings Modal -->
   <div id="org-settings-modal" class="fixed inset-0 bg-black/80 hidden items-center justify-center p-4 z-[96] animate-fade-in">
@@ -2106,6 +2104,11 @@
             <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Address</label>
             <textarea id="org-settings-address" rows="2" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-emerald-500/60"></textarea>
           </div>
+          <div class="form-group">
+            <label for="org-base-url" class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">CUSTOM SCAN DOMAIN (OPTIONAL)</label>
+            <input type="url" id="org-base-url" class="form-control w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-emerald-500/60" placeholder="https://app.sierramycolab.com">
+            <small class="form-text text-muted text-[10px] text-slate-500 mt-1 block">Leave empty to use default domain. Only enter a domain if you use a custom web address for printed label scans.</small>
+          </div>
           <div>
             <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Currency</label>
             <select id="org-settings-currency" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-500/60">
@@ -2115,11 +2118,6 @@
               <option value="CAD">CAD (£)</option>
               <option value="AUD">CAD ($)</option>
             </select>
-          </div>
-          <div>
-            <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">App Base URL (for printed QR codes)</label>
-            <input type="url" id="org-base-url" placeholder="https://app.sierramycolab.com" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-emerald-500/60">
-            <p class="text-[10px] text-slate-500 mt-1">Used to generate permanent, scannable QR codes on printed labels.</p>
           </div>
           <div>
             <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Company Logo (Printed Labels)</label>

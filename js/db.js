@@ -744,7 +744,7 @@ export async function uploadItemsToCloud(items) {
   return { success: true, user, insertedCount: totalProcessed, updatedCount };
 }
 
-// Delete items from Supabase by their IDs for the authenticated user.
+// Delete items from Supabase by their IDs for the authenticated user / current organization.
 // Returns { success: boolean, error? }.
 export async function deleteItemsFromCloud(itemIds) {
   if (!supabaseClient) {
@@ -763,15 +763,43 @@ export async function deleteItemsFromCloud(itemIds) {
     return { success: false, error: new Error('Not authenticated.') };
   }
 
-  const { error } = await supabaseClient
+  // Primary delete query on 'items' table
+  let deleteQuery = supabaseClient
     .from('items')
     .delete()
-    .eq('user_id', user.id)
     .in('id', itemIds);
 
+  if (currentOrganizationId) {
+    deleteQuery = deleteQuery.eq('organization_id', currentOrganizationId);
+  } else {
+    deleteQuery = deleteQuery.eq('user_id', user.id);
+  }
+
+  const { error } = await deleteQuery;
+
   if (error) {
-    console.error('Supabase delete failed:', error.message);
-    return { success: false, error };
+    // If the error was due to organization_id filter or items table, also attempt fallback
+    console.warn('Supabase delete on items error:', error.message);
+    const { error: userScopedError } = await supabaseClient
+      .from('items')
+      .delete()
+      .eq('user_id', user.id)
+      .in('id', itemIds);
+
+    if (userScopedError) {
+      console.error('Supabase delete fallback failed:', userScopedError.message);
+      return { success: false, error: userScopedError };
+    }
+  }
+
+  // Also support any legacy/parallel 'containers' table if present in user schema
+  try {
+    await supabaseClient
+      .from('containers')
+      .delete()
+      .in('id', itemIds);
+  } catch (ignored) {
+    // Expected to fail if containers table does not exist
   }
 
   return { success: true };

@@ -295,7 +295,7 @@ export function closeModal() {
 
 // --- View QR Code Modal ---
 // Opens a focused dialog displaying the container's QR code, the code text,
-// and a "Copy Link" button. The QR value uses the /container/{id} route format
+// and a "Copy Link" button. The QR value embeds the configured production base URL
 // so scanned codes resolve directly to the live app URL.
 export function openViewQRCodeModal() {
   const item = db.items.find(i => i.id === activeItemId);
@@ -308,15 +308,17 @@ export function openViewQRCodeModal() {
   const idEl = document.getElementById('view-qr-item-id');
   if (idEl) idEl.innerText = item.id;
 
-  // Compute QR value — must be a non-empty string for the QR library
-  const qrValue = item?.id ? `${getAppBaseUrl()}/container/${item.id}` : '';
+  // Compute target scan URL
+  const configuredBaseUrl = localStorage.getItem('orgBaseUrl') || window.location.origin;
+  const cleanBaseUrl = configuredBaseUrl.trim().replace(/\/$/, '');
+  const scanTargetUrl = `${cleanBaseUrl}/#container=${item.id}`;
 
   // Set link text
   const linkEl = document.getElementById('view-qr-link');
-  if (linkEl) linkEl.innerText = qrValue || 'No valid container ID';
+  if (linkEl) linkEl.innerText = scanTargetUrl || 'No valid container ID';
 
   // Render QR code or skeleton placeholder
-  renderQRCodeWithSkeleton('view-qr-code', qrValue, 160);
+  renderQRCodeWithSkeleton('view-qr-code', scanTargetUrl, 160);
 
   showModal(modal);
 }
@@ -330,7 +332,10 @@ export function copyQRCodeLink() {
   const item = db.items.find(i => i.id === activeItemId);
   if (!item) return;
 
-  const link = `${getAppBaseUrl()}/container/${item.id}`;
+  const configuredBaseUrl = localStorage.getItem('orgBaseUrl') || window.location.origin;
+  const cleanBaseUrl = configuredBaseUrl.trim().replace(/\/$/, '');
+  const link = `${cleanBaseUrl}/#container=${item.id}`;
+
   navigator.clipboard.writeText(link).then(() => {
     showToast('Link copied to clipboard!', 'success', 2000);
   }).catch(() => {
@@ -562,76 +567,99 @@ export function logYield() {
 }
 
 // --- Delete Functions ---
-export function deleteActiveItem() {
+export async function deleteActiveItem() {
   if (!activeItemId) return;
   if (confirm(`Are you sure you want to delete item ${activeItemId}? This cannot be undone.`)) {
     const deletedId = activeItemId;
-    db.items = db.items.filter(i => i.id !== deletedId);
     closeModal();
-    saveItems();
-    // Sync deletion to Supabase if configured
+
+    // 1. Permanently delete from Supabase first if configured
     if (isSupabaseConfigured()) {
-      deleteItemsFromCloud([deletedId]).then(result => {
-        if (!result.success && result.error) {
-          showToast(`Failed to delete from cloud: ${result.error.message}`, 'error');
-        }
-      });
+      const result = await deleteItemsFromCloud([deletedId]);
+      if (!result.success && result.error) {
+        showToast(`Failed to delete from cloud: ${result.error.message}`, 'error');
+      }
     }
+
+    // 2. Filter local array in-place and persist
+    db.items = db.items.filter(i => i.id !== deletedId);
+    saveItems();
+
+    if (typeof window.render === 'function') window.render();
+    if (typeof window.updateDashboard === 'function') window.updateDashboard();
+    if (typeof window.updateContainerUsageUI === 'function') window.updateContainerUsageUI();
   }
 }
 
-export function deleteItemDirect(id, e) {
-  e.stopPropagation();
+export async function deleteItemDirect(id, e) {
+  if (e && e.stopPropagation) e.stopPropagation();
   if (confirm(`Delete container ${id}?`)) {
+    // 1. Permanently delete from Supabase first if configured
+    if (isSupabaseConfigured()) {
+      const result = await deleteItemsFromCloud([id]);
+      if (!result.success && result.error) {
+        showToast(`Failed to delete from cloud: ${result.error.message}`, 'error');
+      }
+    }
+
+    // 2. Filter local array in-place and persist
     db.items = db.items.filter(i => i.id !== id);
     saveItems();
-    // Sync deletion to Supabase if configured
-    if (isSupabaseConfigured()) {
-      deleteItemsFromCloud([id]).then(result => {
-        if (!result.success && result.error) {
-          showToast(`Failed to delete from cloud: ${result.error.message}`, 'error');
-        }
-      });
-    }
+
+    if (typeof window.render === 'function') window.render();
+    if (typeof window.updateDashboard === 'function') window.updateDashboard();
+    if (typeof window.updateContainerUsageUI === 'function') window.updateContainerUsageUI();
   }
 }
 
-export function deleteUninoculated() {
-  const uninoculatedItems = db.items.filter(i => i.stage === 'Uninoculated');
+export async function deleteUninoculated() {
+  const uninoculatedItems = db.items.filter(i => i.stage === 'Uninoculated' || i.stage === 'Preparation');
   const count = uninoculatedItems.length;
   if (!count) return alert('No uninoculated containers to delete.');
-  if (confirm(`Are you sure you want to purge all ${count} uninoculated jars?`)) {
+  if (confirm(`Are you sure you want to purge all ${count} uninoculated containers?`)) {
     const deletedIds = uninoculatedItems.map(i => i.id);
-    db.items = db.items.filter(i => i.stage !== 'Uninoculated');
-    saveItems();
-    // Sync deletion to Supabase if configured
+
+    // 1. Permanently delete from Supabase first if configured
     if (isSupabaseConfigured()) {
-      deleteItemsFromCloud(deletedIds).then(result => {
-        if (!result.success && result.error) {
-          showToast(`Failed to delete from cloud: ${result.error.message}`, 'error');
-        }
-      });
+      const result = await deleteItemsFromCloud(deletedIds);
+      if (!result.success && result.error) {
+        showToast(`Failed to delete from cloud: ${result.error.message}`, 'error');
+      }
     }
+
+    // 2. Filter local array in-place and persist
+    db.items = db.items.filter(i => i.stage !== 'Uninoculated' && i.stage !== 'Preparation');
+    saveItems();
+
+    if (typeof window.render === 'function') window.render();
+    if (typeof window.updateDashboard === 'function') window.updateDashboard();
+    if (typeof window.updateContainerUsageUI === 'function') window.updateContainerUsageUI();
   }
 }
 
-export function deletePCBatch(batchId) {
-  const affectedItems = db.items.filter(i => i.pcBatch === batchId);
+export async function deletePCBatch(batchId) {
+  const affectedItems = db.items.filter(i => i.pcBatch === batchId || i.batch_code === batchId);
   const affected = affectedItems.length;
   if (confirm(`Delete PC Batch "${batchId}" and all ${affected} associated items?`)) {
     const deletedIds = affectedItems.map(i => i.id);
-    db.items = db.items.filter(i => i.pcBatch !== batchId);
+
+    // 1. Permanently delete from Supabase first if configured
+    if (isSupabaseConfigured()) {
+      const result = await deleteItemsFromCloud(deletedIds);
+      if (!result.success && result.error) {
+        showToast(`Failed to delete from cloud: ${result.error.message}`, 'error');
+      }
+    }
+
+    // 2. Filter local arrays in-place and persist
+    db.items = db.items.filter(i => i.pcBatch !== batchId && i.batch_code !== batchId);
     db.pcBatches = db.pcBatches.filter(b => b.batchId !== batchId);
     saveItems();
     openBatchModal();
-    // Sync deletion to Supabase if configured
-    if (isSupabaseConfigured()) {
-      deleteItemsFromCloud(deletedIds).then(result => {
-        if (!result.success && result.error) {
-          showToast(`Failed to delete from cloud: ${result.error.message}`, 'error');
-        }
-      });
-    }
+
+    if (typeof window.render === 'function') window.render();
+    if (typeof window.updateDashboard === 'function') window.updateDashboard();
+    if (typeof window.updateContainerUsageUI === 'function') window.updateContainerUsageUI();
   }
 }
 
@@ -1486,7 +1514,7 @@ export function openPrintSettingsModal(itemList = null) {
     if (configuredBaseUrl && configuredBaseUrl.trim()) {
       const cleanUrl = configuredBaseUrl.trim().replace(/\/$/, '');
       devWarning.className = 'bg-emerald-950/60 border border-emerald-600/60 rounded-lg p-3 text-[11px] text-emerald-300 leading-relaxed';
-      devWarning.innerHTML = `✅ QR codes configured to route to: <span class="font-mono font-semibold">${cleanUrl}</span>`;
+      devWarning.innerHTML = `✅ QR codes configured to route to live domain: <span class="font-mono font-semibold">${cleanUrl}</span>`;
       devWarning.classList.remove('hidden');
     } else if (isUsingTemporaryBaseUrl()) {
       devWarning.className = 'bg-amber-950/50 border border-amber-600/50 rounded-lg p-3 text-[11px] text-amber-300 leading-relaxed';
@@ -1741,14 +1769,26 @@ export function printBulkLabels(itemList) {
   openPrintSettingsModal(itemList);
 }
 
-export function printSingleLabel() {
-  const item = db.items.find(i => i.id === activeItemId);
+export function printSingleLabel(id = null) {
+  const targetId = id || activeItemId;
+  const item = db.items.find(i => i.id === targetId || i.code === targetId || i.custom_id === targetId);
   if (!item) {
     alert('No active item to print.');
     return;
   }
-  printBulkLabels([item]);
+  // Set checkboxes/selection state to just this item
+  const checkboxes = document.querySelectorAll('.item-checkbox, .container-card-checkbox, input[type="checkbox"][id^="MY-"], input[type="checkbox"][data-item-id]');
+  checkboxes.forEach(cb => {
+    const cbId = cb.getAttribute('data-item-id') || cb.getAttribute('data-id') || cb.value || cb.id;
+    cb.checked = (cbId === item.id || cbId === item.code || cbId === item.custom_id);
+  });
+  updateSelectedCount();
+
+  // Open the standard layout modal with this single item
+  openPrintSettingsModal([item]);
 }
+
+window.printSingleLabel = printSingleLabel;
 
 export function triggerPrint(itemList, layoutKey, offset) {
   try {
@@ -1763,33 +1803,23 @@ export function triggerPrint(itemList, layoutKey, offset) {
   }
 }
 
+// Clean up print DOM nodes automatically after printing completes
+window.addEventListener('afterprint', () => {
+  const mount = document.getElementById('print-mount');
+  if (mount) {
+    mount.innerHTML = '';
+  }
+});
+
 export function executePrint(itemList, layoutKey, offset) {
-  // Guarantee unified #print-mount DOM node attached directly to body
-  let section = document.getElementById('print-mount');
-  if (!section) {
-    section = document.getElementById('bulk-print-section');
-    if (section) {
-      section.id = 'print-mount';
-    } else {
-      section = document.createElement('div');
-      section.id = 'print-mount';
-      document.body.appendChild(section);
-    }
+  let mount = document.getElementById('print-mount');
+  if (!mount) {
+    mount = document.createElement('div');
+    mount.id = 'print-mount';
+    mount.className = 'print-only-container';
+    document.body.appendChild(mount);
   }
-
-  // Ensure any other print containers are clean
-  const oldBulk = document.getElementById('bulk-print-section');
-  if (oldBulk && oldBulk !== section) {
-    oldBulk.innerHTML = '';
-    oldBulk.classList.add('hidden');
-  }
-
-  section.innerHTML = '';
-  // Ensure the print target is not hidden during generation
-  section.classList.remove('hidden');
-  section.style.visibility = 'visible';
-  section.style.opacity = '1';
-  section.style.display = 'block';
+  mount.innerHTML = ''; // clear previous prints
 
   const tmpl = getActiveTemplate();
   applyTemplateCSSVars(tmpl);
@@ -1808,16 +1838,16 @@ export function executePrint(itemList, layoutKey, offset) {
 
   // Apply layout class to container (retain legacy class names for CSS fallback)
   if (!tmpl.continuous) {
-    section.className = 'layout-dynamic';
-    section.style.gridTemplateColumns = `repeat(${cols}, ${labelWidth}in)`;
-    section.style.gridAutoRows = `${labelHeight}in`;
-    section.style.columnGap = `${gapCol}in`;
-    section.style.rowGap = `${gapRow}in`;
-    section.style.paddingTop = `${marginTop}in`;
-    section.style.paddingBottom = `${marginBottom}in`;
-    section.style.paddingLeft = `${marginLeft}in`;
-    section.style.paddingRight = `${marginRight}in`;
-    section.style.display = 'grid';
+    mount.className = 'print-only-container layout-dynamic';
+    mount.style.gridTemplateColumns = `repeat(${cols}, ${labelWidth}in)`;
+    mount.style.gridAutoRows = `${labelHeight}in`;
+    mount.style.columnGap = `${gapCol}in`;
+    mount.style.rowGap = `${gapRow}in`;
+    mount.style.paddingTop = `${marginTop}in`;
+    mount.style.paddingBottom = `${marginBottom}in`;
+    mount.style.paddingLeft = `${marginLeft}in`;
+    mount.style.paddingRight = `${marginRight}in`;
+    mount.style.display = 'grid';
 
     // Render empty invisible placeholder cards before first active label
     const skippedCount = Math.max(0, (offset || 1) - 1);
@@ -1826,19 +1856,19 @@ export function executePrint(itemList, layoutKey, offset) {
       placeholder.className = 'print-placeholder';
       placeholder.style.width = `${labelWidth}in`;
       placeholder.style.height = `${labelHeight}in`;
-      section.appendChild(placeholder);
+      mount.appendChild(placeholder);
     }
   } else {
-    section.className = 'layout-single';
-    section.style.display = 'block';
-    section.style.gridTemplateColumns = '';
-    section.style.gridAutoRows = '';
-    section.style.columnGap = '';
-    section.style.rowGap = '';
-    section.style.paddingTop = '';
-    section.style.paddingBottom = '';
-    section.style.paddingLeft = '';
-    section.style.paddingRight = '';
+    mount.className = 'print-only-container layout-single';
+    mount.style.display = 'block';
+    mount.style.gridTemplateColumns = '';
+    mount.style.gridAutoRows = '';
+    mount.style.columnGap = '';
+    mount.style.rowGap = '';
+    mount.style.paddingTop = '';
+    mount.style.paddingBottom = '';
+    mount.style.paddingLeft = '';
+    mount.style.paddingRight = '';
   }
 
   const includeContainer = localStorage.getItem(APP_CONFIG.STORAGE_KEYS.PRINT_INCLUDE_CONTAINER) === 'true';
@@ -1878,7 +1908,18 @@ export function executePrint(itemList, layoutKey, offset) {
   itemList.forEach((item, index) => {
     const card = document.createElement('div');
     const isLargeLabel = labelHeight >= 2.0;
-    card.className = isLargeLabel ? 'print-card print-card-large' : 'print-card';
+    const isMediumAddressLabel = labelHeight < 2.0 && labelHeight >= 0.75 && labelWidth >= 2.0;
+    
+    let cardClass = 'print-card';
+    if (isLargeLabel) {
+      cardClass += ' print-card-large';
+    } else if (isMediumAddressLabel) {
+      cardClass += ' print-card-medium';
+    }
+    card.className = cardClass;
+    if (Math.abs(labelWidth - 2.625) < 0.1 && Math.abs(labelHeight - 1.0) < 0.1) {
+      card.setAttribute('data-preset', '2.625x1');
+    }
     card.style.width = `${labelWidth}in`;
     card.style.height = `${labelHeight}in`;
 
@@ -1887,6 +1928,12 @@ export function executePrint(itemList, layoutKey, offset) {
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rawId);
     const displayId = isUuid ? rawId.substring(0, 8) : rawId;
     const containerName = item.name || item.label || '';
+
+    // Always attach label model / preset identifier
+    card.setAttribute('data-preset', labelModel || 'default');
+    if (labelModel === 'avery-5160' || (Math.abs(labelWidth - 2.625) < 0.1 && Math.abs(labelHeight - 1.0) < 0.1)) {
+      card.setAttribute('data-preset', '2.625x1');
+    }
 
     // Build text elements conditionally based on user toggles
     let nameHtml = '';
@@ -2017,7 +2064,7 @@ export function executePrint(itemList, layoutKey, offset) {
         </div>
       `;
     }
-    section.appendChild(card);
+    mount.appendChild(card);
 
     // Generate QR code and await render completion
     const qrPromise = new Promise((resolve) => {
@@ -2026,14 +2073,16 @@ export function executePrint(itemList, layoutKey, offset) {
         resolve();
         return;
       }
-      // Use higher pixel density for QR rasterization so it renders crisp and scales via CSS
-      const qrPixelDim = 256;
-      const qrPayload = `${getAppBaseUrl()}/container/${displayId || item.id}`;
+      // Explicitly set QR pixel dim: for smaller labels (height <= 1.25), use 80-90px max to prevent oversized canvases
+      const qrPixelDim = labelHeight <= 1.25 ? 85 : 256;
+      const configuredBaseUrl = localStorage.getItem('orgBaseUrl') || window.location.origin;
+      const cleanBaseUrl = configuredBaseUrl.trim().replace(/\/$/, '');
+      const scanTargetUrl = `${cleanBaseUrl}/#container=${displayId || item.id}`;
       
       try {
         if (typeof QRCode !== 'undefined') {
           new QRCode(qrContainer, {
-            text: qrPayload,
+            text: scanTargetUrl,
             width: qrPixelDim,
             height: qrPixelDim,
             correctLevel: QRCode.CorrectLevel.M
@@ -2179,9 +2228,9 @@ export function printSelectedLabels() {
 // Bulk delete selected items with confirmation and Supabase sync.
 // 1. Collects selected item IDs from checked checkboxes.
 // 2. Shows confirmation dialog with count.
-// 3. Deletes from Supabase if configured.
-// 4. Removes from local state and clears selection.
-// 5. Shows success notification with count.
+// 3. Deletes permanently from Supabase if configured.
+// 4. Removes from local state in-place and clears selection.
+// 5. Re-renders containers and updates dashboard.
 export async function deleteSelectedItems() {
   const selectedCodes = getSelectedContainerIds();
 
@@ -2207,7 +2256,7 @@ export async function deleteSelectedItems() {
   const confirmed = confirm(`Are you sure you want to delete ${matchedItems.length} selected item${matchedItems.length !== 1 ? 's' : ''}? This cannot be undone.`);
   if (!confirmed) return;
 
-  // Delete from Supabase if configured
+  // Delete from Supabase first if configured
   if (isSupabaseConfigured()) {
     const result = await deleteItemsFromCloud(selectedDbIds);
     if (!result.success && result.error) {
@@ -2217,13 +2266,23 @@ export async function deleteSelectedItems() {
     }
   }
 
-  // Remove deleted items from local state
+  // Mutate local array in-place and persist
   db.items = db.items.filter(i => !selectedDbIds.includes(i.id));
   saveItems();
 
-  // Clear the select-all checkbox
+  // Clear the checkboxes and selection state
   const selectAll = document.getElementById('select-all-checkbox');
   if (selectAll) selectAll.checked = false;
+
+  const checkboxes = document.querySelectorAll('.item-checkbox, .container-card-checkbox, input[type="checkbox"][id^="MY-"], input[type="checkbox"][data-item-id]');
+  checkboxes.forEach(cb => { cb.checked = false; });
+  updateSelectedCount();
+
+  // Immediately re-render the workspace and dashboard
+  if (typeof window.render === 'function') window.render();
+  if (typeof window.renderContainers === 'function') window.renderContainers();
+  if (typeof window.updateDashboard === 'function') window.updateDashboard();
+  if (typeof window.updateContainerUsageUI === 'function') window.updateContainerUsageUI();
 
   // Show success notification
   showToast(`Successfully deleted ${matchedItems.length} item${matchedItems.length !== 1 ? 's' : ''}.`, 'success');
@@ -3465,8 +3524,8 @@ export async function refreshBillingInfo() {
   updateContainerUsageUI();
 }
 
-    // Populate organization settings inputs
-    export function populateOrgSettings() {
+    // Load / hydrate organization settings inputs
+    export function loadOrgSettings() {
       if (!currentOrganizationId && userOrganizations.length > 0) {
         setCurrentOrganizationId(userOrganizations[0].id);
       }
@@ -3502,7 +3561,10 @@ export async function refreshBillingInfo() {
       }
     }
 
+    export const populateOrgSettings = loadOrgSettings;
+
     // Attach to window for app.js to call
+    window.loadOrgSettings = loadOrgSettings;
     window.populateOrgSettings = populateOrgSettings;
 
     // Open organization settings modal
@@ -3517,7 +3579,7 @@ export async function refreshBillingInfo() {
         setCurrentOrganizationId(userOrganizations[0].id);
       }
 
-      populateOrgSettings();
+      loadOrgSettings();
 
       showModal(modal);
     }

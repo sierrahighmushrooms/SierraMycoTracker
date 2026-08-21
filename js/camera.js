@@ -20,10 +20,16 @@ export function startScanner() {
     (decodedText) => {
       stopScanner();
       let targetId = decodedText;
-      if (decodedText.includes('#item=')) {
+      if (decodedText.includes('#container=')) {
+        targetId = decodedText.split('#container=')[1];
+      } else if (decodedText.includes('#item=')) {
         targetId = decodedText.split('#item=')[1];
+      } else if (decodedText.includes('/container/')) {
+        targetId = decodedText.split('/container/')[1];
       }
-      if (db.items.find(i => i.id === targetId)) {
+      const matched = db.items.find(i => i.id === targetId || i.code === targetId || i.custom_id === targetId);
+      if (matched) {
+        targetId = matched.id;
         window.currentFilter = 'All';
         window.scannedItemId = targetId;
         window.render();
@@ -66,7 +72,15 @@ export function startG2GCameraScan() {
     { fps: 10, qrbox: { width: 200, height: 200 } },
     (decodedText) => {
       // Successfully decoded a QR code -> push through the scan entry pipeline
-      window.handleG2GScanInput({ key: 'Enter', target: { value: decodedText } });
+      let scannedVal = decodedText;
+      if (decodedText.includes('#container=')) {
+        scannedVal = decodedText.split('#container=')[1];
+      } else if (decodedText.includes('#item=')) {
+        scannedVal = decodedText.split('#item=')[1];
+      } else if (decodedText.includes('/container/')) {
+        scannedVal = decodedText.split('/container/')[1];
+      }
+      window.handleG2GScanInput({ key: 'Enter', target: { value: scannedVal } });
       // Release camera hardware and hide the scanner UI
       stopG2GCameraScan();
     },
@@ -111,8 +125,16 @@ export function startSpawnBulkCameraScan() {
     { fps: 10, qrbox: { width: 200, height: 200 } },
     (decodedText) => {
       // Successfully decoded a QR code -> push through the scan entry pipeline
+      let scannedVal = decodedText;
+      if (decodedText.includes('#container=')) {
+        scannedVal = decodedText.split('#container=')[1];
+      } else if (decodedText.includes('#item=')) {
+        scannedVal = decodedText.split('#item=')[1];
+      } else if (decodedText.includes('/container/')) {
+        scannedVal = decodedText.split('/container/')[1];
+      }
       if (typeof window.handleSpawnBulkScanInput === 'function') {
-        window.handleSpawnBulkScanInput({ key: 'Enter', target: { value: decodedText } });
+        window.handleSpawnBulkScanInput({ key: 'Enter', target: { value: scannedVal } });
       }
       // Release camera hardware and hide the scanner UI
       stopSpawnBulkCameraScan();
