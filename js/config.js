@@ -143,11 +143,20 @@ export function isUnconventionalPair(mediumValue, containerValue) {
 
 // --- Base URL Resolution for QR Codes & Shareable Links ---
 // Resolves the canonical app base URL used to build permanent QR code payloads.
-// Priority 1: Explicit env var (VITE_APP_URL or NEXT_PUBLIC_APP_URL) set at deploy time.
-// Priority 2: Current browser origin, unless we're on a temporary dev tunnel.
-// Priority 3: Production fallback domain.
+// Priority 1: Configured orgBaseUrl in localStorage from Org Settings.
+// Priority 2: Explicit env var (VITE_APP_URL or NEXT_PUBLIC_APP_URL) set at deploy time.
+// Priority 3: Current browser origin, unless we're on a temporary dev tunnel.
+// Priority 4: Production fallback domain.
 export const getAppBaseUrl = () => {
-  // Priority 1: Explicit production/environment base URL
+  // Priority 1: Configured production base URL in organization settings
+  if (typeof window !== 'undefined') {
+    const orgBaseUrl = localStorage.getItem('orgBaseUrl');
+    if (orgBaseUrl && orgBaseUrl.trim()) {
+      return orgBaseUrl.trim().replace(/\/$/, '');
+    }
+  }
+
+  // Priority 2: Explicit production/environment base URL
   // Note: optional chaining keeps this safe when the app is served without a
   // bundler (plain ES modules), where `import.meta.env` is undefined.
   const envUrl =
@@ -156,7 +165,7 @@ export const getAppBaseUrl = () => {
   if (envUrl) {
     return envUrl.replace(/\/$/, '');
   }
-  // Priority 2: Current browser origin (if not on a temporary dev tunnel)
+  // Priority 3: Current browser origin (if not on a temporary dev tunnel)
   if (typeof window !== 'undefined' && !window.location.hostname.includes('devtunnels.ms')) {
     return window.location.origin;
   }
@@ -168,6 +177,8 @@ export const getAppBaseUrl = () => {
 // (dev tunnel or localhost) without an explicit production base URL set.
 export const isUsingTemporaryBaseUrl = () => {
   if (typeof window === 'undefined') return false;
+  const orgBaseUrl = localStorage.getItem('orgBaseUrl');
+  if (orgBaseUrl && orgBaseUrl.trim()) return false;
   const envUrl =
     (typeof import.meta !== 'undefined' && import.meta.env?.VITE_APP_URL) ||
     (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_APP_URL);
@@ -192,6 +203,15 @@ export const APP_CONFIG = {
     PRINT_LAYOUT: 'myco_print_layout',
     PRINT_OFFSET: 'myco_print_offset',
     PRINT_INCLUDE_CONTAINER: 'myco_print_include_container',
+    PRINT_SHOW_NAME: 'myco_print_show_name',
+    PRINT_SHOW_BATCH_ID: 'myco_print_show_batch_id',
+    PRINT_SHOW_STRAIN: 'myco_print_show_strain',
+    PRINT_SHOW_DATES: 'myco_print_show_dates',
+    PRINT_SHOW_LOGO: 'myco_print_show_logo',
+    PRINT_ENABLE_HANDWRITING: 'myco_print_enable_handwriting',
+    PRINT_CUSTOM_HANDWRITING_LINES: 'myco_print_custom_handwriting_lines',
+    ORG_BASE_URL: 'orgBaseUrl',
+    ORG_LOGO_DATA: 'orgLogoData',
     PRINTER_TYPE: 'myco_printer_type',
     LABEL_MODEL: 'myco_label_model',
     CUSTOM_LABEL_DIMS: 'myco_custom_label_dims',
@@ -236,6 +256,16 @@ export const LABEL_TEMPLATES = {
     grid: { cols: 2, rows: 5 },
     gap: { col: 0.1875, row: 0 },
     slots: 10
+  },
+  'generic-4x5': {
+    name: 'Generic 4-Up Sheet (4" x 5")',
+    printerType: PRINTER_TYPES.SHEET,
+    page: { width: 8.5, height: 11 },
+    margin: { top: 0.5, bottom: 0.5, left: 0.25, right: 0.25 },
+    label: { width: 4.0, height: 5.0 },
+    grid: { cols: 2, rows: 2 },
+    gap: { col: 0.0, row: 0.0 },
+    slots: 4
   },
   'generic-20-up': {
     name: 'Generic 20-Up Sheet (4" x 1")',

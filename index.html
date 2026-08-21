@@ -339,8 +339,6 @@
                 <option value="Other" selected>Other</option>
               </select>
             </div>
-=======REPLACE_END_MARKER_UNUSED
-
 
             <div class="flex gap-2.5 pt-2">
               <button type="button" onclick="closeAddLocationModal()" class="flex-1 bg-slate-850 hover:bg-slate-800 border border-slate-700 text-slate-200 font-bold py-2.5 rounded-lg transition text-sm">
@@ -801,8 +799,8 @@
 
             <div class="grid grid-cols-2 gap-3">
               <div>
-                <label class="block text-xs font-semibold font-sans-custom uppercase tracking-wider text-slate-400 mb-1.5">Run Date</label>
-                <input type="date" id="bulk-prep-date" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/50 rounded-lg p-2.5 text-sm text-slate-100 font-mono-custom transition duration-150 outline-none">
+                <label class="block text-xs font-semibold font-sans-custom uppercase tracking-wider text-slate-400 mb-1.5">Prep / Run Date</label>
+                <input type="datetime-local" id="bulk-prep-date" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/50 rounded-lg p-2.5 text-sm text-slate-100 font-mono-custom transition duration-150 outline-none">
               </div>
               <div>
                 <label class="block text-xs font-semibold font-sans-custom uppercase tracking-wider text-slate-400 mb-1.5">Batch Code</label>
@@ -1021,14 +1019,25 @@
               <div id="inoculant-source-container" class="space-y-2 bg-slate-900/40 p-3 rounded border border-slate-700/50">
                 <div class="flex justify-between items-center">
                   <label class="block text-xs font-medium text-slate-400">Inoculant Source</label>
-                  <button type="button" onclick="openQuickAddModal()" class="text-emerald-400 hover:text-emerald-300 text-xs font-bold flex items-center gap-1">
-                    <span>➕</span> Quick Add
-                  </button>
+                  <div class="flex items-center gap-2">
+                    <button type="button" id="btn-create-parent-asset" onclick="openQuickLogParentModal()" class="text-xs bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded font-bold flex items-center gap-1 transition">
+                      <span>➕</span> Create Parent Asset
+                    </button>
+                    <button type="button" onclick="openQuickAddModal()" class="text-emerald-400 hover:text-emerald-300 text-xs font-bold flex items-center gap-1">
+                      <span>⚡</span> Quick Add LC
+                    </button>
+                  </div>
                 </div>
                 
                 <select id="input-parent" class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-sm text-slate-100">
                   <!-- Dynamically filled depending on type -->
                 </select>
+
+                <!-- Legacy Source Description -->
+                <div id="legacy-source-container" class="hidden mt-2">
+                  <label class="block text-xs font-medium text-slate-400 mb-1">Source Notes / Vendor Name</label>
+                  <input type="text" id="input-legacy-source" placeholder="e.g., B+ LC Syringe from Vendor X, April 2024" class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-sm text-slate-100">
+                </div>
 
                 <!-- Volume field for Liquid Culture -->
                 <div id="volume-per-bag-container">
@@ -1175,6 +1184,9 @@
             <p id="text-break-shake" class="text-xs text-slate-300 hidden"></p>
             <button id="btn-g2g-transfer" type="button" onclick="openG2GModal()" class="bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold py-1.5 rounded w-full transition flex items-center justify-center gap-1.5">
               <span>🧫</span> Perform G2G Transfer
+            </button>
+            <button id="btn-spawn-bulk" type="button" onclick="openSpawnBulkModal()" class="bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold py-1.5 rounded w-full transition flex items-center justify-center gap-1.5">
+              <span>🍄</span> Spawn to Fruiting Block
             </button>
           </div>
           <div id="yield-log-block" class="bg-slate-900 p-3 rounded border border-slate-700 text-center">
@@ -1346,6 +1358,121 @@
     </div>
   </div>
 
+  <!-- Spawn to Fruiting Block Modal -->
+  <div id="spawn-bulk-modal" class="fixed inset-0 bg-black/80 hidden items-center justify-center p-4 z-50 animate-fade-in">
+    <div class="bg-slate-800 border border-slate-700 rounded-xl w-full max-w-lg p-5 space-y-4 shadow-2xl">
+      <div class="flex justify-between items-center border-b border-slate-700/60 pb-2">
+        <h3 class="text-md font-bold text-emerald-400 flex items-center gap-1.5">
+          <span>🍄</span> Spawn to Fruiting Block
+        </h3>
+        <button onclick="closeSpawnBulkModal()" class="text-slate-400 hover:text-white font-bold text-lg">✕</button>
+      </div>
+
+      <!-- Source Grain Info -->
+      <div class="bg-slate-900 p-3 rounded-lg border border-slate-700 space-y-1">
+        <div class="text-[10px] uppercase tracking-wider text-slate-400">Source Grain Spawn</div>
+        <div id="spawn-bulk-source-name" class="text-sm font-bold text-slate-100"></div>
+        <div id="spawn-bulk-source-details" class="text-xs text-emerald-400"></div>
+      </div>
+
+      <!-- Substrate Source Selector Mode Tabs -->
+      <div class="flex gap-1 border-b border-slate-700">
+        <button id="spawn-bulk-tab-scan" onclick="switchSpawnBulkTab('scan')" class="px-3 py-2 text-xs font-bold border-b-2 border-emerald-500 text-emerald-400 transition">
+          Scan / Select Existing Substrate
+        </button>
+        <button id="spawn-bulk-tab-create" onclick="switchSpawnBulkTab('create')" class="px-3 py-2 text-xs font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-200 transition">
+          Quick-Create Substrate
+        </button>
+      </div>
+
+      <!-- Option A: Scan / Select Existing Substrate Bag -->
+      <div id="spawn-bulk-panel-scan" class="space-y-3">
+        <div>
+          <label class="block text-xs font-medium text-slate-400 mb-1">Scan Substrate QR (or type ID + Enter)</label>
+          <div class="flex gap-2">
+            <input type="text" id="spawn-bulk-scan-input" placeholder="Scan substrate bag ID..." class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-sm text-slate-100" onkeydown="handleSpawnBulkScanInput(event)">
+            <button id="btnOpenSpawnBulkCamera" type="button" onclick="startSpawnBulkCameraScan()" class="bg-slate-700 hover:bg-slate-600 text-white text-xs px-3 py-2 rounded shrink-0">📷 Scan Substrate QR</button>
+          </div>
+        </div>
+
+        <!-- Camera Container -->
+        <div id="spawn-bulk-camera-container" class="hidden mt-2 p-2 bg-slate-900 border border-slate-700 rounded text-center">
+          <div id="spawn-bulk-qr-reader" class="w-full rounded overflow-hidden"></div>
+          <button id="btnCloseSpawnBulkCamera" type="button" onclick="stopSpawnBulkCameraScan()" class="mt-2 bg-rose-600 hover:bg-rose-500 text-white text-xs px-3 py-1.5 rounded w-full font-semibold">
+            ❌ Stop Camera
+          </button>
+        </div>
+
+        <div>
+          <label class="block text-xs font-medium text-slate-400 mb-1">Or Select Pre-Made Uninoculated Substrate</label>
+          <select id="spawn-bulk-substrate-select" class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-sm text-slate-100" onchange="onSpawnBulkSubstrateSelect(this.value)">
+            <option value="">-- Select Uninoculated Substrate --</option>
+          </select>
+        </div>
+
+        <div id="spawn-bulk-selected-substrate-info" class="hidden bg-slate-950/60 p-2.5 rounded border border-emerald-900/60 text-xs text-slate-300">
+        </div>
+      </div>
+
+      <!-- Option B: Quick-Create Substrate Bag -->
+      <div id="spawn-bulk-panel-create" class="space-y-3 hidden">
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="block text-xs font-medium text-slate-400 mb-1">Substrate Type / Recipe</label>
+            <select id="spawn-bulk-create-recipe" class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-sm text-slate-100">
+              <option value="Masters Mix">Masters Mix</option>
+              <option value="CVG Bulk" selected>CVG Bulk</option>
+              <option value="Hardwood Sawdust">Hardwood Sawdust</option>
+              <option value="Straw Substrate">Straw Substrate</option>
+              <option value="Manure Blend">Manure Blend</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-400 mb-1">Weight / Size</label>
+            <select id="spawn-bulk-create-weight" class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-sm text-slate-100">
+              <option value="5 lb Bag" selected>5 lb Bag</option>
+              <option value="10 lb Tub">10 lb Tub</option>
+              <option value="3 lb Bag">3 lb Bag</option>
+              <option value="6 qt Shoebox">6 qt Shoebox</option>
+              <option value="Monotub (20-66 qt)">Monotub (20-66 qt)</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- Common Spawning Fields: Ratio & Resulting Blocks -->
+      <div class="grid grid-cols-2 gap-2 pt-2 border-t border-slate-700/60">
+        <div>
+          <label class="block text-xs font-medium text-slate-400 mb-1">Spawn Ratio</label>
+          <select id="spawn-bulk-ratio" class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-sm text-slate-100">
+            <option value="1:1 (Fast Colonization)">1:1 (Fast Colonization)</option>
+            <option value="1:2 (Standard Ratio)" selected>1:2 (Standard Ratio)</option>
+            <option value="1:3 (Extended Yield)">1:3 (Extended Yield)</option>
+            <option value="1:4 (Bulk Inoculation)">1:4 (Bulk Inoculation)</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-slate-400 mb-1">Resulting Fruiting Blocks</label>
+          <input type="number" id="spawn-bulk-qty" min="1" max="20" value="1" class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-sm text-slate-100">
+        </div>
+      </div>
+
+      <!-- Printing Action Option -->
+      <div class="space-y-2 pt-1 border-t border-slate-700/60">
+        <label class="flex items-center gap-2 text-xs text-slate-200 cursor-pointer">
+          <input type="checkbox" id="spawn-bulk-print-now" checked class="rounded bg-slate-900 border-slate-700 text-emerald-500 focus:ring-emerald-500">
+          <span class="font-semibold">Print Labels for New Fruiting Block(s) Now</span>
+        </label>
+        <p class="text-[11px] text-slate-400">If unchecked, fruiting blocks will be saved to inventory and you can print labels anytime from Container Details.</p>
+      </div>
+
+      <!-- Action Button -->
+      <button onclick="executeSpawnToFruitingBlock()" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 rounded-lg transition shadow-lg shadow-emerald-600/20 flex items-center justify-center gap-2">
+        <span>🚀</span> Confirm Spawn to Fruiting Block
+      </button>
+    </div>
+  </div>
+
   <!-- G2G Transfer Modal -->
   <div id="g2g-modal" class="fixed inset-0 bg-black/80 hidden items-center justify-center p-4 z-50 animate-fade-in">
     <div class="bg-slate-800 border border-slate-700 rounded-xl w-full max-w-lg p-5 space-y-4 shadow-2xl">
@@ -1447,6 +1574,50 @@
     </div>
   </div>
 
+  <!-- Quick-Log Parent Asset Modal -->
+  <div id="quick-log-parent-modal" class="fixed inset-0 bg-black/80 hidden items-center justify-center p-4 z-50 animate-fade-in">
+    <div class="bg-slate-800 border border-slate-700 rounded-xl w-full max-w-md p-5 space-y-4 shadow-2xl">
+      <div class="flex justify-between items-center border-b border-slate-700/60 pb-2">
+        <h3 class="text-md font-bold text-emerald-400 flex items-center gap-1.5">
+          <span>🧫</span> Quick-Log Parent Asset
+        </h3>
+        <button type="button" onclick="closeQuickLogParentModal()" class="text-slate-400 hover:text-white font-bold text-lg">✕</button>
+      </div>
+      <form id="quick-log-parent-form" class="space-y-3">
+        <div>
+          <label class="block text-xs font-medium text-slate-400 mb-1">Asset Type *</label>
+          <select id="qlp-asset-type" required class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-sm text-slate-100">
+            <option value="Grain Jar">Grain Jar</option>
+            <option value="Grain Bag" selected>Grain Bag</option>
+            <option value="LC">LC (Liquid Culture)</option>
+            <option value="Agar Plate">Agar Plate</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-slate-400 mb-1">Label / Name *</label>
+          <input type="text" id="qlp-label" required placeholder="e.g., Master Grain Spawn Bag #1" class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-sm text-slate-100">
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-slate-400 mb-1">Strain *</label>
+          <input type="text" id="qlp-strain" required placeholder="e.g., Golden Teacher, Lion's Mane" class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-sm text-slate-100">
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-slate-400 mb-1">Date Created *</label>
+          <input type="date" id="qlp-date-created" required class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-sm text-slate-100">
+          <p class="text-[10px] text-slate-400 mt-0.5">Allows past dates up to today.</p>
+        </div>
+        <div class="flex gap-2 pt-2">
+          <button type="button" onclick="closeQuickLogParentModal()" class="flex-1 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold py-2 rounded transition text-sm">
+            Cancel
+          </button>
+          <button type="submit" class="flex-1 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold py-2 rounded transition text-sm shadow-lg shadow-emerald-500/20">
+            Save Parent Asset
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <!-- Quick Add Source Modal -->
   <div id="quick-add-modal" class="fixed inset-0 bg-black/80 hidden items-center justify-center p-4 z-50 animate-fade-in">
     <div class="bg-slate-800 border border-slate-700 rounded-xl w-full max-w-md p-5 space-y-4 shadow-2xl">
@@ -1477,16 +1648,18 @@
   </div>
 
   <!-- Label Print Settings & Layout Modal -->
-  <div id="print-settings-modal" class="fixed inset-0 bg-black/80 hidden items-center justify-center p-4 z-50 animate-fade-in">
-    <div class="bg-slate-800 border border-slate-700 rounded-xl w-full max-w-md p-5 space-y-4 shadow-2xl">
-      <div class="flex justify-between items-center border-b border-slate-700/60 pb-2">
+  <div id="print-settings-modal" class="fixed inset-0 bg-black/80 hidden items-center justify-center p-2 sm:p-4 z-50 animate-fade-in overflow-y-auto">
+    <div class="bg-slate-800 border border-slate-700 rounded-xl w-full max-w-md max-h-[90vh] my-auto flex flex-col shadow-2xl overflow-hidden relative">
+      <!-- Modal Header (Sticky top) -->
+      <header class="shrink-0 px-5 py-3.5 border-b border-slate-700/60 flex justify-between items-center bg-slate-800 z-10">
         <h3 class="text-md font-bold text-emerald-400 flex items-center gap-1.5">
           <span>🖨️</span> Label Print Settings & Layout
         </h3>
-        <button onclick="closePrintSettingsModal()" class="text-slate-400 hover:text-white font-bold text-lg">✕</button>
-      </div>
+        <button onclick="closePrintSettingsModal()" class="text-slate-400 hover:text-white font-bold text-lg leading-none p-1">✕</button>
+      </header>
       
-      <div class="space-y-4">
+      <!-- Modal Body (Scrollable) -->
+      <div class="flex-1 overflow-y-auto p-5 space-y-4 min-h-0 custom-scrollbar">
         <!-- Dev Environment Warning (shown when printing from a dev tunnel/localhost without an explicit base URL) -->
         <div id="print-dev-warning" class="hidden bg-amber-950/50 border border-amber-600/50 rounded-lg p-3 text-[11px] text-amber-300 leading-relaxed">
           ⚠️ Notice: You are printing labels from a dev environment. Ensure your Base URL points to your live deployment so printed QR codes work permanently.
@@ -1533,13 +1706,56 @@
           </div>
           <button type="button" onclick="applyCustomLabelDims()" class="w-full bg-slate-700 hover:bg-slate-600 text-slate-100 text-xs font-bold py-1.5 rounded transition">Apply Custom Dimensions</button>
         </div>
-=======REPLACE_MARKER_UNUSED
 
+        <!-- Label Customization Fields Checklist -->
+        <div class="bg-slate-900/60 border border-slate-700/80 rounded-lg p-3 space-y-2.5">
+          <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider">Printed Label Fields</label>
+          <div class="grid grid-cols-2 gap-2 text-xs">
+            <label class="flex items-center gap-2 text-slate-300 cursor-pointer select-none hover:text-white">
+              <input type="checkbox" id="print-show-name" checked class="rounded text-emerald-600 focus:ring-emerald-500 bg-slate-800 border-slate-700">
+              <span>Show Container Name</span>
+            </label>
+            <label class="flex items-center gap-2 text-slate-300 cursor-pointer select-none hover:text-white">
+              <input type="checkbox" id="print-show-batch-id" checked class="rounded text-emerald-600 focus:ring-emerald-500 bg-slate-800 border-slate-700">
+              <span>Show Batch ID / Code</span>
+            </label>
+            <label class="flex items-center gap-2 text-slate-300 cursor-pointer select-none hover:text-white">
+              <input type="checkbox" id="print-show-strain" checked class="rounded text-emerald-600 focus:ring-emerald-500 bg-slate-800 border-slate-700">
+              <span>Show Strain</span>
+            </label>
+            <label class="flex items-center gap-2 text-slate-300 cursor-pointer select-none hover:text-white">
+              <input type="checkbox" id="print-show-dates" checked class="rounded text-emerald-600 focus:ring-emerald-500 bg-slate-800 border-slate-700">
+              <span>Show Dates</span>
+            </label>
+          </div>
+          <div id="print-show-logo-container" class="pt-1 border-t border-slate-800/80 hidden">
+            <label class="flex items-center gap-2 text-xs text-slate-300 cursor-pointer select-none hover:text-white">
+              <input type="checkbox" id="print-show-logo" class="rounded text-emerald-600 focus:ring-emerald-500 bg-slate-800 border-slate-700">
+              <span>Show Company Logo</span>
+            </label>
+          </div>
+          <div class="pt-1 border-t border-slate-800/80">
+            <label class="flex items-center gap-2 text-xs text-slate-400 cursor-pointer select-none hover:text-slate-300">
+              <input type="checkbox" id="print-include-container" class="rounded text-emerald-600 focus:ring-emerald-500 bg-slate-800 border-slate-700">
+              <span>Include Container Specs (Type & Weight)</span>
+            </label>
+          </div>
+        </div>
 
-        <!-- Optional Container Details Toggle on Labels -->
-        <div class="flex items-center gap-2 py-1">
-          <input type="checkbox" id="print-include-container" class="rounded text-emerald-600 focus:ring-emerald-500 bg-slate-900 border-slate-700">
-          <label for="print-include-container" class="text-xs font-medium text-slate-300 cursor-pointer select-none">Include Container Details on Labels</label>
+        <!-- Dynamic Handwriting Lines Section (shown only for labels height >= 2" or custom) -->
+        <div id="handwriting-settings-container" class="hidden bg-slate-900/60 border border-amber-800/50 rounded-lg p-3 space-y-2.5">
+          <div class="flex items-center justify-between">
+            <label class="block text-xs font-semibold text-amber-300 uppercase tracking-wider">✍️ Handwriting Lines</label>
+            <span class="text-[10px] text-amber-400/80">Large Labels (≥ 2" Height)</span>
+          </div>
+          <label class="flex items-center gap-2 text-xs text-slate-200 cursor-pointer select-none hover:text-white">
+            <input type="checkbox" id="print-enable-handwriting" class="rounded text-amber-500 focus:ring-amber-400 bg-slate-800 border-slate-700">
+            <span>Replace Data with Blank Handwriting Lines</span>
+          </label>
+          <div>
+            <label for="custom-handwriting-lines" class="block text-[11px] text-slate-400 mb-1">Custom Lines (comma-separated)</label>
+            <input type="text" id="custom-handwriting-lines" placeholder="e.g., Spore Vendor, Transfer Date, Generation" class="w-full bg-slate-800 border border-slate-700 rounded p-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-amber-500">
+          </div>
         </div>
 
         <!-- Offset / Starting Position -->
@@ -1555,28 +1771,29 @@
           <!-- Interactive Sheet Layout Preview -->
           <div>
             <label class="block text-xs font-medium text-slate-400 mb-2">Interactive Sheet Layout Preview (Click to select slot)</label>
-            <div class="bg-amber-950/40 border border-amber-800/40 p-2.5 rounded text-[11px] text-amber-300 mb-3 leading-relaxed text-left">
+            <div class="bg-amber-950/40 border border-amber-800/40 p-2 rounded text-[10px] text-amber-300 mb-2.5 leading-relaxed text-left">
               ⚠️ Paper Alignment Tip: Always feed sheets top-edge first into your printer tray. If using a bottom paper cassette where sheets flip, ensure the top edge points toward the feed mechanism so Slot #1 matches your physical sheet top.
             </div>
-            <div class="grid grid-cols-3 gap-1 bg-slate-950 p-2 rounded-lg border border-slate-700 max-w-[280px] mx-auto text-center" id="print-preview-grid">
+            <div class="grid grid-cols-3 gap-1 bg-slate-950 p-1.5 rounded-lg border border-slate-700 max-w-[240px] mx-auto text-center" id="print-preview-grid">
               <!-- Will be populated dynamically by JS -->
             </div>
-            <p class="text-[10px] text-center text-slate-500 mt-2">
-              <span class="inline-block w-2.5 h-2.5 bg-slate-700 rounded mr-1"></span> Skipped / Used
-              <span class="inline-block w-2.5 h-2.5 bg-emerald-500 rounded ml-3 mr-1"></span> Printing Positions
+            <p class="text-[10px] text-center text-slate-500 mt-1.5">
+              <span class="inline-block w-2 h-2 bg-slate-700 rounded mr-1"></span> Skipped / Used
+              <span class="inline-block w-2 h-2 bg-emerald-500 rounded ml-2.5 mr-1"></span> Printing Positions
             </p>
           </div>
         </div>
       </div>
 
-      <div class="flex gap-2 pt-2 border-t border-slate-700/60">
-        <button onclick="closePrintSettingsModal()" class="w-1/2 bg-slate-700 hover:bg-slate-600 text-slate-100 font-bold py-2 rounded transition">
+      <!-- Modal Footer (Sticky bottom) -->
+      <footer class="shrink-0 p-4 border-t border-slate-700/60 bg-slate-800 flex gap-2 z-10">
+        <button onclick="closePrintSettingsModal()" class="w-1/2 bg-slate-700 hover:bg-slate-600 text-slate-100 font-bold py-2.5 rounded-lg transition text-sm">
           Cancel
         </button>
-        <button id="print-settings-action-btn" onclick="applyOrExecutePrintSettings()" class="w-1/2 bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold py-2 rounded transition">
+        <button id="print-settings-action-btn" onclick="applyOrExecutePrintSettings()" class="w-1/2 bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold py-2.5 rounded-lg transition text-sm shadow-lg shadow-emerald-950/20">
           Save Settings
         </button>
-      </div>
+      </footer>
     </div>
   </div>
 
@@ -1857,6 +2074,8 @@
     </div>
   </div>
 
+  <!-- Print Target Container -->
+  <div id="print-mount" class="hidden"></div>
   <div id="bulk-print-section" class="hidden"></div>
 
   <!-- Organization Settings Modal -->
@@ -1896,6 +2115,25 @@
               <option value="CAD">CAD (£)</option>
               <option value="AUD">CAD ($)</option>
             </select>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">App Base URL (for printed QR codes)</label>
+            <input type="url" id="org-base-url" placeholder="https://app.sierramycolab.com" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-emerald-500/60">
+            <p class="text-[10px] text-slate-500 mt-1">Used to generate permanent, scannable QR codes on printed labels.</p>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Company Logo (Printed Labels)</label>
+            <div class="flex items-center gap-3 bg-slate-950 p-3 rounded-xl border border-slate-800">
+              <div class="w-12 h-12 rounded-lg bg-slate-900 border border-slate-700 flex items-center justify-center overflow-hidden shrink-0">
+                <span id="org-logo-preview-placeholder" class="text-xl text-slate-500">🏢</span>
+                <img id="org-logo-preview" class="hidden w-full h-full object-contain">
+              </div>
+              <div class="flex-1 min-w-0 space-y-1">
+                <input type="file" id="org-logo-upload" accept="image/*" class="text-xs text-slate-400 file:mr-2 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-slate-800 file:text-slate-200 hover:file:bg-slate-700 cursor-pointer">
+                <p class="text-[10px] text-slate-500">PNG, JPG, or SVG. Printed on label headers.</p>
+              </div>
+              <button type="button" id="org-logo-remove-btn" onclick="removeOrgLogo()" class="hidden text-xs text-red-400 hover:text-red-300 font-bold px-2 py-1">Remove</button>
+            </div>
           </div>
         </div>
 

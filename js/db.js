@@ -6,17 +6,40 @@
 
 import { APP_CONFIG, SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
-// Live mutable application state (single source of truth).
-// NOTE: Intentionally NOT hydrated from localStorage. Supabase is the
-// authoritative source of truth; local state starts empty and is populated
-// by syncItemsWithCloud() after the database query completes. This prevents
-// stale or corrupted cached arrays from being rendered before the fetch.
+// Live mutable application state.
+// Hydrated initially from localStorage, then synced and updated with Supabase.
 export const db = {
   items: [],
   pcBatches: [],
   customers: [],
   orders: []
 };
+
+// Hydrate items and batches from local storage safely on startup
+export function loadItems() {
+  try {
+    const rawItems = localStorage.getItem(APP_CONFIG.STORAGE_KEYS.ITEMS);
+    if (rawItems) {
+      const parsed = JSON.parse(rawItems);
+      if (Array.isArray(parsed)) {
+        db.items = parsed;
+      }
+    }
+    const rawBatches = localStorage.getItem(APP_CONFIG.STORAGE_KEYS.BATCHES);
+    if (rawBatches) {
+      const parsed = JSON.parse(rawBatches);
+      if (Array.isArray(parsed)) {
+        db.pcBatches = parsed;
+      }
+    }
+  } catch (e) {
+    console.warn('Failed to load items from localStorage:', e);
+  }
+  return db.items;
+}
+
+// Initial load from localStorage
+loadItems();
 
 // Multi-tenant organization and location context variables
 export let userOrganizations = [];
@@ -157,12 +180,6 @@ export function clearLegacyStorage() {
       sessionStorage.removeItem(key);
     } catch (e) { /* storage unavailable: ignore */ }
   });
-  // Also remove the current items/batches keys and any pending import payloads so the app always starts
-  // empty and waits for the Supabase fetch to populate state.
-  localStorage.removeItem(APP_CONFIG.STORAGE_KEYS.ITEMS);
-  localStorage.removeItem(APP_CONFIG.STORAGE_KEYS.BATCHES);
-  sessionStorage.removeItem(APP_CONFIG.STORAGE_KEYS.ITEMS);
-  sessionStorage.removeItem(APP_CONFIG.STORAGE_KEYS.BATCHES);
   clearPendingImportStorage();
 }
 
@@ -347,28 +364,20 @@ function serializeItemForCloud(item, userId) {
     yields: Array.isArray(item.yields) ? item.yields : [],
     created_at: createdAt,
     updated_at: updatedAt,
-    organization_id: item.organization_id || currentOrganizationId || null,
-    location_id: item.location_id || currentLocationId || (userLocations[0] ? userLocations[0].id : null) || null
+    organization_id: item.organization_id || currentOrganizationId || null
   };
 
-  // Preserve the custom human-readable code (e.g. "MY-Z9UGC") when present.
-  // The legacy id may have been the source of this code; once migrated to a
-  // real UUID, the code lives in the `code` column for display/search.
-  if (item.code) {
-    sanitizedItem.code = item.code;
+  if (item.containerType || item.container_type) {
+    sanitizedItem.container_type = item.containerType || item.container_type;
   }
 
-  // Include prep_date if present (used for backdating historical runs)
-  if (item.prepDate) {
-    sanitizedItem.prep_date = item.prepDate;
-  }
-  // Include container capacity for PC load calculations
-  if (item.containerCapacity != null) {
-    sanitizedItem.container_capacity = item.containerCapacity;
-  }
-  if (item.containerType) {
-    sanitizedItem.container_type = item.containerType;
-  }
+  // Ensure non-schema/unmapped columns are never sent to Supabase
+  delete sanitizedItem.legacy_source_description;
+  delete sanitizedItem.prep_date;
+  delete sanitizedItem.code;
+  delete sanitizedItem.location_id;
+  delete sanitizedItem.container_capacity;
+  delete sanitizedItem.parent_id;
 
   return sanitizedItem;
 }
@@ -436,7 +445,17 @@ export async function pushLocalChangesToCloud() {
   // replace legacy non-UUID ids with fresh UUIDs, while pendingCloudIds is
   // keyed by the original id.
   const originalIds = itemsToPush.map(i => i.id);
-  const rows = itemsToPush.map(item => serializeItemForCloud(item, user.id));
+  const rows = itemsToPush.map(item => {
+    const row = serializeItemForCloud(item, user.id);
+    if (row) {
+      delete row.legacy_source_description;
+      delete row.prep_date;
+      delete row.code;
+      delete row.location_id;
+      delete row.container_capacity;
+    }
+    return row;
+  });
   const { error } = await fetchWithAuthRetry(() => supabaseClient.from('items').upsert(rows, { onConflict: 'id' }));
   if (error) {
     console.warn('Supabase upsert failed:', error.message);
@@ -504,7 +523,6 @@ function ensureValidCloudId(item) {
 // Any key NOT in this list will be stripped from the payload before insert.
 const ALLOWED_COLUMNS = [
   'user_id',
-  'code',
   'name',
   'strain',
   'medium_type',
@@ -514,11 +532,8 @@ const ALLOWED_COLUMNS = [
   'yields',
   'created_at',
   'updated_at',
-  'prep_date',
-  'container_capacity',
   'container_type',
-  'organization_id',
-  'location_id'
+  'organization_id'
 ];
 
 // --- Defensive Key Mapping ---
@@ -540,6 +555,12 @@ const KEY_ALIASES = {
   // updated_at aliases
   updatedAt: 'updated_at',
   updated_at: 'updated_at',
+  // parent_id aliases
+  parentItemId: 'parent_id',
+  parent_id: 'parent_id',
+  // legacy_source_description aliases
+  legacySourceDescription: 'legacy_source_description',
+  legacy_source_description: 'legacy_source_description',
   // direct mappings (no alias needed)
   strain: 'strain',
   stage: 'stage',
@@ -548,9 +569,6 @@ const KEY_ALIASES = {
   // prep date aliases
   prepDate: 'prep_date',
   prep_date: 'prep_date',
-  // container capacity aliases
-  containerCapacity: 'container_capacity',
-  container_capacity: 'container_capacity',
   // container type aliases
   containerType: 'container_type',
   container_type: 'container_type',
@@ -564,13 +582,6 @@ const KEY_ALIASES = {
 // Strips extra fields like breakAndShake, parentItemId, legacy non-UUID ids, etc.
 function transformLegacyItemForSupabase(item, userId) {
   if (!item || typeof item !== 'object') return null;
-
-  // Preserve the legacy custom code (e.g. "MY-Z9UGC") into the `code` column
-  // so it isn't lost during import, then omit the `id` key entirely so
-  // Supabase auto-generates a fresh UUID primary key for the new row.
-  // Prefer an explicit `code`, and only fall back to a legacy non-UUID `id`.
-  // Never write a valid UUID into `code` (that would duplicate the key).
-  const customCode = item.code || (item.id && !isValidUuid(item.id) ? item.id : null) || null;
 
   // Step 1: Defensive mapping - iterate over incoming item keys and map
   // known legacy aliases to their Supabase column names.
@@ -589,7 +600,6 @@ function transformLegacyItemForSupabase(item, userId) {
   // Step 2: Build the clean payload with defaults for missing fields.
   const cleanedItem = {
     user_id: userId,
-    code: customCode,
     name: mappedItem.name || '',
     strain: mappedItem.strain || '',
     medium_type: mappedItem.medium_type || '',
@@ -599,9 +609,8 @@ function transformLegacyItemForSupabase(item, userId) {
     yields: Array.isArray(mappedItem.yields) ? mappedItem.yields : [],
     created_at: mappedItem.created_at || new Date().toISOString(),
     updated_at: mappedItem.updated_at || new Date().toISOString(),
-    prep_date: mappedItem.prep_date || null,
-    container_capacity: mappedItem.container_capacity != null ? mappedItem.container_capacity : null,
-    container_type: mappedItem.container_type || null
+    container_type: mappedItem.container_type || null,
+    organization_id: mappedItem.organization_id || currentOrganizationId || null
   };
 
   // Step 3: Final whitelist filter - ensure ONLY ALLOWED_COLUMNS are present.
@@ -614,10 +623,11 @@ function transformLegacyItemForSupabase(item, userId) {
   }
 
   // Step 4: Include the `id` if it's a valid UUID so UPSERT can match existing
-  // records. For legacy non-UUID ids (e.g. "MY-Z9UGC"), omit the id so Supabase
-  // auto-generates a valid UUID, while the legacy code is preserved in `code`.
+  // records. For items without a valid UUID, assign a generated UUID.
   if (item.id && isValidUuid(item.id)) {
     sanitizedItem.id = item.id;
+  } else {
+    sanitizedItem.id = generateCloudUuid();
   }
   return sanitizedItem;
 }
@@ -652,8 +662,20 @@ export async function uploadItemsToCloud(items) {
   //    - Preserves the legacy custom code into the `code` column
   //    - Omits the `id` key so Supabase auto-generates a fresh UUID
   //    - Attaches user_id from the active session
+  //    - Explicitly strips non-schema fields like container_capacity
   const formattedItems = items
-    .map(item => transformLegacyItemForSupabase(item, user.id))
+    .map(item => {
+      const sanitized = transformLegacyItemForSupabase(item, user.id);
+      if (sanitized) {
+        delete sanitized.legacy_source_description;
+        delete sanitized.prep_date;
+        delete sanitized.code;
+        delete sanitized.location_id;
+        delete sanitized.container_capacity;
+        delete sanitized.parent_id;
+      }
+      return sanitized;
+    })
     .filter(item => item != null);
 
   if (!formattedItems.length) {
@@ -796,7 +818,6 @@ export async function syncItemsWithCloud() {
     }
 
     // 1) FETCH ONLY — filtered by current organization (multi-tenant) or user
-    //    IMPORTANT: do NOT push/upsert local state during page mount/fetch.
     let query = supabaseClient.from('items').select('*');
     if (currentOrganizationId) {
       query = query.eq('organization_id', currentOrganizationId);
@@ -810,14 +831,33 @@ export async function syncItemsWithCloud() {
       .map(deserializeCloudRow)
       .filter(item => item != null);
 
-    // 2) REPLACE local state with the fetched data (never append/merge).
-    db.items = cloudItems;
+    // 2) Safety check: DO NOT clear or overwrite local items if Supabase returns an empty array
+    // unless explicitly logged out. If local items exist that aren't in Supabase, execute uploadItemsToCloud automatically.
+    if (cloudItems.length === 0) {
+      if (db.items.length > 0) {
+        // Upload local items to cloud so they are saved to Supabase
+        uploadItemsToCloud(db.items).catch(err => {
+          console.warn('Auto-uploading local items to Supabase failed:', err);
+        });
+      }
+    } else {
+      // If we have local items not yet in cloudItems, preserve and upload them
+      const cloudIdSet = new Set(cloudItems.map(i => i.id));
+      const missingLocalItems = db.items.filter(i => i && i.id && !cloudIdSet.has(i.id));
+      
+      if (missingLocalItems.length > 0) {
+        db.items = [...cloudItems, ...missingLocalItems];
+        uploadItemsToCloud(missingLocalItems).catch(err => {
+          console.warn('Auto-uploading missing local items to Supabase failed:', err);
+        });
+      } else {
+        db.items = cloudItems;
+      }
+    }
     pendingCloudIds.clear();
     
     // 3) Persist locally & align the change-detection snapshot so this fetch
-    //    isn't mistaken for a local mutation by stampUpdatedItems(). Persist
-    //    directly (instead of saveItems()) so the fetch itself can never
-    //    schedule a cloud push.
+    //    isn't mistaken for a local mutation by stampUpdatedItems().
     lastItemsSnapshot = JSON.stringify(db.items);
     localStorage.setItem(APP_CONFIG.STORAGE_KEYS.ITEMS, lastItemsSnapshot);
     localStorage.setItem(APP_CONFIG.STORAGE_KEYS.BATCHES, JSON.stringify(db.pcBatches));
@@ -825,13 +865,10 @@ export async function syncItemsWithCloud() {
 
     lastSyncInfo = { synced: true, at: new Date().toISOString(), user };
     notifySyncStatus();
-    return { synced: true, user, itemCount: cloudItems.length };
+    return { synced: true, user, itemCount: db.items.length };
   } catch (err) {
-    // Fetch error (network / auth / server): clear the stale local cache so
-    // the UI never renders outdated items that are out of sync with Supabase.
-    // No saveItems() here — a failed fetch must never trigger a push.
+    // Fetch error (network / auth / server): preserve local state so user's data isn't lost
     notifySyncError(err, 'sync');
-    clearLocalItemsCache();
     lastSyncInfo = { synced: false, at: null, user: null, error: err };
     notifySyncStatus();
     return { synced: false, reason: 'error', error: err };

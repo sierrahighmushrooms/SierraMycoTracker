@@ -33,12 +33,11 @@
 }
 
 .print-card, .label-card, .qr-label {
-  position: relative !important;
-  z-index: 1 !important;
-  margin: 0 !important;
-  padding: 5mm !important;
-  box-shadow: none !important;
-  border: 1px solid #ccc !important;
+  position: relative;
+  z-index: 1;
+  margin: 0;
+  box-shadow: none;
+  border: 1px solid #ccc;
   background: white !important;
   color: black !important;
 }
@@ -217,4 +216,22 @@ html {
    Smooth transitions for the progress bar. */
 #container-usage-widget .rounded-full {
   transition: width 0.5s ease-in-out;
+}
+
+/* ---- Container Cards Interactive Styling ---- */
+.container-card, [data-item-id] {
+  cursor: pointer;
+  user-select: none;
+}
+
+/* ---- Media Print Rules ----
+   Explicitly keep the print target visible while suppressing all other UI */
+@media print {
+  body > *:not(#print-mount):not(#bulk-print-section) {
+    display: none !important;
+  }
+  #print-mount, #print-mount *,
+  #bulk-print-section, #bulk-print-section * {
+    visibility: visible !important;
+  }
 }

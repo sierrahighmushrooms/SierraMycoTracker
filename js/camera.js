@@ -5,6 +5,7 @@ import { db } from './db.js';
 
 let html5QrcodeScanner = null; // standalone scanner modal instance
 let html5QrCode = null;        // G2G in-modal scanner instance
+let html5QrCodeSpawnBulk = null; // Spawn to Bulk in-modal scanner instance
 
 // --- Standalone scanner modal ---
 export function startScanner() {
@@ -92,6 +93,53 @@ export function stopG2GCameraScan() {
     });
   } else {
     const container = document.getElementById('g2g-camera-container');
+    if (container) container.classList.add('hidden');
+  }
+}
+
+// --- Spawn to Bulk in-modal camera scan ---
+export function startSpawnBulkCameraScan() {
+  if (html5QrCodeSpawnBulk) return;
+  const container = document.getElementById('spawn-bulk-camera-container');
+  if (!container) return;
+
+  container.classList.remove('hidden');
+
+  html5QrCodeSpawnBulk = new Html5Qrcode('spawn-bulk-qr-reader');
+  html5QrCodeSpawnBulk.start(
+    { facingMode: 'environment' },
+    { fps: 10, qrbox: { width: 200, height: 200 } },
+    (decodedText) => {
+      // Successfully decoded a QR code -> push through the scan entry pipeline
+      if (typeof window.handleSpawnBulkScanInput === 'function') {
+        window.handleSpawnBulkScanInput({ key: 'Enter', target: { value: decodedText } });
+      }
+      // Release camera hardware and hide the scanner UI
+      stopSpawnBulkCameraScan();
+    },
+    () => { /* ignore decoding errors */ }
+  ).catch((err) => {
+    console.error('Could not start webcam scanner:', err);
+    html5QrCodeSpawnBulk = null;
+    container.classList.add('hidden');
+    alert('Could not start camera: ' + err);
+  });
+}
+
+export function stopSpawnBulkCameraScan() {
+  if (html5QrCodeSpawnBulk) {
+    html5QrCodeSpawnBulk.stop().then(() => {
+      html5QrCodeSpawnBulk.clear();
+      html5QrCodeSpawnBulk = null;
+      const container = document.getElementById('spawn-bulk-camera-container');
+      if (container) container.classList.add('hidden');
+    }).catch(() => {
+      html5QrCodeSpawnBulk = null;
+      const container = document.getElementById('spawn-bulk-camera-container');
+      if (container) container.classList.add('hidden');
+    });
+  } else {
+    const container = document.getElementById('spawn-bulk-camera-container');
     if (container) container.classList.add('hidden');
   }
 }

@@ -99,17 +99,71 @@ function hideModal(element) {
   element.classList.remove('flex');
 }
 
-// --- Single Item Detail Modal ---
-export function openItemModal(id) {
-  return openModal(id);
+// Helper to dynamically find an item by id, code, custom_id, or display_id
+export function findItem(identifier) {
+  if (!identifier) return null;
+  if (typeof identifier === 'object' && identifier !== null) {
+    const key = identifier.id || identifier.code || identifier.custom_id || identifier.display_id;
+    return (key ? findItem(key) : null) || identifier;
+  }
+  return (db.items || []).find(i => 
+    i && (
+      i.id === identifier || 
+      i.code === identifier || 
+      i.custom_id === identifier || 
+      i.display_id === identifier
+    )
+  ) || null;
 }
 
-export function openModal(id) {
-  activeItemId = id;
-  const item = db.items.find(i => i.id === id);
+// --- Single Item Detail Modal ---
+export function openItemModal(itemOrId) {
+  return openModal(itemOrId);
+}
 
-  document.getElementById('modal-id').innerText = item.id;
-  document.getElementById('modal-label').innerText = item.label;
+export function openItemDetailModal(itemOrId) {
+  if (!itemOrId) {
+    console.warn('openItemDetailModal: No item or ID provided.');
+    return;
+  }
+  const item = findItem(itemOrId);
+  if (!item) {
+    console.warn('openItemDetailModal: Item not found for:', itemOrId);
+    showToast('Container item not found.', 'warning');
+    return;
+  }
+  return openModal(item);
+}
+
+export function showItemDetails(itemOrId) {
+  return openModal(itemOrId);
+}
+
+export function showContainerDetails(itemOrId) {
+  return openModal(itemOrId);
+}
+
+export function openModal(itemOrId) {
+  if (!itemOrId) {
+    console.warn('openModal: No item or ID provided.');
+    return;
+  }
+
+  const item = findItem(itemOrId);
+
+  if (!item) {
+    const id = typeof itemOrId === 'object' ? (itemOrId.id || itemOrId.code || itemOrId.custom_id || 'unknown') : itemOrId;
+    console.warn(`openModal: Item not found with ID "${id}"`);
+    showToast('Container item not found.', 'warning');
+    return;
+  }
+
+  activeItemId = item.id || id;
+
+  const modalIdEl = document.getElementById('modal-id');
+  if (modalIdEl) modalIdEl.innerText = item.id;
+  const modalLabelEl = document.getElementById('modal-label');
+  if (modalLabelEl) modalLabelEl.innerText = item.label;
 
   let parentText = item.parentItemId ? `Transferred from ${item.parentItemId}` : 'Spore/LC Generation 1';
   let genText = item.generation ? ` | Generation: ${item.generation}` : '';
@@ -118,8 +172,18 @@ export function openModal(id) {
 
   // Render Spawn Lineage badge for bulk substrate items with a captured parent spawn source
   const lineageBadge = document.getElementById('modal-lineage-badge');
+  
+  // Render Legacy Source badge if applicable
   const spawnId = item.parentSpawnId || item.parentSourceId;
-  if (lineageBadge) {
+  if (lineageBadge && !item.parentItemId && item.legacy_source_description) {
+    lineageBadge.innerHTML = `
+      <div class="text-xs bg-slate-800 border border-slate-700 rounded p-2 my-2 text-slate-300">
+        <span class="text-amber-400 font-semibold">📜 Legacy Origin:</span>
+        <span class="text-slate-300">${item.legacy_source_description}</span>
+      </div>
+    `;
+    lineageBadge.classList.remove('hidden');
+  } else if (lineageBadge) {
     if (spawnId) {
       const spawnName = item.parentSpawnName || spawnId;
       lineageBadge.innerHTML = `
@@ -129,7 +193,7 @@ export function openModal(id) {
         </div>
       `;
       lineageBadge.classList.remove('hidden');
-    } else {
+    } else if (!item.legacy_source_description) {
       lineageBadge.innerHTML = '';
       lineageBadge.classList.add('hidden');
     }
@@ -649,8 +713,303 @@ export function openG2GModal() {
 }
 
 export function closeG2GModal() {
-  window.stopG2GCameraScan();
+  if (typeof window.stopG2GCameraScan === 'function') {
+    window.stopG2GCameraScan();
+  }
   hideModal(document.getElementById('g2g-modal'));
+}
+
+// --- Spawn to Fruiting Block Modal Logic ---
+let spawnBulkSelectedSubstrateId = null;
+
+export function openSpawnBulkModal() {
+  const parent = db.items.find(i => i.id === activeItemId);
+  if (!parent) return;
+
+  const parentGen = parent.generation || 1;
+  const nameEl = document.getElementById('spawn-bulk-source-name');
+  const detailsEl = document.getElementById('spawn-bulk-source-details');
+  if (nameEl) nameEl.innerText = parent.label || `${parent.medium} - ${parent.strain || 'Grain Spawn'}`;
+  if (detailsEl) detailsEl.innerText = `ID: ${parent.id} | Strain: ${parent.strain || 'Unknown'} | Gen: ${parentGen}`;
+
+  spawnBulkSelectedSubstrateId = null;
+  const scanInput = document.getElementById('spawn-bulk-scan-input');
+  if (scanInput) scanInput.value = '';
+  
+  const partialCheckbox = document.getElementById('spawn-bulk-partial');
+  if (partialCheckbox) partialCheckbox.checked = false;
+
+  const subInfo = document.getElementById('spawn-bulk-selected-substrate-info');
+  if (subInfo) {
+    subInfo.innerHTML = '';
+    subInfo.classList.add('hidden');
+  }
+
+  populateSpawnBulkSubstrateSelect();
+  switchSpawnBulkTab('scan');
+
+  showModal(document.getElementById('spawn-bulk-modal'));
+}
+
+export function closeSpawnBulkModal() {
+  if (typeof window.stopSpawnBulkCameraScan === 'function') {
+    window.stopSpawnBulkCameraScan();
+  }
+  hideModal(document.getElementById('spawn-bulk-modal'));
+}
+
+export function switchSpawnBulkTab(tab) {
+  const tabScan = document.getElementById('spawn-bulk-tab-scan');
+  const tabCreate = document.getElementById('spawn-bulk-tab-create');
+  const panelScan = document.getElementById('spawn-bulk-panel-scan');
+  const panelCreate = document.getElementById('spawn-bulk-panel-create');
+
+  if (tab === 'scan') {
+    if (tabScan) {
+      tabScan.classList.add('border-emerald-500', 'text-emerald-400');
+      tabScan.classList.remove('border-transparent', 'text-slate-400');
+    }
+    if (tabCreate) {
+      tabCreate.classList.add('border-transparent', 'text-slate-400');
+      tabCreate.classList.remove('border-emerald-500', 'text-emerald-400');
+    }
+    if (panelScan) panelScan.classList.remove('hidden');
+    if (panelCreate) panelCreate.classList.add('hidden');
+  } else {
+    if (tabCreate) {
+      tabCreate.classList.add('border-emerald-500', 'text-emerald-400');
+      tabCreate.classList.remove('border-transparent', 'text-slate-400');
+    }
+    if (tabScan) {
+      tabScan.classList.add('border-transparent', 'text-slate-400');
+      tabScan.classList.remove('border-emerald-500', 'text-emerald-400');
+    }
+    if (panelCreate) panelCreate.classList.remove('hidden');
+    if (panelScan) panelScan.classList.add('hidden');
+  }
+}
+
+export function populateSpawnBulkSubstrateSelect() {
+  const select = document.getElementById('spawn-bulk-substrate-select');
+  if (!select) return;
+
+  // Find uninoculated substrate items in Preparation stage
+  const prepSubstrates = db.items.filter(i => {
+    if (i.id === activeItemId || isLockedStage(i.stage)) return false;
+    const isPrep = i.stage === 'Preparation' || i.stage === 'Uninoculated';
+    const isSub = getItemCategory(i) === 'Bulk Substrate' || getMediumType(i) === 'substrate';
+    return isPrep && isSub;
+  });
+
+  if (!prepSubstrates.length) {
+    select.innerHTML = '<option value="">No uninoculated substrate bags in inventory</option>';
+    return;
+  }
+
+  select.innerHTML = '<option value="">-- Select Uninoculated Substrate --</option>' +
+    prepSubstrates.map(i => `<option value="${i.id}">${i.id} - ${i.label || i.medium} (${i.containerType || 'Substrate Bag'})</option>`).join('');
+}
+
+export function handleSpawnBulkScanInput(event) {
+  if (event.key === 'Enter') {
+    if (event.preventDefault) event.preventDefault();
+    const input = event.target;
+    let scannedId = (input.value || '').trim();
+    if (scannedId.includes('#item=')) {
+      scannedId = scannedId.split('#item=')[1];
+    }
+    if (scannedId.includes('/container/')) {
+      scannedId = scannedId.split('/container/')[1];
+    }
+    selectSpawnBulkSubstrate(scannedId);
+    if (input.value !== undefined) input.value = '';
+  }
+}
+
+export function onSpawnBulkSubstrateSelect(subId) {
+  selectSpawnBulkSubstrate(subId);
+}
+
+export function selectSpawnBulkSubstrate(subId) {
+  if (!subId) {
+    spawnBulkSelectedSubstrateId = null;
+    const subInfo = document.getElementById('spawn-bulk-selected-substrate-info');
+    if (subInfo) {
+      subInfo.innerHTML = '';
+      subInfo.classList.add('hidden');
+    }
+    return;
+  }
+
+  const subItem = db.items.find(i => i.id === subId || i.code === subId || i.custom_id === subId);
+  if (!subItem) {
+    showToast(`Substrate item not found: ${subId}`, 'error');
+    return;
+  }
+
+  spawnBulkSelectedSubstrateId = subItem.id;
+
+  const select = document.getElementById('spawn-bulk-substrate-select');
+  if (select) {
+    select.value = subItem.id;
+  }
+
+  const subInfo = document.getElementById('spawn-bulk-selected-substrate-info');
+  if (subInfo) {
+    subInfo.innerHTML = `
+      <div class="flex justify-between items-center">
+        <div>
+          <span class="font-bold text-emerald-400">✓ Selected Substrate:</span>
+          <span class="text-white font-mono ml-1">${subItem.id}</span>
+          <span class="text-slate-300 ml-1">(${subItem.medium || subItem.label || 'Substrate'})</span>
+        </div>
+        <button type="button" onclick="selectSpawnBulkSubstrate('')" class="text-red-400 hover:text-red-300 font-bold ml-2">✕</button>
+      </div>
+    `;
+    subInfo.classList.remove('hidden');
+  }
+}
+
+export function executeSpawnToFruitingBlock() {
+  const parent = db.items.find(i => i.id === activeItemId);
+  if (!parent) {
+    showToast('Source grain container not found.', 'error');
+    return;
+  }
+
+  const panelCreate = document.getElementById('spawn-bulk-panel-create');
+  const isQuickCreate = panelCreate && !panelCreate.classList.contains('hidden');
+
+  const ratio = document.getElementById('spawn-bulk-ratio')?.value || '1:2';
+  const qty = parseInt(document.getElementById('spawn-bulk-qty')?.value, 10) || 1;
+  const printNow = document.getElementById('spawn-bulk-print-now')?.checked !== false;
+  const isPartial = document.getElementById('spawn-bulk-partial')?.checked === true;
+
+  let substrateName = 'CVG Bulk';
+  let containerType = 'Fruiting Block / Monotub';
+  let containerWeight = '5 lb Bag';
+  let parentSubstrateItem = null;
+
+  if (isQuickCreate) {
+    substrateName = document.getElementById('spawn-bulk-create-recipe')?.value || 'CVG Bulk';
+    containerWeight = document.getElementById('spawn-bulk-create-weight')?.value || '5 lb Bag';
+    containerType = containerWeight.toLowerCase().includes('tub') || containerWeight.toLowerCase().includes('shoebox')
+      ? 'Fruiting Block / Monotub'
+      : 'Fruiting Block / Monotub';
+  } else {
+    if (spawnBulkSelectedSubstrateId) {
+      parentSubstrateItem = db.items.find(i => i.id === spawnBulkSelectedSubstrateId);
+      if (parentSubstrateItem) {
+        substrateName = parentSubstrateItem.medium || 'CVG Bulk';
+        containerType = parentSubstrateItem.containerType || 'Fruiting Block / Monotub';
+        containerWeight = parentSubstrateItem.containerWeight || '5 lb Bag';
+      }
+    }
+  }
+
+  const today = new Date().toLocaleDateString();
+  const parentGen = parent.generation || 1;
+  const strain = parent.strain || 'Unknown Strain';
+
+  const newFruitingBlocks = [];
+
+  for (let i = 1; i <= qty; i++) {
+    const newId = generateId();
+    const blockLabel = qty > 1 
+      ? `${substrateName} - ${strain} (#${i}/${qty})`
+      : `${substrateName} - ${strain}`;
+
+    const newBlock = {
+      id: newId,
+      label: blockLabel,
+      strain: strain,
+      medium: substrateName,
+      mediumType: 'substrate',
+      type: 'Bulk Substrate',
+      category: 'Bulk Substrate',
+      containerType: containerType,
+      containerWeight: containerWeight,
+      parentSourceId: parent.id,
+      parentItemId: parent.id,
+      parentGrainId: parent.id,
+      parentSubstrateId: parentSubstrateItem ? parentSubstrateItem.id : null,
+      parentSpawnId: parent.id,
+      parentSpawnName: parent.label || parent.id,
+      generation: parentGen,
+      stage: 'Colonizing',
+      createdAt: today,
+      spawnRatio: ratio,
+      totalYield: 0,
+      totalWetYield: 0,
+      totalDryYield: 0,
+      yields: [],
+      flushYields: [],
+      history: [{
+        stage: 'Colonizing',
+        timestamp: new Date().toLocaleString(),
+        notes: `Spawned from Grain Spawn ${parent.id} (Ratio ${ratio})${parentSubstrateItem ? ` paired with Substrate ${parentSubstrateItem.id}` : ''}.`,
+        env: ''
+      }],
+      lifecycleHistory: [{
+        fromStage: 'Preparation',
+        toStage: 'Colonizing',
+        timestamp: new Date().toLocaleString(),
+        type: 's2b-transfer',
+        notes: `Spawned from Grain Spawn ${parent.id} with ${substrateName} (${ratio}).`
+      }]
+    };
+
+    newFruitingBlocks.push(newBlock);
+    db.items.unshift(newBlock);
+  }
+
+  // Update Parent Grain Container based on Partial Spawn toggle
+  if (isPartial) {
+    parent.stage = 'Colonizing';
+    parent.archived = false;
+    parent.history.unshift({
+      stage: 'Colonizing',
+      timestamp: new Date().toLocaleString(),
+      notes: `Partially spawned into ${qty} fruiting block(s). Source bag remains active.`,
+      env: ''
+    });
+  } else {
+    parent.stage = 'Spent';
+    parent.archived = true;
+    parent.history.unshift({
+      stage: 'Spent',
+      timestamp: new Date().toLocaleString(),
+      notes: `Fully spawned into ${qty} fruiting block(s). Marked as SPENT.`,
+      env: ''
+    });
+  }
+
+  // If existing substrate was used, consume it / mark as Spent
+  if (parentSubstrateItem) {
+    parentSubstrateItem.stage = 'Spent';
+    parentSubstrateItem.history.unshift({
+      stage: 'Spent',
+      timestamp: new Date().toLocaleString(),
+      notes: `Consumed/inoculated during S2B with Grain Spawn ${parent.id}. Resulting Fruiting Blocks: ${newFruitingBlocks.map(b => b.id).join(', ')}.`,
+      env: ''
+    });
+  }
+
+  saveItems();
+  closeSpawnBulkModal();
+  closeModal();
+
+  if (printNow) {
+    showToast(`Created ${qty} Fruiting Block(s)! Opening label printer...`, 'success', 3000);
+    openPrintSettingsModal(newFruitingBlocks);
+  } else {
+    showToast(`✓ Fruiting Block(s) created! You can print labels anytime from Container Details.`, 'success', 6000);
+  }
+
+  if (typeof window.render === 'function') {
+    window.render();
+    window.updateDashboard();
+  }
 }
 
 export function switchG2GTab(tab) {
@@ -885,6 +1244,41 @@ export function executeG2GScanTransfer() {
   alert(`Successfully transferred to ${g2gScannedIds.length} items via G2G.`);
 }
 
+// --- Quick-Log Parent Asset Modal ---
+export function openQuickLogParentModal() {
+  const modal = document.getElementById('quick-log-parent-modal');
+  if (modal) {
+    showModal(modal);
+    const dateInput = document.getElementById('qlp-date-created');
+    if (dateInput) {
+      const today = new Date().toISOString().split('T')[0];
+      dateInput.max = today;
+      if (!dateInput.value) {
+        dateInput.value = today;
+      }
+    }
+    // Pre-populate strain from main inoculation form if typed
+    const mainStrainInput = document.getElementById('input-strain');
+    const qlpStrainInput = document.getElementById('qlp-strain');
+    if (mainStrainInput && qlpStrainInput && mainStrainInput.value && !qlpStrainInput.value) {
+      qlpStrainInput.value = mainStrainInput.value;
+    }
+    const qlpLabelInput = document.getElementById('qlp-label');
+    if (qlpLabelInput) {
+      setTimeout(() => qlpLabelInput.focus(), 100);
+    }
+  }
+}
+
+export function closeQuickLogParentModal() {
+  const modal = document.getElementById('quick-log-parent-modal');
+  if (modal) {
+    hideModal(modal);
+    const form = document.getElementById('quick-log-parent-form');
+    if (form) form.reset();
+  }
+}
+
 // --- Quick Add Source Modal ---
 export function openQuickAddModal() {
   showModal(document.getElementById('quick-add-modal'));
@@ -918,19 +1312,33 @@ export function calculateCVG() {
 // Returns the active label template, applying any saved custom dims when
 // the 'custom' label model is selected.
 function getActiveTemplate() {
-  const tmpl = resolveLabelTemplate(labelModel);
-  if (labelModel === 'custom' || tmpl.custom) {
+  const tmpl = resolveLabelTemplate(labelModel) || LABEL_TEMPLATES[APP_CONFIG.DEFAULT_LABEL_MODEL] || {
+    name: 'Default 30-Up',
+    printerType: PRINTER_TYPES.SHEET,
+    page: { width: 8.5, height: 11 },
+    margin: { top: 0.5, bottom: 0.5, left: 0.1875, right: 0.1875 },
+    label: { width: 2.625, height: 1.0 },
+    grid: { cols: 3, rows: 10 },
+    gap: { col: 0.125, row: 0 },
+    slots: 30
+  };
+
+  if (labelModel === 'custom' || tmpl?.custom) {
     const stored = JSON.parse(localStorage.getItem(APP_CONFIG.STORAGE_KEYS.CUSTOM_LABEL_DIMS) || 'null');
     if (stored) {
+      const w = parseFloat(stored.width) || parseFloat(stored.label?.width) || 2.625;
+      const h = parseFloat(stored.height) || parseFloat(stored.label?.height) || 1.0;
+      const c = parseInt(stored.cols) || parseInt(stored.grid?.cols) || 1;
+      const r = parseInt(stored.rows) || parseInt(stored.grid?.rows) || 1;
       return {
         name: 'Custom Dimensions',
         printerType: printerType,
-        page: stored.page || { width: stored.width, height: stored.height },
+        page: stored.page || { width: w * c, height: h * r },
         margin: stored.margin || { top: 0, bottom: 0, left: 0, right: 0 },
-        label: { width: stored.width, height: stored.height },
-        grid: { cols: stored.cols || 1, rows: stored.rows || 1 },
+        label: { width: w, height: h },
+        grid: { cols: c, rows: r },
         gap: stored.gap || { col: 0, row: 0 },
-        slots: (stored.cols || 1) * (stored.rows || 1),
+        slots: c * r,
         continuous: printerType === PRINTER_TYPES.THERMAL
       };
     }
@@ -940,7 +1348,7 @@ function getActiveTemplate() {
 
 function getLayoutConfig(tmpl) {
   const t = tmpl || getActiveTemplate();
-  return { slots: t.slots || 1, cols: (t.grid && t.grid.cols) || 1 };
+  return { slots: t?.slots || 1, cols: (t?.grid && t.grid.cols) || 1 };
 }
 
 // Apply the resolved template's physical metrics as CSS custom properties so
@@ -948,17 +1356,30 @@ function getLayoutConfig(tmpl) {
 function applyTemplateCSSVars(tmpl) {
   const root = document.documentElement;
   if (!tmpl) return;
-  root.style.setProperty('--label-width', `${tmpl.label.width}in`);
-  root.style.setProperty('--label-height', `${tmpl.label.height}in`);
-  root.style.setProperty('--page-width', `${tmpl.page.width}in`);
-  root.style.setProperty('--page-height', `${tmpl.page.height}in`);
-  root.style.setProperty('--page-margin-top', `${tmpl.margin.top}in`);
-  root.style.setProperty('--page-margin-bottom', `${tmpl.margin.bottom}in`);
-  root.style.setProperty('--page-margin-left', `${tmpl.margin.left}in`);
-  root.style.setProperty('--page-margin-right', `${tmpl.margin.right}in`);
-  root.style.setProperty('--label-cols', `${tmpl.grid.cols}`);
-  root.style.setProperty('--label-col-gap', `${tmpl.gap.col}in`);
-  root.style.setProperty('--label-row-gap', `${tmpl.gap.row}in`);
+
+  const labelWidth = tmpl.label?.width ?? tmpl.width ?? 2.625;
+  const labelHeight = tmpl.label?.height ?? tmpl.height ?? 1.0;
+  const pageWidth = tmpl.page?.width ?? 8.5;
+  const pageHeight = tmpl.page?.height ?? 11;
+  const marginTop = tmpl.margin?.top ?? 0.5;
+  const marginBottom = tmpl.margin?.bottom ?? 0.5;
+  const marginLeft = tmpl.margin?.left ?? 0.1875;
+  const marginRight = tmpl.margin?.right ?? 0.1875;
+  const cols = tmpl.grid?.cols ?? 1;
+  const gapCol = tmpl.gap?.col ?? 0;
+  const gapRow = tmpl.gap?.row ?? 0;
+
+  root.style.setProperty('--label-width', `${labelWidth}in`);
+  root.style.setProperty('--label-height', `${labelHeight}in`);
+  root.style.setProperty('--page-width', `${pageWidth}in`);
+  root.style.setProperty('--page-height', `${pageHeight}in`);
+  root.style.setProperty('--page-margin-top', `${marginTop}in`);
+  root.style.setProperty('--page-margin-bottom', `${marginBottom}in`);
+  root.style.setProperty('--page-margin-left', `${marginLeft}in`);
+  root.style.setProperty('--page-margin-right', `${marginRight}in`);
+  root.style.setProperty('--label-cols', `${cols}`);
+  root.style.setProperty('--label-col-gap', `${gapCol}in`);
+  root.style.setProperty('--label-row-gap', `${gapRow}in`);
 }
 
 export function openPrintSettingsModal(itemList = null) {
@@ -986,6 +1407,61 @@ export function openPrintSettingsModal(itemList = null) {
     includeContainerCheckbox.checked = localStorage.getItem(APP_CONFIG.STORAGE_KEYS.PRINT_INCLUDE_CONTAINER) === 'true';
   }
 
+  const showNameCheckbox = document.getElementById('print-show-name');
+  if (showNameCheckbox) {
+    const saved = localStorage.getItem(APP_CONFIG.STORAGE_KEYS.PRINT_SHOW_NAME);
+    showNameCheckbox.checked = saved === null ? true : saved === 'true';
+  }
+
+  const showBatchIdCheckbox = document.getElementById('print-show-batch-id');
+  if (showBatchIdCheckbox) {
+    const saved = localStorage.getItem(APP_CONFIG.STORAGE_KEYS.PRINT_SHOW_BATCH_ID);
+    showBatchIdCheckbox.checked = saved === null ? true : saved === 'true';
+  }
+
+  const showStrainCheckbox = document.getElementById('print-show-strain');
+  if (showStrainCheckbox) {
+    const saved = localStorage.getItem(APP_CONFIG.STORAGE_KEYS.PRINT_SHOW_STRAIN);
+    showStrainCheckbox.checked = saved === null ? true : saved === 'true';
+  }
+
+  const showDatesCheckbox = document.getElementById('print-show-dates');
+  if (showDatesCheckbox) {
+    const saved = localStorage.getItem(APP_CONFIG.STORAGE_KEYS.PRINT_SHOW_DATES);
+    showDatesCheckbox.checked = saved === null ? true : saved === 'true';
+  }
+
+  // Company logo toggle initialization and visibility
+  const orgLogoData = localStorage.getItem(APP_CONFIG.STORAGE_KEYS.ORG_LOGO_DATA);
+  const showLogoContainer = document.getElementById('print-show-logo-container');
+  const showLogoCheckbox = document.getElementById('print-show-logo');
+  if (showLogoContainer) {
+    if (orgLogoData) {
+      showLogoContainer.classList.remove('hidden');
+      if (showLogoCheckbox) {
+        showLogoCheckbox.disabled = false;
+        const savedLogoPref = localStorage.getItem(APP_CONFIG.STORAGE_KEYS.PRINT_SHOW_LOGO);
+        showLogoCheckbox.checked = savedLogoPref === 'true';
+      }
+    } else {
+      showLogoContainer.classList.add('hidden');
+      if (showLogoCheckbox) {
+        showLogoCheckbox.checked = false;
+        showLogoCheckbox.disabled = true;
+      }
+    }
+  }
+
+  const handwritingCheckbox = document.getElementById('print-enable-handwriting');
+  if (handwritingCheckbox) {
+    handwritingCheckbox.checked = localStorage.getItem(APP_CONFIG.STORAGE_KEYS.PRINT_ENABLE_HANDWRITING) === 'true';
+  }
+
+  const customHandwritingInput = document.getElementById('custom-handwriting-lines');
+  if (customHandwritingInput) {
+    customHandwritingInput.value = localStorage.getItem(APP_CONFIG.STORAGE_KEYS.PRINT_CUSTOM_HANDWRITING_LINES) || '';
+  }
+
   // Customize dynamic print action button text
   const actionBtn = document.getElementById('print-settings-action-btn');
   if (actionBtn) {
@@ -1003,11 +1479,18 @@ export function openPrintSettingsModal(itemList = null) {
     showModal(modal);
   }
 
-  // Show a subtle dev-environment warning when printing labels from a
-  // temporary dev URL (dev tunnel / localhost) without an explicit base URL.
+  // Show dev-environment notice / confirmation when printing labels
   const devWarning = document.getElementById('print-dev-warning');
   if (devWarning) {
-    if (isUsingTemporaryBaseUrl()) {
+    const configuredBaseUrl = localStorage.getItem('orgBaseUrl');
+    if (configuredBaseUrl && configuredBaseUrl.trim()) {
+      const cleanUrl = configuredBaseUrl.trim().replace(/\/$/, '');
+      devWarning.className = 'bg-emerald-950/60 border border-emerald-600/60 rounded-lg p-3 text-[11px] text-emerald-300 leading-relaxed';
+      devWarning.innerHTML = `✅ QR codes configured to route to: <span class="font-mono font-semibold">${cleanUrl}</span>`;
+      devWarning.classList.remove('hidden');
+    } else if (isUsingTemporaryBaseUrl()) {
+      devWarning.className = 'bg-amber-950/50 border border-amber-600/50 rounded-lg p-3 text-[11px] text-amber-300 leading-relaxed';
+      devWarning.innerHTML = '⚠️ Notice: You are printing labels from a dev environment. Ensure your Base URL points to your live deployment so printed QR codes work permanently.';
       devWarning.classList.remove('hidden');
     } else {
       devWarning.classList.add('hidden');
@@ -1096,6 +1579,18 @@ export function refreshPrintSettingsUI(shouldSave = true) {
   const tmpl = getActiveTemplate();
   const config = getLayoutConfig(tmpl);
 
+  // Handwriting Lines section visibility: height >= 2 or custom
+  const handwritingContainer = document.getElementById('handwriting-settings-container');
+  if (handwritingContainer) {
+    const isCustom = labelModel === 'custom' || tmpl?.custom;
+    const labelH = tmpl.label?.height ?? tmpl.height ?? 0;
+    if (isCustom || labelH >= 2.0) {
+      handwritingContainer.classList.remove('hidden');
+    } else {
+      handwritingContainer.classList.add('hidden');
+    }
+  }
+
   const offsetContainer = document.getElementById('print-offset-container');
   const offsetSelect = document.getElementById('print-offset-select');
   if (offsetContainer) {
@@ -1142,7 +1637,7 @@ export function renderPreviewGrid() {
 
   for (let i = 1; i <= config.slots; i++) {
     const cell = document.createElement('div');
-    cell.className = 'w-10 h-8 rounded border flex items-center justify-center text-[10px] font-bold cursor-pointer transition';
+    cell.className = 'h-6 rounded border flex items-center justify-center text-[9px] font-semibold cursor-pointer transition py-0.5';
     cell.innerText = i;
 
     if (i < printOffset) {
@@ -1186,6 +1681,41 @@ export function applyOrExecutePrintSettings() {
     localStorage.setItem(APP_CONFIG.STORAGE_KEYS.PRINT_INCLUDE_CONTAINER, includeContainerCheckbox.checked ? 'true' : 'false');
   }
 
+  const showNameCheckbox = document.getElementById('print-show-name');
+  if (showNameCheckbox) {
+    localStorage.setItem(APP_CONFIG.STORAGE_KEYS.PRINT_SHOW_NAME, showNameCheckbox.checked ? 'true' : 'false');
+  }
+
+  const showBatchIdCheckbox = document.getElementById('print-show-batch-id');
+  if (showBatchIdCheckbox) {
+    localStorage.setItem(APP_CONFIG.STORAGE_KEYS.PRINT_SHOW_BATCH_ID, showBatchIdCheckbox.checked ? 'true' : 'false');
+  }
+
+  const showStrainCheckbox = document.getElementById('print-show-strain');
+  if (showStrainCheckbox) {
+    localStorage.setItem(APP_CONFIG.STORAGE_KEYS.PRINT_SHOW_STRAIN, showStrainCheckbox.checked ? 'true' : 'false');
+  }
+
+  const showDatesCheckbox = document.getElementById('print-show-dates');
+  if (showDatesCheckbox) {
+    localStorage.setItem(APP_CONFIG.STORAGE_KEYS.PRINT_SHOW_DATES, showDatesCheckbox.checked ? 'true' : 'false');
+  }
+
+  const showLogoCheckbox = document.getElementById('print-show-logo');
+  if (showLogoCheckbox) {
+    localStorage.setItem(APP_CONFIG.STORAGE_KEYS.PRINT_SHOW_LOGO, showLogoCheckbox.checked ? 'true' : 'false');
+  }
+
+  const handwritingCheckbox = document.getElementById('print-enable-handwriting');
+  if (handwritingCheckbox) {
+    localStorage.setItem(APP_CONFIG.STORAGE_KEYS.PRINT_ENABLE_HANDWRITING, handwritingCheckbox.checked ? 'true' : 'false');
+  }
+
+  const customHandwritingInput = document.getElementById('custom-handwriting-lines');
+  if (customHandwritingInput) {
+    localStorage.setItem(APP_CONFIG.STORAGE_KEYS.PRINT_CUSTOM_HANDWRITING_LINES, customHandwritingInput.value.trim());
+  }
+
   const tmpl = getActiveTemplate();
   if (!tmpl.continuous) {
     printOffset = parseInt(document.getElementById('print-offset-select').value) || 1;
@@ -1202,6 +1732,10 @@ export function applyOrExecutePrintSettings() {
   }
 }
 
+export function openPrintModal(itemList = null) {
+  return openPrintSettingsModal(itemList);
+}
+
 export function printBulkLabels(itemList) {
   if (!itemList || !itemList.length) return alert('No labels to print.');
   openPrintSettingsModal(itemList);
@@ -1209,32 +1743,80 @@ export function printBulkLabels(itemList) {
 
 export function printSingleLabel() {
   const item = db.items.find(i => i.id === activeItemId);
-  if (item) printBulkLabels([item]);
+  if (!item) {
+    alert('No active item to print.');
+    return;
+  }
+  printBulkLabels([item]);
+}
+
+export function triggerPrint(itemList, layoutKey, offset) {
+  try {
+    return executePrint(itemList, layoutKey, offset);
+  } catch (err) {
+    console.error('triggerPrint failed:', err);
+    try {
+      window.print();
+    } catch (e) {
+      console.warn('Fallback window.print() failed:', e);
+    }
+  }
 }
 
 export function executePrint(itemList, layoutKey, offset) {
-  const section = document.getElementById('bulk-print-section');
-  if (!section) return;
+  // Guarantee unified #print-mount DOM node attached directly to body
+  let section = document.getElementById('print-mount');
+  if (!section) {
+    section = document.getElementById('bulk-print-section');
+    if (section) {
+      section.id = 'print-mount';
+    } else {
+      section = document.createElement('div');
+      section.id = 'print-mount';
+      document.body.appendChild(section);
+    }
+  }
+
+  // Ensure any other print containers are clean
+  const oldBulk = document.getElementById('bulk-print-section');
+  if (oldBulk && oldBulk !== section) {
+    oldBulk.innerHTML = '';
+    oldBulk.classList.add('hidden');
+  }
+
   section.innerHTML = '';
+  // Ensure the print target is not hidden during generation
+  section.classList.remove('hidden');
+  section.style.visibility = 'visible';
+  section.style.opacity = '1';
+  section.style.display = 'block';
 
   const tmpl = getActiveTemplate();
   applyTemplateCSSVars(tmpl);
 
+  const labelWidth = tmpl.label?.width ?? tmpl.width ?? 2.625;
+  const labelHeight = tmpl.label?.height ?? tmpl.height ?? 1.0;
   const cols = (tmpl.grid && tmpl.grid.cols) || 1;
   const rows = (tmpl.grid && tmpl.grid.rows) || 1;
   const totalSlots = cols * rows;
+  const gapCol = tmpl.gap?.col ?? 0;
+  const gapRow = tmpl.gap?.row ?? 0;
+  const marginTop = tmpl.margin?.top ?? 0;
+  const marginBottom = tmpl.margin?.bottom ?? 0;
+  const marginLeft = tmpl.margin?.left ?? 0;
+  const marginRight = tmpl.margin?.right ?? 0;
 
   // Apply layout class to container (retain legacy class names for CSS fallback)
   if (!tmpl.continuous) {
     section.className = 'layout-dynamic';
-    section.style.gridTemplateColumns = `repeat(${cols}, ${tmpl.label.width}in)`;
-    section.style.gridAutoRows = `${tmpl.label.height}in`;
-    section.style.columnGap = `${tmpl.gap.col}in`;
-    section.style.rowGap = `${tmpl.gap.row}in`;
-    section.style.paddingTop = `${tmpl.margin.top}in`;
-    section.style.paddingBottom = `${tmpl.margin.bottom}in`;
-    section.style.paddingLeft = `${tmpl.margin.left}in`;
-    section.style.paddingRight = `${tmpl.margin.right}in`;
+    section.style.gridTemplateColumns = `repeat(${cols}, ${labelWidth}in)`;
+    section.style.gridAutoRows = `${labelHeight}in`;
+    section.style.columnGap = `${gapCol}in`;
+    section.style.rowGap = `${gapRow}in`;
+    section.style.paddingTop = `${marginTop}in`;
+    section.style.paddingBottom = `${marginBottom}in`;
+    section.style.paddingLeft = `${marginLeft}in`;
+    section.style.paddingRight = `${marginRight}in`;
     section.style.display = 'grid';
 
     // Render empty invisible placeholder cards before first active label
@@ -1242,66 +1824,283 @@ export function executePrint(itemList, layoutKey, offset) {
     for (let s = 0; s < skippedCount; s++) {
       const placeholder = document.createElement('div');
       placeholder.className = 'print-placeholder';
-      placeholder.style.width = `${tmpl.label.width}in`;
-      placeholder.style.height = `${tmpl.label.height}in`;
+      placeholder.style.width = `${labelWidth}in`;
+      placeholder.style.height = `${labelHeight}in`;
       section.appendChild(placeholder);
     }
   } else {
     section.className = 'layout-single';
+    section.style.display = 'block';
+    section.style.gridTemplateColumns = '';
+    section.style.gridAutoRows = '';
+    section.style.columnGap = '';
+    section.style.rowGap = '';
+    section.style.paddingTop = '';
+    section.style.paddingBottom = '';
+    section.style.paddingLeft = '';
+    section.style.paddingRight = '';
   }
 
   const includeContainer = localStorage.getItem(APP_CONFIG.STORAGE_KEYS.PRINT_INCLUDE_CONTAINER) === 'true';
+  const showName = localStorage.getItem(APP_CONFIG.STORAGE_KEYS.PRINT_SHOW_NAME) !== 'false';
+  const showBatchId = localStorage.getItem(APP_CONFIG.STORAGE_KEYS.PRINT_SHOW_BATCH_ID) !== 'false';
+  const showStrain = localStorage.getItem(APP_CONFIG.STORAGE_KEYS.PRINT_SHOW_STRAIN) !== 'false';
+  const showDates = localStorage.getItem(APP_CONFIG.STORAGE_KEYS.PRINT_SHOW_DATES) !== 'false';
+  const showLogo = localStorage.getItem(APP_CONFIG.STORAGE_KEYS.PRINT_SHOW_LOGO) === 'true';
+  const orgLogoData = localStorage.getItem(APP_CONFIG.STORAGE_KEYS.ORG_LOGO_DATA);
+  const enableHandwriting = localStorage.getItem(APP_CONFIG.STORAGE_KEYS.PRINT_ENABLE_HANDWRITING) === 'true';
+  const customHandwritingStr = localStorage.getItem(APP_CONFIG.STORAGE_KEYS.PRINT_CUSTOM_HANDWRITING_LINES) || '';
+
+  // Helper to generate QR code canvas/image and return a Promise that resolves when ready
+  const qrPromises = [];
+
+  // Helper to format dates cleanly without raw ISO strings
+  const formatCleanDate = (dateVal) => {
+    if (!dateVal) return '';
+    // Handle standard YYYY-MM-DD or ISO strings
+    let d = new Date(dateVal);
+    if (isNaN(d.getTime())) {
+      d = new Date(dateVal + 'T12:00:00');
+    }
+    if (isNaN(d.getTime())) return String(dateVal);
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  };
+
+  // Helper to determine if an item is truly inoculated
+  const isInoculatedItem = (item) => {
+    if (!item) return false;
+    if (item.stage === 'Preparation' || item.stage === 'Uninoculated') return false;
+    if (!item.strain || item.strain === 'Uninoculated') return false;
+    return true;
+  };
 
   // Render actual active labels
-  itemList.forEach((item) => {
+  itemList.forEach((item, index) => {
     const card = document.createElement('div');
-    card.className = 'print-card';
-    card.style.width = `${tmpl.label.width}in`;
-    card.style.height = `${tmpl.label.height}in`;
+    const isLargeLabel = labelHeight >= 2.0;
+    card.className = isLargeLabel ? 'print-card print-card-large' : 'print-card';
+    card.style.width = `${labelWidth}in`;
+    card.style.height = `${labelHeight}in`;
 
-    let containerElement = '';
-    if (includeContainer && item.containerType) {
-      containerElement = `<div class="print-extra font-semibold text-emerald-800">${item.containerType}${item.containerWeight ? ` (${item.containerWeight})` : ''}</div>`;
+    const rawId = item.code || item.custom_id || item.id || '';
+    // Format long UUIDs cleanly (first 8 chars) or use readable code
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rawId);
+    const displayId = isUuid ? rawId.substring(0, 8) : rawId;
+    const containerName = item.name || item.label || '';
+
+    // Build text elements conditionally based on user toggles
+    let nameHtml = '';
+    if (showName && containerName) {
+      nameHtml = `<div class="print-name" title="${containerName}">${containerName}</div>`;
     }
 
-    // Format prep date for display (e.g., "Prepped: Aug 8, 2026")
-    let prepDateText = '';
-    if (item.prepDate) {
-      const d = new Date(item.prepDate + 'T12:00:00');
-      if (!isNaN(d.getTime())) {
-        prepDateText = `Prepped: ${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+    let batchIdHtml = '';
+    if (showBatchId && displayId) {
+      batchIdHtml = `<div class="print-id">ID: ${displayId}</div>`;
+    }
+
+    let innerContentHtml = '';
+
+    let fullWidthHandwritingHtml = '';
+
+    if (enableHandwriting) {
+      // Handwriting mode: Keep Container Name & Batch ID at top, replace remaining data with blank fillable lines
+      let fillLines = [
+        '<div class="fill-line"><span class="line-label">Strain:</span><span class="line-blank"></span></div>',
+        '<div class="fill-line"><span class="line-label">Date:</span><span class="line-blank"></span></div>'
+      ];
+
+      // Parse custom handwriting lines
+      if (customHandwritingStr) {
+        const customLines = customHandwritingStr.split(',').map(s => s.trim()).filter(Boolean);
+        customLines.forEach(line => {
+          fillLines.push(`<div class="fill-line"><span class="line-label">${line}:</span><span class="line-blank"></span></div>`);
+        });
       }
+
+      fillLines.push('<div class="fill-line"><span class="line-label">Notes:</span><span class="line-blank"></span></div>');
+
+      if (isLargeLabel) {
+        // Large templates: move handwriting lines to a dedicated full-width container below the body row
+        fullWidthHandwritingHtml = `
+          <div class="print-card-footer print-handwriting-zone">
+            ${fillLines.join('')}
+          </div>
+        `;
+        innerContentHtml = `
+          ${!isLargeLabel && showLogo && orgLogoData ? `<img src="${orgLogoData}" alt="Company Logo" class="print-logo" />` : ''}
+          ${nameHtml}
+          ${batchIdHtml}
+        `;
+      } else {
+        innerContentHtml = `
+          ${!isLargeLabel && showLogo && orgLogoData ? `<img src="${orgLogoData}" alt="Company Logo" class="print-logo" />` : ''}
+          ${nameHtml}
+          ${batchIdHtml}
+          <div class="handwriting-lines-container">
+            ${fillLines.join('')}
+          </div>
+        `;
+      }
+    } else {
+      // Standard Digital Rendering: Only render strain if container is truly inoculated (suppress 'Uninoculated')
+      let strainHtml = '';
+      if (showStrain && isInoculatedItem(item)) {
+        const strainText = item.strain;
+        strainHtml = `<div class="print-strain">${strainText}</div>`;
+      }
+
+      let dateHtml = '';
+      if (showDates) {
+        let dateParts = [];
+        // 1. Prepped Date
+        if (item.prepDate || item.prep_date) {
+          const pDate = formatCleanDate(item.prepDate || item.prep_date);
+          if (pDate) dateParts.push(`Prep: ${pDate}`);
+        }
+        // 2. Inoculation Date (only if container is actually inoculated)
+        if (isInoculatedItem(item)) {
+          const rawInocDate = item.inoculationDate || item.inoculatedAt || item.createdAt || item.created_at;
+          if (rawInocDate && rawInocDate !== 'null' && rawInocDate !== 'undefined') {
+            const formattedInoc = formatCleanDate(rawInocDate);
+            if (formattedInoc) dateParts.push(`Inoc: ${formattedInoc}`);
+          }
+        }
+        if (dateParts.length > 0) {
+          dateHtml = `<div class="print-date">${dateParts.join(' | ')}</div>`;
+        }
+      }
+
+      let containerElement = '';
+      if (includeContainer && (item.containerType || item.container_type)) {
+        const cType = item.containerType || item.container_type;
+        const cWeight = item.containerWeight || item.container_weight;
+        containerElement = `<div class="print-extra font-semibold text-emerald-800">${cType}${cWeight ? ` (${cWeight})` : ''}</div>`;
+      }
+
+      innerContentHtml = `
+        ${!isLargeLabel && showLogo && orgLogoData ? `<img src="${orgLogoData}" alt="Company Logo" class="print-logo" />` : ''}
+        ${nameHtml}
+        ${batchIdHtml}
+        ${strainHtml}
+        ${dateHtml}
+        <div class="print-extra">${item.medium || item.medium_type || ''}</div>
+        ${containerElement}
+      `;
     }
 
-    card.innerHTML = `
-      <div class="print-qr-container" id="print-qr-${item.id}"></div>
-      <div class="print-text-container">
-        <div class="print-id">${item.id}</div>
-        <div class="print-strain">${item.strain === 'Uninoculated' ? 'Uninoculated' : item.strain}</div>
-        <div class="print-date">${prepDateText || `Inoc: ${item.createdAt}`}</div>
-        <div class="print-extra">${item.medium}</div>
-        ${containerElement}
-      </div>
-    `;
+    const qrContainerId = `print-qr-${item.id || index}`;
+
+    if (isLargeLabel) {
+      // Large label structure: Optional full-width logo header banner across top, top-aligned side-by-side QR & details below, optional full-width handwriting footer
+      const headerHtml = (showLogo && orgLogoData) ? `
+        <div class="print-card-header">
+          <img src="${orgLogoData}" alt="Company Logo" class="print-logo" />
+        </div>` : '';
+
+      card.innerHTML = `
+        ${headerHtml}
+        <div class="print-card-body">
+          <div class="print-qr-container" id="${qrContainerId}"></div>
+          <div class="print-text-container">
+            ${innerContentHtml}
+          </div>
+        </div>
+        ${fullWidthHandwritingHtml}
+      `;
+    } else {
+      // Standard or compact label structure
+      card.innerHTML = `
+        <div class="print-qr-container" id="${qrContainerId}"></div>
+        <div class="print-text-container">
+          ${innerContentHtml}
+        </div>
+      `;
+    }
     section.appendChild(card);
 
-    // Render QR Code in background
-    setTimeout(() => {
-      const size = Math.round(Math.min(tmpl.label.width, tmpl.label.height) * 96 * 0.6);
-      const qrPayload = `${getAppBaseUrl()}/container/${item.id}`;
-      new QRCode(document.getElementById(`print-qr-${item.id}`), {
-        text: qrPayload,
-        width: size,
-        height: size,
-        correctLevel: QRCode.CorrectLevel.M
-      });
-    }, 30);
+    // Generate QR code and await render completion
+    const qrPromise = new Promise((resolve) => {
+      const qrContainer = document.getElementById(qrContainerId);
+      if (!qrContainer) {
+        resolve();
+        return;
+      }
+      // Use higher pixel density for QR rasterization so it renders crisp and scales via CSS
+      const qrPixelDim = 256;
+      const qrPayload = `${getAppBaseUrl()}/container/${displayId || item.id}`;
+      
+      try {
+        if (typeof QRCode !== 'undefined') {
+          new QRCode(qrContainer, {
+            text: qrPayload,
+            width: qrPixelDim,
+            height: qrPixelDim,
+            correctLevel: QRCode.CorrectLevel.M
+          });
+        }
+      } catch (err) {
+        console.error('Error rendering QRCode for item ' + (item.id || index), err);
+      }
+
+      // Check if canvas or image was generated or wait for image onload
+      let attempts = 0;
+      const checkReady = () => {
+        const img = qrContainer.querySelector('img');
+        const canvas = qrContainer.querySelector('canvas');
+        if (img) {
+          if (img.complete && img.naturalWidth !== 0) {
+            resolve();
+          } else {
+            img.onload = () => resolve();
+            img.onerror = () => resolve();
+            setTimeout(resolve, 300);
+          }
+        } else if (canvas) {
+          resolve();
+        } else {
+          attempts++;
+          if (attempts < 15) {
+            setTimeout(checkReady, 50);
+          } else {
+            resolve();
+          }
+        }
+      };
+
+      // Allow DOM to settle before checking
+      requestAnimationFrame(checkReady);
+    });
+
+    qrPromises.push(qrPromise);
   });
 
-  // Show print panel and print
-  setTimeout(() => {
-    window.print();
-  }, 350);
+  // Ensure all QR codes and DOM nodes are inserted and images rendered BEFORE invoking window.print()
+  Promise.all(qrPromises).then(() => {
+    // Wait for fonts, layout, and images to complete paint
+    if (document.fonts && document.fonts.ready) {
+      document.fonts.ready.then(triggerBrowserPrint).catch(triggerBrowserPrint);
+    } else {
+      triggerBrowserPrint();
+    }
+  }).catch(err => {
+    console.warn('QR code generation error:', err);
+    triggerBrowserPrint();
+  });
+
+  function triggerBrowserPrint() {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        setTimeout(() => {
+          try {
+            window.print();
+          } catch (printErr) {
+            console.warn('window.print() error in executePrint:', printErr);
+          }
+        }, 350);
+      });
+    });
+  }
 }
 
 
@@ -1314,9 +2113,28 @@ export function toggleSelectAll(selectAllInput) {
   updateSelectedCount();
 }
 
+export function getSelectedContainerIds() {
+  const checkboxes = document.querySelectorAll('.item-checkbox:checked, .container-card-checkbox:checked, input[type="checkbox"][id^="MY-"]:checked, input[type="checkbox"][data-item-id]:checked');
+  return Array.from(checkboxes)
+    .map(cb => cb.getAttribute('data-item-id') || cb.getAttribute('data-id') || cb.value || cb.id)
+    .filter(Boolean);
+}
+
 export function updateSelectedCount() {
-  const checkboxes = document.querySelectorAll('.item-checkbox');
-  const checkedCount = Array.from(checkboxes).filter(cb => cb.checked).length;
+  const checkboxes = document.querySelectorAll('.item-checkbox, .container-card-checkbox, input[type="checkbox"][id^="MY-"], input[type="checkbox"][data-item-id]');
+  // Deduplicate in case multiple selectors match the same input
+  const uniqueChecked = new Set();
+  const uniqueTotal = new Set();
+  checkboxes.forEach(cb => {
+    uniqueTotal.add(cb);
+    if (cb.checked) {
+      uniqueChecked.add(cb);
+    }
+  });
+
+  const checkedCount = uniqueChecked.size;
+  const totalCount = uniqueTotal.size;
+
   const printBtn = document.getElementById('print-selected-btn');
   if (printBtn) {
     printBtn.innerText = `🖨️ Print Selected Labels (${checkedCount})`;
@@ -1333,19 +2151,29 @@ export function updateSelectedCount() {
   }
   const selectAll = document.getElementById('select-all-checkbox');
   if (selectAll) {
-    selectAll.checked = checkboxes.length > 0 && checkedCount === checkboxes.length;
+    selectAll.checked = totalCount > 0 && checkedCount === totalCount;
   }
 }
 
 export function printSelectedLabels() {
-  const checkboxes = document.querySelectorAll('.item-checkbox');
-  const checkedIds = Array.from(checkboxes).filter(cb => cb.checked).map(cb => cb.getAttribute('data-id'));
-  if (!checkedIds.length) {
+  const selectedCodes = getSelectedContainerIds();
+  if (!selectedCodes.length) {
     alert('Please select at least one item label to print.');
     return;
   }
-  const itemsToPrint = db.items.filter(i => checkedIds.includes(i.id));
-  printBulkLabels(itemsToPrint);
+
+  const matchedItems = db.items.filter(item => 
+    selectedCodes.includes(item.id) || 
+    (item.code && selectedCodes.includes(item.code)) || 
+    (item.custom_id && selectedCodes.includes(item.custom_id))
+  );
+
+  if (!matchedItems.length) {
+    alert('No labels to print.');
+    return;
+  }
+
+  printBulkLabels(matchedItems);
 }
 
 // Bulk delete selected items with confirmation and Supabase sync.
@@ -1355,23 +2183,33 @@ export function printSelectedLabels() {
 // 4. Removes from local state and clears selection.
 // 5. Shows success notification with count.
 export async function deleteSelectedItems() {
-  const checkboxes = document.querySelectorAll('.item-checkbox');
-  const selectedIds = Array.from(checkboxes)
-    .filter(cb => cb.checked)
-    .map(cb => cb.getAttribute('data-id'));
+  const selectedCodes = getSelectedContainerIds();
 
-  if (!selectedIds.length) {
+  if (!selectedCodes.length) {
     showToast('No items selected for deletion.', 'warning');
     return;
   }
 
+  const matchedItems = db.items.filter(item => 
+    selectedCodes.includes(item.id) || 
+    (item.code && selectedCodes.includes(item.code)) || 
+    (item.custom_id && selectedCodes.includes(item.custom_id))
+  );
+
+  if (!matchedItems.length) {
+    showToast('No items selected for deletion.', 'warning');
+    return;
+  }
+
+  const selectedDbIds = matchedItems.map(i => i.id);
+
   // Show confirmation dialog
-  const confirmed = confirm(`Are you sure you want to delete ${selectedIds.length} selected item${selectedIds.length !== 1 ? 's' : ''}? This cannot be undone.`);
+  const confirmed = confirm(`Are you sure you want to delete ${matchedItems.length} selected item${matchedItems.length !== 1 ? 's' : ''}? This cannot be undone.`);
   if (!confirmed) return;
 
   // Delete from Supabase if configured
   if (isSupabaseConfigured()) {
-    const result = await deleteItemsFromCloud(selectedIds);
+    const result = await deleteItemsFromCloud(selectedDbIds);
     if (!result.success && result.error) {
       console.error('Bulk Delete Error:', result.error);
       showToast(`Failed to delete items from cloud: ${result.error.message}`, 'error', 8000);
@@ -1380,7 +2218,7 @@ export async function deleteSelectedItems() {
   }
 
   // Remove deleted items from local state
-  db.items = db.items.filter(i => !selectedIds.includes(i.id));
+  db.items = db.items.filter(i => !selectedDbIds.includes(i.id));
   saveItems();
 
   // Clear the select-all checkbox
@@ -1388,7 +2226,7 @@ export async function deleteSelectedItems() {
   if (selectAll) selectAll.checked = false;
 
   // Show success notification
-  showToast(`Successfully deleted ${selectedIds.length} item${selectedIds.length !== 1 ? 's' : ''}.`, 'success');
+  showToast(`Successfully deleted ${matchedItems.length} item${matchedItems.length !== 1 ? 's' : ''}.`, 'success');
 }
 
 // --- Item Modal Stage Form Submit ---
@@ -2634,14 +3472,21 @@ export async function refreshBillingInfo() {
       }
       const org = userOrganizations.find(o => o.id === currentOrganizationId);
 
-      if (org) {
-        const nameInput = document.getElementById('org-settings-name');
-        const addressInput = document.getElementById('org-settings-address');
-        const currencySelect = document.getElementById('org-settings-currency');
+      const nameInput = document.getElementById('org-settings-name');
+      const addressInput = document.getElementById('org-settings-address');
+      const currencySelect = document.getElementById('org-settings-currency');
+      const baseUrlInput = document.getElementById('org-base-url');
 
+      const savedBaseUrl = localStorage.getItem('orgBaseUrl') || (org && org.settings && org.settings.base_url) || '';
+      if (baseUrlInput) baseUrlInput.value = savedBaseUrl;
+
+      if (org) {
         if (nameInput) nameInput.value = org.name || '';
-        if (addressInput) addressInput.value = org.address || '';
-        if (currencySelect) currencySelect.value = org.currency || 'USD';
+        if (addressInput) addressInput.value = org.address || (org.settings && org.settings.address) || '';
+        if (currencySelect) currencySelect.value = org.currency || (org.settings && org.settings.currency) || 'USD';
+
+        // Load stored logo preview
+        updateOrgLogoPreviewUI();
 
         if (org.settings) {
           const enableSales = document.getElementById('org-enable-sales');
@@ -2652,6 +3497,8 @@ export async function refreshBillingInfo() {
           if (enableRacks) enableRacks.checked = org.settings.enable_racks !== false;
           if (enableSupplies) enableSupplies.checked = org.settings.enable_supplies !== false;
         }
+      } else {
+        updateOrgLogoPreviewUI();
       }
     }
 
@@ -2674,6 +3521,37 @@ export async function refreshBillingInfo() {
 
       showModal(modal);
     }
+
+// Update Org Logo Preview in Settings Modal
+export function updateOrgLogoPreviewUI() {
+  const logoData = localStorage.getItem(APP_CONFIG.STORAGE_KEYS.ORG_LOGO_DATA);
+  const preview = document.getElementById('org-logo-preview');
+  const placeholder = document.getElementById('org-logo-preview-placeholder');
+  const removeBtn = document.getElementById('org-logo-remove-btn');
+
+  if (logoData && preview) {
+    preview.src = logoData;
+    preview.classList.remove('hidden');
+    if (placeholder) placeholder.classList.add('hidden');
+    if (removeBtn) removeBtn.classList.remove('hidden');
+  } else {
+    if (preview) {
+      preview.src = '';
+      preview.classList.add('hidden');
+    }
+    if (placeholder) placeholder.classList.remove('hidden');
+    if (removeBtn) removeBtn.classList.add('hidden');
+  }
+}
+
+// Remove Org Logo handler
+export function removeOrgLogo() {
+  localStorage.removeItem(APP_CONFIG.STORAGE_KEYS.ORG_LOGO_DATA);
+  const fileInput = document.getElementById('org-logo-upload');
+  if (fileInput) fileInput.value = '';
+  updateOrgLogoPreviewUI();
+  showToast('Company logo removed.', 'info');
+}
 
 // Close organization settings modal
 export function closeOrgSettings() {
@@ -2708,10 +3586,19 @@ export async function saveOrgSettings() {
   const nameInput = document.getElementById('org-settings-name');
   const addressInput = document.getElementById('org-settings-address');
   const currencySelect = document.getElementById('org-settings-currency');
+  const baseUrlInput = document.getElementById('org-base-url');
   
   const enableSales = document.getElementById('org-enable-sales').checked;
   const enableRacks = document.getElementById('org-enable-racks').checked;
   const enableSupplies = document.getElementById('org-enable-supplies').checked;
+
+  // Persist orgBaseUrl in localStorage
+  const baseUrlVal = baseUrlInput ? baseUrlInput.value.trim() : '';
+  if (baseUrlVal) {
+    localStorage.setItem('orgBaseUrl', baseUrlVal);
+  } else {
+    localStorage.removeItem('orgBaseUrl');
+  }
 
   const { updateOrganization, currentOrganizationId } = await import('./db.js');
 
@@ -2721,7 +3608,10 @@ export async function saveOrgSettings() {
     const settings = {
       enable_sales: enableSales,
       enable_racks: enableRacks,
-      enable_supplies: enableSupplies
+      enable_supplies: enableSupplies,
+      address: addressInput ? addressInput.value.trim() : '',
+      currency: currencySelect ? currencySelect.value : 'USD',
+      base_url: baseUrlVal
     };
 
     const updates = {
@@ -2731,14 +3621,10 @@ export async function saveOrgSettings() {
     if (nameInput && nameInput.value.trim()) {
       updates.name = nameInput.value.trim();
     }
-    if (addressInput) {
-      updates.address = addressInput.value.trim();
-    }
-    if (currencySelect) {
-      updates.currency = currencySelect.value;
-    }
 
-    await updateOrganization(currentOrganizationId, updates);
+    if (currentOrganizationId) {
+      await updateOrganization(currentOrganizationId, updates);
+    }
     showToast('✓ Organization settings updated successfully!', 'success');
 
     // Trigger dynamic toggle of sidebar/app sections based on these active boolean flags

@@ -79,10 +79,11 @@ export function isFlushTrackingItem(item) {
   return haystack.includes('substrate') || haystack.includes('fruiting');
 }
 
-// Toggle G2G button, Break & Shake, Flush Yield Tracking section, and legacy
+// Toggle G2G button, Spawn to Bulk button, Break & Shake, Flush Yield Tracking section, and legacy
 // Yield Log visibility based on the item's medium type and current stage.
 export function updateModalActionVisibility(mediumType, stage, item) {
   const g2gBtn = document.getElementById('btn-g2g-transfer');
+  const spawnBulkBtn = document.getElementById('btn-spawn-bulk');
   const breakShakeBtn = document.getElementById('btn-break-shake');
   const yieldBlock = document.getElementById('yield-log-block');
   const flushSection = document.getElementById('flush-yield-section');
@@ -92,14 +93,17 @@ export function updateModalActionVisibility(mediumType, stage, item) {
 
   if (mediumType === 'substrate') {
     if (g2gBtn) g2gBtn.classList.add('hidden');
+    if (spawnBulkBtn) spawnBulkBtn.classList.add('hidden');
     if (breakShakeBtn) breakShakeBtn.classList.add('hidden');
     if (yieldBlock) yieldBlock.classList.add('hidden');
   } else if (mediumType === 'grain') {
     if (g2gBtn) g2gBtn.classList.remove('hidden');
+    if (spawnBulkBtn) spawnBulkBtn.classList.remove('hidden');
     if (breakShakeBtn) breakShakeBtn.classList.remove('hidden');
     if (yieldBlock) yieldBlock.classList.add('hidden');
   } else {
     if (flushSection) flushSection.classList.add('hidden');
+    if (spawnBulkBtn) spawnBulkBtn.classList.add('hidden');
     if (breakShakeBtn) breakShakeBtn.classList.add('hidden');
     if (yieldBlock) yieldBlock.classList.add('hidden');
     if (g2gBtn) g2gBtn.classList.remove('hidden');
@@ -305,6 +309,16 @@ export function formatPrepDate(dateStr) {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
+// Get current date & time as YYYY-MM-DDTHH:MM (for datetime-local input)
+export function getNowDateTimeLocalString(dateObj = new Date()) {
+  const year = dateObj.getFullYear();
+  const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+  const day = String(dateObj.getDate()).padStart(2, '0');
+  const hours = String(dateObj.getHours()).padStart(2, '0');
+  const minutes = String(dateObj.getMinutes()).padStart(2, '0');
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
+}
+
 // Get today's date as YYYY-MM-DD
 export function getTodayDateString() {
   const now = new Date();
@@ -315,11 +329,15 @@ export function getTodayDateString() {
   return localDateStr;
 }
 
-// Initialize the prep date input with today's date
+// Initialize the prep date input with current date/time and set max attribute to prevent future dates
 export function initPrepDateInput() {
   const input = document.getElementById('bulk-prep-date');
-  if (input && !input.value) {
-    input.value = getTodayDateString();
+  if (input) {
+    const nowStr = getNowDateTimeLocalString();
+    if (!input.value) {
+      input.value = nowStr;
+    }
+    input.max = nowStr;
   }
 }
 
@@ -335,28 +353,32 @@ export function getBatchPrefix(mediumName) {
 }
 
 // Auto-incrementing batch code derived from the selected medium + date.
-export function generateBatchCode() {
-  const medium = (document.getElementById('bulk-medium') || {}).value || '';
+// Accepts optional customMedium and customDate parameters, otherwise extracts from UI.
+export function generateBatchCode(customMedium, customDate) {
+  const medium = customMedium || (document.getElementById('bulk-medium') || {}).value || '';
   const prefix = getBatchPrefix(medium);
   
   let yyyy, mm, dd;
-  const dateInput = document.getElementById('bulk-prep-date');
-  if (dateInput && dateInput.value) {
-    const parts = dateInput.value.split('-');
-    yyyy = parts[0];
-    mm = parts[1];
-    dd = parts[2];
-  } else {
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = String(now.getMonth() + 1).padStart(2, '0');
-    const day = String(now.getDate()).padStart(2, '0');
-    const localDateStr = `${year}-${month}-${day}`;
-    const parts = localDateStr.split('-');
-    yyyy = parts[0];
-    mm = parts[1];
-    dd = parts[2];
+  const rawDateVal = customDate || (document.getElementById('bulk-prep-date') || {}).value;
+
+  if (rawDateVal) {
+    // If rawDateVal is ISO string, datetime-local (YYYY-MM-DDTHH:MM), or date string (YYYY-MM-DD)
+    const dateOnly = rawDateVal.split('T')[0];
+    const parts = dateOnly.split('-');
+    if (parts.length >= 3) {
+      yyyy = parts[0];
+      mm = parts[1].padStart(2, '0');
+      dd = parts[2].padStart(2, '0');
+    }
   }
+
+  if (!yyyy || !mm || !dd) {
+    const now = new Date();
+    yyyy = String(now.getFullYear());
+    mm = String(now.getMonth() + 1).padStart(2, '0');
+    dd = String(now.getDate()).padStart(2, '0');
+  }
+
   const dateStr = `${yyyy}${mm}${dd}`;
 
   const base = `${prefix}${dateStr}`;
