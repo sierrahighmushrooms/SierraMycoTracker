@@ -354,6 +354,14 @@ export function getLabelModelsForPrinterType(printerType) {
     .map(([key, tmpl]) => ({ key, name: tmpl.name }));
 }
 
+// Square OAuth & Payments Configuration
+export const SQUARE_CONFIG = {
+  APPLICATION_ID: 'sq0idp-T2BxJMzFqiatyH5XW4iX1g',
+  SCOPES: ['PAYMENTS_WRITE', 'ORDERS_WRITE', 'MERCHANT_PROFILE_READ'],
+  AUTH_BASE_URL: 'https://connect.squareup.com/oauth2/authorize',
+  APP_FEE_PERCENTAGE: 0.01 // 1% platform revenue fee split
+};
+
 // Supabase credentials (configure before enabling cloud sync)
 export const SUPABASE_URL = 'https://wsalxxsjnxptoeduwfqw.supabase.co';
 export const SUPABASE_ANON_KEY = 'sb_publishable_BotNKDv8qzsonc1Rf3rEkQ_-s8K1esY';

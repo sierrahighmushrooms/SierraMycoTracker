@@ -332,8 +332,10 @@ function executeCreateItems(data) {
         suffixNum++;
       }
 
+      const newUuid = generateId();
       const newItem = {
-        id: candidateId,
+        id: newUuid,
+        code: candidateId,
         label: quantity > 1 ? `${baseName} (#${i}/${quantity})` : baseName,
         strain: strain,
         medium: medium,

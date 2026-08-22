@@ -41,12 +41,16 @@
   }
 
   /* Force print target and its children visible regardless of Tailwind dark/hidden classes */
-  #print-mount, .print-only-container,
-  #print-mount *, .print-only-container * {
+  #print-mount, .print-only-container {
     display: block !important;
     visibility: visible !important;
     opacity: 1 !important;
     position: static !important;
+  }
+
+  #print-mount *, .print-only-container * {
+    visibility: visible !important;
+    opacity: 1 !important;
   }
 
   /* Ensure print target container fits tightly without overflow */
@@ -205,11 +209,12 @@
   }
 
   /* Medium / Address Label Adjustments (2.625in x 1.0in) */
-  .print-card-medium,
   .print-card[data-preset="2.625x1"],
-  .layout-30-up .print-card {
+  .print-card-medium,
+  .layout-30-up .print-card,
+  .print-card {
     display: flex !important;
-    flex-direction: row !important;
+    flex-direction: row !important; /* Force side-by-side, NOT stacked */
     align-items: center !important;
     justify-content: flex-start !important;
     box-sizing: border-box !important;
@@ -217,11 +222,14 @@
     overflow: hidden !important;
   }
 
-  /* Constrain QR Container */
+  /* Strictly Constrain QR Container & Canvas */
   .print-card[data-preset="2.625x1"] .print-qr-container,
   .print-card-medium .print-qr-container,
-  .layout-30-up .print-qr-container {
-    flex: 0 0 0.85in !important;
+  .layout-30-up .print-qr-container,
+  .print-card .print-qr-container,
+  .print-card canvas,
+  .print-card img.print-qr-img {
+    flex: 0 0 0.85in !important; /* Prevent shrinking or growing */
     width: 0.85in !important;
     height: 0.85in !important;
     max-width: 0.85in !important;
@@ -229,6 +237,7 @@
     display: flex !important;
     align-items: center !important;
     justify-content: center !important;
+    box-sizing: border-box !important;
   }
 
   .print-card[data-preset="2.625x1"] .print-qr-container canvas,
@@ -236,31 +245,49 @@
   .print-card-medium .print-qr-container canvas,
   .print-card-medium .print-qr-container img,
   .layout-30-up .print-qr-container canvas,
-  .layout-30-up .print-qr-container img {
-    width: 100% !important;
-    height: 100% !important;
+  .layout-30-up .print-qr-container img,
+  .print-card .print-qr-container canvas,
+  .print-card .print-qr-container img {
+    width: 0.85in !important;
+    height: 0.85in !important;
+    max-width: 0.85in !important;
+    max-height: 0.85in !important;
     object-fit: contain !important;
   }
 
-  /* Text Container Constraints */
+  /* Text Container Constraints (Right-hand space in flex row) */
   .print-card[data-preset="2.625x1"] .print-text-container,
   .print-card-medium .print-text-container,
-  .layout-30-up .print-text-container {
+  .layout-30-up .print-text-container,
+  .print-card .print-text-container {
     flex: 1 1 auto !important;
-    min-width: 0 !important; /* Prevents flex item overflow */
-    padding-left: 0.08in !important;
+    min-width: 0 !important; /* Prevents flex overflow */
     display: flex !important;
     flex-direction: column !important;
     justify-content: center !important;
+    padding-left: 0.08in !important;
     overflow: hidden !important;
   }
 
-  .print-card[data-preset="2.625x1"] .print-title,
   .print-card[data-preset="2.625x1"] .print-text-container *,
   .print-card-medium .print-text-container *,
   .layout-30-up .print-text-container * {
     font-size: clamp(8px, 1.8cqi, 10px) !important;
     line-height: 1.15 !important;
+    white-space: nowrap !important;
+    text-overflow: ellipsis !important;
+    overflow: hidden !important;
+  }
+
+  .print-card[data-preset="2.625x1"] .print-title,
+  .print-card[data-preset="2.625x1"] .print-name,
+  .print-card-medium .print-title,
+  .print-card-medium .print-name,
+  .layout-30-up .print-title,
+  .layout-30-up .print-name {
+    font-weight: bold !important;
+    font-size: 0.75rem !important;
+    line-height: 1.1 !important;
     white-space: nowrap !important;
     text-overflow: ellipsis !important;
     overflow: hidden !important;
@@ -426,14 +453,15 @@
     flex-shrink: 1 !important;
   }
 
+  .print-title,
   .print-name {
-    font-weight: 800 !important;
+    font-weight: bold !important;
+    font-size: 0.75rem !important;
+    line-height: 1.1 !important;
     overflow: hidden !important;
     text-overflow: ellipsis !important;
     white-space: nowrap !important;
-    line-height: 1.1 !important;
     min-width: 0 !important;
-    font-size: clamp(5.5pt, 11.5cqmin, 10.5pt);
     color: #111 !important;
   }
 
@@ -445,6 +473,7 @@
     text-overflow: ellipsis !important;
     min-width: 0 !important;
     line-height: 1.15 !important;
+    color: #c2410c !important;
     font-size: clamp(5.5pt, 11cqmin, 10.5pt);
   }
   
@@ -525,6 +554,7 @@
       max-height: 25% !important;
       margin-bottom: 1px !important;
     }
+    .print-title,
     .print-name {
       font-size: 5.5pt !important;
     }
@@ -550,6 +580,7 @@
       max-height: 28% !important;
       margin-bottom: 6px !important;
     }
+    .print-title,
     .print-name {
       font-size: 13pt !important;
     }

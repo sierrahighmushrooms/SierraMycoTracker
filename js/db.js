@@ -12,10 +12,11 @@ export const db = {
   items: [],
   pcBatches: [],
   customers: [],
-  orders: []
+  orders: [],
+  freshProduceInventory: []
 };
 
-// Hydrate items and batches from local storage safely on startup
+// Hydrate items, batches, and fresh produce from local storage safely on startup
 export function loadItems() {
   try {
     const rawItems = localStorage.getItem(APP_CONFIG.STORAGE_KEYS.ITEMS);
@@ -30,6 +31,13 @@ export function loadItems() {
       const parsed = JSON.parse(rawBatches);
       if (Array.isArray(parsed)) {
         db.pcBatches = parsed;
+      }
+    }
+    const rawProduce = localStorage.getItem('mycotrack_fresh_produce_inventory');
+    if (rawProduce) {
+      const parsed = JSON.parse(rawProduce);
+      if (Array.isArray(parsed)) {
+        db.freshProduceInventory = parsed;
       }
     }
   } catch (e) {
@@ -297,6 +305,7 @@ export function saveItems() {
   lastItemsSnapshot = JSON.stringify(db.items);
   localStorage.setItem(APP_CONFIG.STORAGE_KEYS.ITEMS, lastItemsSnapshot);
   localStorage.setItem(APP_CONFIG.STORAGE_KEYS.BATCHES, JSON.stringify(db.pcBatches));
+  localStorage.setItem('mycotrack_fresh_produce_inventory', JSON.stringify(db.freshProduceInventory || []));
   if (typeof refreshCallback === 'function') refreshCallback();
   scheduleCloudPush();
 }
@@ -432,6 +441,11 @@ function itemTimestamp(item) {
 // Returns { success: boolean, limitError?: boolean } to indicate sync status.
 export async function pushLocalChangesToCloud() {
   if (!supabaseClient || pendingCloudIds.size === 0) return { success: false };
+
+  // Validate session before pushing changes
+  const session = await ensureValidSession(false);
+  if (!session) return { success: false, error: new Error('Session expired.') };
+
   const { data: { user } } = await supabaseClient.auth.getUser();
   if (!user) return { success: false };
 
@@ -640,12 +654,18 @@ function transformLegacyItemForSupabase(item, userId) {
 //    - Omits the `id` key so Supabase auto-generates a valid UUID primary key
 //    - Maps `label` -> `name`, `medium` -> `medium_type`
 //    - Attaches `user_id` from the active session
-// 3) Executes a single batch `supabase.from('items').insert(...)`.
+// 3) Executes a single batch `supabase.from('items').upsert(..., { onConflict: 'id' })`.
 // 4) Exposes full Supabase error details for debugging.
 // Returns { success: boolean, user?, error?, limitError?, insertedCount? }.
 export async function uploadItemsToCloud(items) {
   if (!supabaseClient) {
     return { success: false, error: new Error('Supabase is not configured.') };
+  }
+
+  // Validate session before critical bulk upload
+  const session = await ensureValidSession(true);
+  if (!session) {
+    return { success: false, error: new Error('Your session has expired. Please log in again.') };
   }
 
   // 1) Fetch the logged-in user's UUID from the active session.
@@ -755,6 +775,12 @@ export async function deleteItemsFromCloud(itemIds) {
     return { success: true }; // Nothing to delete
   }
 
+  // Validate session before bulk delete
+  const session = await ensureValidSession(true);
+  if (!session) {
+    return { success: false, error: new Error('Your session has expired. Please log in again.') };
+  }
+
   // Cancel any pending background pushes for the items being deleted.
   itemIds.forEach(id => pendingCloudIds.delete(id));
 
@@ -859,29 +885,8 @@ export async function syncItemsWithCloud() {
       .map(deserializeCloudRow)
       .filter(item => item != null);
 
-    // 2) Safety check: DO NOT clear or overwrite local items if Supabase returns an empty array
-    // unless explicitly logged out. If local items exist that aren't in Supabase, execute uploadItemsToCloud automatically.
-    if (cloudItems.length === 0) {
-      if (db.items.length > 0) {
-        // Upload local items to cloud so they are saved to Supabase
-        uploadItemsToCloud(db.items).catch(err => {
-          console.warn('Auto-uploading local items to Supabase failed:', err);
-        });
-      }
-    } else {
-      // If we have local items not yet in cloudItems, preserve and upload them
-      const cloudIdSet = new Set(cloudItems.map(i => i.id));
-      const missingLocalItems = db.items.filter(i => i && i.id && !cloudIdSet.has(i.id));
-      
-      if (missingLocalItems.length > 0) {
-        db.items = [...cloudItems, ...missingLocalItems];
-        uploadItemsToCloud(missingLocalItems).catch(err => {
-          console.warn('Auto-uploading missing local items to Supabase failed:', err);
-        });
-      } else {
-        db.items = cloudItems;
-      }
-    }
+    // 2) Set live db.items to cloudItems as single source of truth when logged in
+    db.items = cloudItems;
     pendingCloudIds.clear();
     
     // 3) Persist locally & align the change-detection snapshot so this fetch
@@ -928,15 +933,26 @@ export async function loadOrganizationContext() {
   const { data: { user } } = await supabaseClient.auth.getUser();
   if (!user) return { onboardingNeeded: false };
 
-  // Fetch memberships with organization details
-  const { data: memberships, error: memError } = await fetchWithAuthRetry(() => supabaseClient
+  // Fetch memberships with organization details. Fall back gracefully if square columns are not yet present in schema
+  let memberships = null;
+  let { data: fullMemberships, error: memError } = await fetchWithAuthRetry(() => supabaseClient
     .from('organization_members')
-    .select('role, organization_id, organizations(id, name, slug, logo_url, settings)')
+    .select('role, organization_id, organizations(*)')
     .eq('user_id', user.id));
 
   if (memError) {
-    console.error('Failed to fetch memberships:', memError);
-    return { onboardingNeeded: false };
+    console.warn('Full organization query fallback to basic columns:', memError);
+    const { data: basicMemberships, error: basicError } = await fetchWithAuthRetry(() => supabaseClient
+      .from('organization_members')
+      .select('role, organization_id, organizations(id, name, slug, logo_url, settings)')
+      .eq('user_id', user.id));
+    if (basicError) {
+      console.error('Failed to fetch memberships:', basicError);
+      return { onboardingNeeded: false };
+    }
+    memberships = basicMemberships;
+  } else {
+    memberships = fullMemberships;
   }
 
   if (!memberships || memberships.length === 0) {
@@ -948,15 +964,21 @@ export async function loadOrganizationContext() {
     return { onboardingNeeded: true };
   }
 
-  // Map organizations
-  userOrganizations = memberships.map(m => ({
-    id: m.organizations.id,
-    name: m.organizations.name,
-    slug: m.organizations.slug,
-    logo_url: m.organizations.logo_url,
-    settings: m.organizations.settings || { enable_sales: true, enable_racks: false, enable_supplies: true, enable_inoculation: true },
-    role: m.role
-  }));
+  // Map organizations (read square metadata from dedicated columns OR settings JSONB)
+  userOrganizations = memberships.map(m => {
+    const org = m.organizations || {};
+    const settings = org.settings || { enable_sales: true, enable_racks: false, enable_supplies: true, enable_inoculation: true };
+    return {
+      id: org.id,
+      name: org.name,
+      slug: org.slug,
+      logo_url: org.logo_url,
+      settings: settings,
+      square_merchant_id: org.square_merchant_id || settings.square_merchant_id || null,
+      square_connected_at: org.square_connected_at || settings.square_connected_at || null,
+      role: m.role
+    };
+  });
 
   // Set default organization if none selected
   const savedOrgId = localStorage.getItem('mycotrack_current_org_id');
@@ -1117,12 +1139,115 @@ export async function createRack(locationId, name, preset, shelfCount = 4, capac
   return data;
 }
 
+// --- FRESH PRODUCE INVENTORY CRUD ---
+
+// Get all fresh produce inventory items
+export async function getFreshProduceInventory() {
+  if (supabaseClient && currentOrganizationId) {
+    try {
+      const { data, error } = await supabaseClient
+        .from('fresh_produce_inventory')
+        .select('*')
+        .eq('organization_id', currentOrganizationId)
+        .order('created_at', { ascending: false });
+
+      if (!error && data) {
+        db.freshProduceInventory = data;
+        localStorage.setItem('mycotrack_fresh_produce_inventory', JSON.stringify(db.freshProduceInventory));
+        return data;
+      }
+    } catch (e) {
+      console.warn('Failed to fetch fresh produce from Supabase, using local cache:', e);
+    }
+  }
+  return db.freshProduceInventory || [];
+}
+
+// Log a new harvest and add to fresh produce inventory
+export async function createFreshProduceEntry(produceData) {
+  const newProduce = {
+    id: produceData.id || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : ('PROD-' + Date.now().toString(36))),
+    organization_id: produceData.organization_id || currentOrganizationId || null,
+    container_id: produceData.container_id || produceData.containerId || null,
+    strain: produceData.strain || 'Unknown Strain',
+    batch_code: produceData.batch_code || produceData.batchCode || '',
+    flush_number: produceData.flush_number || produceData.flushNumber || 'Flush #1',
+    harvest_date: produceData.harvest_date || produceData.harvestDate || new Date().toISOString().split('T')[0],
+    weight_harvested: Number(produceData.weight_harvested ?? produceData.weightHarvested ?? 0),
+    weight_available: Number(produceData.weight_available ?? produceData.weightAvailable ?? produceData.weightHarvested ?? 0),
+    unit: produceData.unit || 'lbs',
+    weight_grams: Number(produceData.weight_grams ?? produceData.weightGrams ?? 0),
+    grade: produceData.grade || 'Grade A (Wholesale)',
+    cooler_location: produceData.cooler_location || produceData.coolerLocation || 'Walk-in Cooler 1',
+    notes: produceData.notes || '',
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  };
+
+  if (supabaseClient) {
+    try {
+      const { data, error } = await supabaseClient
+        .from('fresh_produce_inventory')
+        .insert([newProduce])
+        .select();
+
+      if (!error && data && data.length > 0) {
+        db.freshProduceInventory = db.freshProduceInventory || [];
+        db.freshProduceInventory.unshift(data[0]);
+        saveItems();
+        return data[0];
+      }
+    } catch (err) {
+      console.warn('Failed to insert fresh produce to Supabase, saving locally:', err);
+    }
+  }
+
+  db.freshProduceInventory = db.freshProduceInventory || [];
+  db.freshProduceInventory.unshift(newProduce);
+  saveItems();
+  return newProduce;
+}
+
+// Update fresh produce inventory (e.g., deducting sold weight)
+export async function updateFreshProduceEntry(id, updates) {
+  const updatePayload = {
+    ...updates,
+    updated_at: new Date().toISOString()
+  };
+
+  if (supabaseClient) {
+    try {
+      const { data, error } = await supabaseClient
+        .from('fresh_produce_inventory')
+        .update(updatePayload)
+        .eq('id', id)
+        .select();
+
+      if (!error && data && data.length > 0) {
+        const idx = (db.freshProduceInventory || []).findIndex(p => p.id === id);
+        if (idx !== -1) db.freshProduceInventory[idx] = data[0];
+        saveItems();
+        return data[0];
+      }
+    } catch (e) {
+      console.warn('Failed to update fresh produce in Supabase:', e);
+    }
+  }
+
+  const produce = (db.freshProduceInventory || []).find(p => p.id === id);
+  if (produce) {
+    Object.assign(produce, updatePayload);
+    saveItems();
+    return produce;
+  }
+  return null;
+}
+
 // --- INVENTORY & SUPPLIES CRUD ---
 
 // Get all supplies for the current organization
 export async function getSupplies() {
   if (!supabaseClient) throw new Error('Supabase not configured.');
-  console.log('currentOrganizationId:', currentOrganizationId);
   if (!currentOrganizationId) throw new Error('No active organization.');
 
   const { data, error } = await supabaseClient
@@ -1255,8 +1380,53 @@ export async function signInWithGoogle() {
 // Current session (from local storage; no network round-trip).
 export async function getSession() {
   if (!supabaseClient) return null;
-  const { data } = await supabaseClient.auth.getSession();
+  const { data, error } = await supabaseClient.auth.getSession();
+  if (error) {
+    console.warn('Failed to retrieve Supabase session:', error.message);
+    return null;
+  }
   return data ? data.session : null;
+}
+
+// Pre-action session validation: validates active Supabase auth session.
+// If null or dead, triggers clean logout, notifies user, and returns null.
+export async function ensureValidSession(promptUser = true) {
+  if (!isSupabaseConfigured() || !supabaseClient) return null;
+  try {
+    const { data: { session }, error } = await supabaseClient.auth.getSession();
+    if (error || !session) {
+      console.warn('Session expired or invalid. Triggering auto-logout.');
+      if (promptUser) {
+        if (typeof window !== 'undefined' && typeof window.alert === 'function') {
+          window.alert('Your session has expired. Please log in again.');
+        }
+      }
+      if (typeof window !== 'undefined' && typeof window.signOut === 'function') {
+        await window.signOut();
+      } else {
+        await signOutUser();
+        if (typeof window !== 'undefined' && window.location) {
+          window.location.reload();
+        }
+      }
+      return null;
+    }
+    return session;
+  } catch (err) {
+    console.error('Error during session validation:', err);
+    if (promptUser && typeof window !== 'undefined' && typeof window.alert === 'function') {
+      window.alert('Your session has expired. Please log in again.');
+    }
+    if (typeof window !== 'undefined' && typeof window.signOut === 'function') {
+      await window.signOut();
+    } else {
+      await signOutUser();
+      if (typeof window !== 'undefined' && window.location) {
+        window.location.reload();
+      }
+    }
+    return null;
+  }
 }
 
 // Subscribe to auth state changes. Returns an unsubscribe function.
@@ -1273,12 +1443,13 @@ export function onAuthStateChange(cb) {
 export function initCloudSync() {
   syncItemsWithCloud();
   if (supabaseClient) {
-    supabaseClient.auth.onAuthStateChange((event) => {
+    supabaseClient.auth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_IN' || event === 'USER_UPDATED') {
         syncItemsWithCloud();
-      } else if (event === 'SIGNED_OUT') {
+      } else if (event === 'SIGNED_OUT' || event === 'USER_DELETED' || (!session && event !== 'INITIAL_SESSION')) {
         // Purge ALL local and session storage so a different account or guest
         // session never sees the previous user's cached data.
+        console.warn('Session expired or signed out (event: ' + event + '). Purging local state.');
         purgeAllStorage();
         lastSyncInfo = { synced: false, at: null, user: null };
         notifySyncStatus();
@@ -1663,6 +1834,109 @@ export function isContainerLimitError(error) {
   return message.includes('Active container limit reached') ||
          message.includes('container limit') ||
          message.includes('Upgrade to add more containers');
+}
+
+// --- Square OAuth & Payment API Functions ---
+
+// Exchange Square OAuth code for access token and persist to organization
+export async function exchangeSquareOAuthCode(code, redirectUri) {
+  if (!supabaseClient) throw new Error('Supabase is not configured.');
+  if (!currentOrganizationId) throw new Error('No active organization selected.');
+
+  const { data: { session } } = await supabaseClient.auth.getSession();
+  const token = session?.access_token || SUPABASE_ANON_KEY;
+
+  const response = await fetch(`${SUPABASE_URL}/functions/v1/square-oauth`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    },
+    body: JSON.stringify({
+      action: 'exchange_token',
+      code: code,
+      redirect_uri: redirectUri,
+      organization_id: currentOrganizationId
+    })
+  });
+
+  const result = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    throw new Error(result.error || `Square OAuth exchange failed (${response.status})`);
+  }
+
+  // Reload organization context to update local merchant state
+  await loadOrganizationContext();
+  return result;
+}
+
+// Disconnect Square account from current organization
+export async function disconnectSquareAccount() {
+  if (!supabaseClient) throw new Error('Supabase is not configured.');
+  if (!currentOrganizationId) throw new Error('No active organization selected.');
+
+  const { data: { session } } = await supabaseClient.auth.getSession();
+  const token = session?.access_token || SUPABASE_ANON_KEY;
+
+  const response = await fetch(`${SUPABASE_URL}/functions/v1/square-oauth`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    },
+    body: JSON.stringify({
+      action: 'disconnect',
+      organization_id: currentOrganizationId
+    })
+  });
+
+  const result = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    throw new Error(result.error || `Failed to disconnect Square account (${response.status})`);
+  }
+
+  // Reload context
+  await loadOrganizationContext();
+  return result;
+}
+
+// Process a payment via Square with automatic 1% platform revenue fee split
+export async function processSquarePayment(paymentOptions) {
+  if (!supabaseClient) throw new Error('Supabase is not configured.');
+  if (!currentOrganizationId) throw new Error('No active organization selected.');
+
+  const { data: { session } } = await supabaseClient.auth.getSession();
+  const token = session?.access_token || SUPABASE_ANON_KEY;
+
+  const response = await fetch(`${SUPABASE_URL}/functions/v1/square-create-payment`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    },
+    body: JSON.stringify({
+      organization_id: currentOrganizationId,
+      source_id: paymentOptions.sourceId || 'EXTERNAL',
+      amount_money: {
+        amount: Math.round(paymentOptions.amountCents),
+        currency: paymentOptions.currency || 'USD'
+      },
+      order_id: paymentOptions.orderId || null,
+      customer_id: paymentOptions.customerId || null,
+      note: paymentOptions.note || `Sierra Myco Lab Order Payment`,
+      idempotency_key: paymentOptions.idempotencyKey || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : ('SQ-' + Date.now()))
+    })
+  });
+
+  const result = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    throw new Error(result.error || `Square payment processing failed (${response.status})`);
+  }
+
+  return result;
 }
 
 // --- Billing & Subscription Helpers ---

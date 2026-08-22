@@ -1,0 +1,221 @@
+// Supabase Edge Function: etsy-import-listings
+// Imports active listings from Etsy API v3, supports auto-token refresh & 250ms rate limit delay
+
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS"
+};
+
+// Helper: Sleep delay for rate-limiting (5 QPS max)
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// Helper: Refresh access token if expired
+async function getValidEtsyAccessToken(supabaseAdmin: any, integration: any, etsyClientId: string): Promise<string> {
+  const expiresAt = new Date(integration.expires_at).getTime();
+  const now = Date.now();
+
+  // If token expires in less than 2 minutes, refresh it
+  if (now > expiresAt - 120000) {
+    console.log("Etsy access token expiring/expired. Refreshing token...");
+    const refreshResp = await fetch("https://api.etsy.com/v3/public/oauth/token", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded"
+      },
+      body: new URLSearchParams({
+        grant_type: "refresh_token",
+        client_id: etsyClientId,
+        refresh_token: integration.refresh_token
+      })
+    });
+
+    const refreshData = await refreshResp.json();
+    if (!refreshResp.ok || refreshData.error) {
+      throw new Error(`Token refresh failed: ${refreshData.error_description || refreshData.error}`);
+    }
+
+    const newExpiresAt = new Date(Date.now() + (refreshData.expires_in || 3600) * 1000).toISOString();
+
+    await supabaseAdmin
+      .from("etsy_integrations")
+      .update({
+        access_token: refreshData.access_token,
+        refresh_token: refreshData.refresh_token,
+        expires_at: newExpiresAt,
+        updated_at: new Date().toISOString()
+      })
+      .eq("id", integration.id);
+
+    return refreshData.access_token;
+  }
+
+  return integration.access_token;
+}
+
+serve(async (req: Request) => {
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders });
+  }
+
+  try {
+    const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
+    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY") || "";
+    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+    const etsyClientId = Deno.env.get("ETSY_KEYSTRING") || "defw08dcohinep37tx3vdgmm";
+
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) {
+      return new Response(JSON.stringify({ error: "Missing Authorization header" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
+      });
+    }
+
+    // Authenticate caller
+    const userClient = createClient(supabaseUrl, supabaseAnonKey, {
+      global: { headers: { Authorization: authHeader } }
+    });
+    const { data: { user }, error: authError } = await userClient.auth.getUser();
+
+    if (authError || !user) {
+      return new Response(JSON.stringify({ error: "Unauthorized user" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
+      });
+    }
+
+    const adminClient = createClient(supabaseUrl, supabaseServiceKey);
+
+    // Retrieve integration for user
+    const { data: integration, error: integrationError } = await adminClient
+      .from("etsy_integrations")
+      .select("*")
+      .eq("user_id", user.id)
+      .single();
+
+    if (integrationError || !integration || !integration.etsy_shop_id) {
+      return new Response(JSON.stringify({ error: "No connected Etsy shop found for this account. Please connect Etsy first." }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
+      });
+    }
+
+    // Ensure valid access token
+    const accessToken = await getValidEtsyAccessToken(adminClient, integration, etsyClientId);
+    const shopId = integration.etsy_shop_id;
+
+    // Fetch active listings with pagination (limit 100 per page) and 250ms rate-limit pause
+    let offset = 0;
+    const limit = 100;
+    let totalImported = 0;
+    let hasMore = true;
+    const allListings: any[] = [];
+
+    while (hasMore) {
+      const url = `https://openapi.etsy.com/v3/application/shops/${shopId}/listings/active?limit=${limit}&offset=${offset}&includes=Inventory`;
+      
+      const res = await fetch(url, {
+        headers: {
+          "x-api-key": etsyClientId,
+          "Authorization": `Bearer ${accessToken}`
+        }
+      });
+
+      if (!res.ok) {
+        const errorBody = await res.text();
+        console.error("Etsy API Error fetching listings:", res.status, errorBody);
+        throw new Error(`Etsy API returned status ${res.status}: ${errorBody}`);
+      }
+
+      const data = await res.json();
+      const results = data.results || [];
+      allListings.push(...results);
+
+      totalImported += results.length;
+
+      // Check if more results exist
+      if (results.length < limit || totalImported >= (data.count || 0)) {
+        hasMore = false;
+      } else {
+        offset += limit;
+        // Rate-limit delay: 250ms to adhere to 5 QPS Personal Access tier
+        await sleep(250);
+      }
+    }
+
+    // Save SKU mappings to database
+    const mappingsToUpsert: any[] = [];
+
+    for (const listing of allListings) {
+      const listingId = String(listing.listing_id);
+      const title = listing.title || "";
+      const products = listing.inventory?.products || [];
+
+      if (products.length > 0) {
+        for (const prod of products) {
+          const productId = String(prod.product_id);
+          const sku = prod.sku || null;
+          const offerings = prod.offerings || [];
+          const quantity = offerings.reduce((acc: number, curr: any) => acc + (curr.quantity || 0), 0);
+
+          mappingsToUpsert.push({
+            user_id: user.id,
+            organization_id: integration.organization_id || null,
+            listing_id: listingId,
+            product_id: productId,
+            sku: sku,
+            title: title,
+            etsy_quantity: quantity,
+            last_synced_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          });
+        }
+      } else {
+        // Fallback for listings without granular products array
+        mappingsToUpsert.push({
+          user_id: user.id,
+          organization_id: integration.organization_id || null,
+          listing_id: listingId,
+          product_id: null,
+          sku: listing.sku || null,
+          title: title,
+          etsy_quantity: listing.quantity || 0,
+          last_synced_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        });
+      }
+    }
+
+    // Upsert mappings in batches of 100
+    for (let i = 0; i < mappingsToUpsert.length; i += 100) {
+      const batch = mappingsToUpsert.slice(i, i + 100);
+      const { error: upsertErr } = await adminClient
+        .from("sku_mappings")
+        .upsert(batch, { onConflict: "user_id,listing_id,sku" });
+
+      if (upsertErr) {
+        console.error("Error upserting SKU mappings batch:", upsertErr);
+      }
+    }
+
+    return new Response(JSON.stringify({
+      success: true,
+      total_listings_imported: allListings.length,
+      total_skus_mapped: mappingsToUpsert.length
+    }), {
+      status: 200,
+      headers: { ...corsHeaders, "Content-Type": "application/json" }
+    });
+
+  } catch (err: any) {
+    console.error("etsy-import-listings exception:", err);
+    return new Response(JSON.stringify({ error: err.message || "Internal server error" }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" }
+    });
+  }
+});

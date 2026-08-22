@@ -23,8 +23,38 @@ window.closeAuthModal = () => {
   }
 };
 
-import { db, saveItems, setRefreshCallback, getCustomContainers, addCustomContainer, addCustomContainerPreset, addCustomMediumPreset, getCustomContainerPresets, initCloudSync, setSyncStatusCallback, setSyncErrorCallback, isSupabaseConfigured, getSupabaseClient, getSession, onAuthStateChange, isContainerLimitError, uploadItemsToCloud, syncItemsWithCloud, clearLegacyStorage, clearPendingImportStorage, checkAndClearStaleCache, loadCustomPresetsFromCloud, userOrganizations, userLocations, currentOrganizationId, currentLocationId, setCurrentOrganizationId, setCurrentLocationId, loadOrganizationContext, createOrganization, createRack } from './db.js';
-import { fetchCustomers, createCustomer, updateCustomer, deleteCustomer, createOrder, updateOrder, deleteOrder, populateCustomerPicker } from './sales.js';
+// Global signOut handler accessible to HTML inline onclick="signOut()"
+window.signOut = async () => {
+  try {
+    const client = window.supabaseClient || (typeof getSupabaseClient === 'function' ? getSupabaseClient() : null);
+    if (client) {
+      const { error } = await client.auth.signOut();
+      if (error) console.error("Supabase SignOut Error:", error);
+    }
+  } catch (err) {
+    console.error("SignOut Exception:", err);
+  } finally {
+    // Clear local auth/container states
+    localStorage.removeItem('mycotrack_containers');
+    localStorage.removeItem('myco_items_v5');
+    localStorage.removeItem('mycotrack_current_org_id');
+    localStorage.removeItem('supabase.auth.token');
+    localStorage.removeItem('mycotrack_auth_token');
+    localStorage.removeItem('sb-wsalxxsjnxptoeduwfqw-auth-token');
+    sessionStorage.clear();
+    
+    if (typeof showLandingPage === 'function') {
+      showLandingPage();
+      const locContainer = document.getElementById('header-location-container');
+      if (locContainer) locContainer.classList.add('hidden');
+    } else {
+      window.location.reload();
+    }
+  }
+};
+
+import { db, saveItems, setRefreshCallback, getCustomContainers, addCustomContainer, addCustomContainerPreset, addCustomMediumPreset, getCustomContainerPresets, initCloudSync, setSyncStatusCallback, setSyncErrorCallback, isSupabaseConfigured, getSupabaseClient, getSession, ensureValidSession, onAuthStateChange, isContainerLimitError, uploadItemsToCloud, syncItemsWithCloud, clearLegacyStorage, clearPendingImportStorage, checkAndClearStaleCache, loadCustomPresetsFromCloud, userOrganizations, userLocations, currentOrganizationId, currentLocationId, setCurrentOrganizationId, setCurrentLocationId, loadOrganizationContext, createOrganization, createRack } from './db.js';
+import { fetchCustomers, createCustomer, updateCustomer, deleteCustomer, fetchOrders, createOrder, updateOrder, deleteOrder, populateCustomerPicker } from './sales.js';
 
 import {
   generateId,
@@ -80,6 +110,14 @@ import {
   openRecipeCalcModal,
   closeRecipeCalcModal,
   calculateCVG,
+  switchRecipeMode,
+  handleRecipePresetChange,
+  handleRecipeContainerChange,
+  handleMoistureSliderChange,
+  recalculateRecipeEngine,
+  handleSaveCurrentRecipeModal,
+  handleDeleteActiveCustomRecipe,
+  pushRecipeToBulkPrep,
   openPrintSettingsModal,
   openPrintModal,
   closePrintSettingsModal,
@@ -147,9 +185,21 @@ import {
   switchOrgTab,
   saveOrgSettings,
   removeOrgLogo,
-  updateOrgLogoPreviewUI
+  updateOrgLogoPreviewUI,
+  openRecordSaleModal,
+  closeRecordSaleModal,
+  handleSaleCustomerSelect,
+  renderSaleLineItems,
+  updateSaleLineItem,
+  removeSaleLineItem,
+  addSaleCustomLineItem,
+  addScannedItemToSale,
+  handleSaleSearchEnter,
+  handleSaleSearchSuggestions,
+  calculateSaleTotal,
+  saveNewSale
 } from './modals.js';
-import { startScanner, stopScanner, startG2GCameraScan, stopG2GCameraScan, startSpawnBulkCameraScan, stopSpawnBulkCameraScan } from './camera.js';
+import { startScanner, stopScanner, startG2GCameraScan, stopG2GCameraScan, startSpawnBulkCameraScan, stopSpawnBulkCameraScan, startSaleCameraScan, stopSaleCameraScan } from './camera.js';
 import { STAGES, CONTAINER_STAGES } from './config.js';
 
 // --- Module-level UI state ---
@@ -249,11 +299,77 @@ function closeAddSupplyModal() {
   }
 }
 
+// --- Orders Table & Sales History UI Logic ---
+window.renderOrdersList = async function() {
+  const tbody = document.getElementById('orders-list');
+  if (!tbody) return;
+
+  try {
+    const orders = await fetchOrders();
+    const customers = await fetchCustomers();
+
+    if (!orders || orders.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="6" class="px-4 py-8 text-center text-slate-500">No orders recorded yet. Click "Create Order" or "+ New Order" on a customer to record a sale.</td></tr>`;
+      return;
+    }
+
+    const escapeHtml = (unsafe) => {
+      const div = document.createElement('div');
+      div.textContent = (unsafe || '').toString();
+      return div.innerHTML;
+    };
+
+    tbody.innerHTML = orders.map(order => {
+      const customer = customers.find(c => c.id === (order.customer_id || order.customerId));
+      const customerName = customer 
+        ? `${customer.first_name || customer.firstName || ''} ${customer.last_name || customer.lastName || ''}`.trim() || customer.company || 'Customer'
+        : 'Walk-in / Direct';
+      
+      const orderDate = order.order_date || order.orderDate || (order.created_at ? order.created_at.split('T')[0] : 'Today');
+      const paymentStatus = (order.payment_status || order.paymentStatus || 'unpaid').toLowerCase();
+      const statusBadge = paymentStatus === 'paid'
+        ? `<span class="text-[10px] bg-emerald-500/20 text-emerald-300 font-bold px-2 py-0.5 rounded border border-emerald-500/30">Paid</span>`
+        : `<span class="text-[10px] bg-amber-500/20 text-amber-300 font-bold px-2 py-0.5 rounded border border-amber-500/30">Unpaid / Invoice</span>`;
+
+      // Compute total from line items if total not stored directly
+      let total = 0;
+      const items = order.line_items || order.lineItems || [];
+      if (Array.isArray(items)) {
+        const subtotal = items.reduce((sum, item) => sum + (Number(item.qty || 1) * Number(item.unitPrice || 0)), 0);
+        const discount = Number(order.discount || 0);
+        const taxRate = Number(order.tax_rate || order.taxRate || 0);
+        const discountedSub = Math.max(0, subtotal - discount);
+        total = discountedSub + ((discountedSub * taxRate) / 100);
+      }
+      const displayTotal = `$${total.toFixed(2)}`;
+      const shortId = (order.id || '').substring(0, 8);
+
+      return `
+        <tr class="border-b border-slate-800/80 hover:bg-slate-900/50 transition">
+          <td class="px-4 py-3 font-mono text-emerald-400 font-semibold text-xs">#${shortId}</td>
+          <td class="px-4 py-3 text-slate-200 font-medium">${escapeHtml(customerName)}</td>
+          <td class="px-4 py-3 text-slate-400 text-xs">${escapeHtml(orderDate)}</td>
+          <td class="px-4 py-3">${statusBadge}</td>
+          <td class="px-4 py-3 font-mono font-bold text-slate-100">${displayTotal}</td>
+          <td class="px-4 py-3 text-right">
+            <button onclick="openRecordSaleModal('${order.customer_id || order.customerId || ''}')" class="text-xs text-emerald-400 hover:text-emerald-300 mr-2 font-medium">New Order</button>
+            <button onclick="deleteOrder('${order.id}')" class="text-xs text-rose-400 hover:text-rose-300 font-medium">Delete</button>
+          </td>
+        </tr>
+      `;
+    }).join('');
+  } catch (err) {
+    console.error('Error rendering orders list:', err);
+    tbody.innerHTML = `<tr><td colspan="6" class="px-4 py-4 text-center text-rose-400">Error loading orders.</td></tr>`;
+  }
+};
+
 // Initialize optional sub-modules with error handling
 try {
   if (document.getElementById('sales-module-container')) {
     fetchCustomers().then(() => {
       populateCustomerPicker();
+      window.renderOrdersList();
     });
   }
 } catch (err) {
@@ -309,24 +425,66 @@ function updateDashboard() {
 
 // --- Form population helpers ---
 function togglePCSourceFields() {
-  const source = document.querySelector('input[name="pc-source"]:checked').value;
+  const checkedRadio = document.querySelector('input[name="pc-source"]:checked');
+  const source = checkedRadio ? checkedRadio.value : 'manual';
+  const batchContainer = document.getElementById('pc-batch-select-container');
+  const dateContainer = document.getElementById('pc-date-input-container');
+
   if (source === 'existing') {
-    document.getElementById('pc-batch-select-container').classList.remove('hidden');
-    document.getElementById('pc-date-input-container').classList.add('hidden');
+    if (batchContainer) batchContainer.classList.remove('hidden');
+    if (dateContainer) dateContainer.classList.add('hidden');
   } else {
-    document.getElementById('pc-batch-select-container').classList.add('hidden');
-    document.getElementById('pc-date-input-container').classList.remove('hidden');
+    if (batchContainer) batchContainer.classList.add('hidden');
+    if (dateContainer) dateContainer.classList.remove('hidden');
   }
 }
 
 function populatePCBatchDropdown() {
   const select = document.getElementById('input-pc-select');
   if (!select) return;
-  if (!db.pcBatches.length) {
-    select.innerHTML = '<option value="">No PC Batches Available</option>';
+
+  // Derive active batch IDs dynamically from current non-deleted items
+  const activeBatchIdSet = new Set(
+    (db.items || [])
+      .filter(item => (item.pcBatch || item.batch_code) && !item.deleted)
+      .map(item => item.pcBatch || item.batch_code)
+  );
+
+  const activeBatches = (db.pcBatches || []).filter(b => activeBatchIdSet.has(b.batchId));
+
+  // Also include any batch IDs found in active items even if not in pcBatches
+  const registeredBatchIds = new Set(activeBatches.map(b => b.batchId));
+  activeBatchIdSet.forEach(batchId => {
+    if (!registeredBatchIds.has(batchId)) {
+      const sampleItem = (db.items || []).find(i => (i.pcBatch === batchId || i.batch_code === batchId));
+      activeBatches.push({
+        batchId: batchId,
+        medium: sampleItem ? (sampleItem.medium || sampleItem.medium_type || 'Unknown') : 'Batch',
+        date: sampleItem ? (sampleItem.createdAt || sampleItem.sterilizationDate || '') : ''
+      });
+    }
+  });
+
+  const existingRadio = document.querySelector('input[name="pc-source"][value="existing"]');
+  const manualRadio = document.querySelector('input[name="pc-source"][value="manual"]');
+
+  if (!activeBatches.length) {
+    select.innerHTML = '<option value="">No active PC batches available</option>';
+    select.disabled = true;
+    if (existingRadio) existingRadio.disabled = true;
+    if (manualRadio) {
+      manualRadio.checked = true;
+    }
+    togglePCSourceFields();
     return;
   }
-  select.innerHTML = db.pcBatches.map(b => `<option value="${b.batchId}">${b.batchId} (${b.medium} - ${b.date})</option>`).join('');
+
+  select.disabled = false;
+  if (existingRadio) existingRadio.disabled = false;
+  select.innerHTML = activeBatches.map(b => {
+    const desc = b.date ? `${b.medium} - ${b.date}` : b.medium;
+    return `<option value="${b.batchId}">${b.batchId} (${desc})</option>`;
+  }).join('');
 }
 
 function populateInoculantSources(selectedIdToSelect = null) {
@@ -338,16 +496,16 @@ function populateInoculantSources(selectedIdToSelect = null) {
   let defaultOptionText = 'None / Direct';
 
   if (type === 'Liquid Culture') {
-    filtered = db.items.filter(i => (i.medium === 'Liquid Culture' || i.medium === 'Media Bottle') && !isLockedStage(i.stage));
+    filtered = db.items.filter(i => (i.medium === 'Liquid Culture' || i.medium === 'Media Bottle' || i.containerType === 'Liquid Culture Jar') && !isLockedStage(i.stage));
     defaultOptionText = 'Select LC Source...';
   } else if (type === 'Agar') {
-    filtered = db.items.filter(i => (i.medium === 'Agar' || i.medium === 'Petri Dish') && !isLockedStage(i.stage));
+    filtered = db.items.filter(i => (i.medium === 'Agar' || i.medium === 'Petri Dish' || i.containerType === 'Agar Dish / Slant') && !isLockedStage(i.stage));
     defaultOptionText = 'Select Agar Plate...';
   } else if (type === 'Grain-to-Grain') {
-    filtered = db.items.filter(i => (i.medium === 'Whole Oats' || i.medium === 'Rye Grain' || i.medium === 'Millet' || i.stage === 'G2G Ready') && !isLockedStage(i.stage) && i.stage !== 'Uninoculated');
+    filtered = db.items.filter(i => (i.medium === 'Whole Oats' || i.medium === 'Rye Grain' || i.medium === 'Millet' || i.stage === 'Colonizing' || i.stage === 'G2G Ready') && !isLockedStage(i.stage) && i.stage !== 'Uninoculated' && i.stage !== 'Preparation');
     defaultOptionText = 'Select G2G Parent...';
   } else if (type === 'Spore Syringe') {
-    filtered = db.items.filter(i => i.medium === 'Spore Syringe' && !isLockedStage(i.stage));
+    filtered = db.items.filter(i => (i.medium === 'Spore Syringe' || i.inoculantType === 'Spore Syringe') && !isLockedStage(i.stage));
     defaultOptionText = 'None (Direct Spore Syringe)';
   }
 
@@ -355,7 +513,10 @@ function populateInoculantSources(selectedIdToSelect = null) {
   optionsHtml += `<option value="legacy" ${selectedIdToSelect === 'legacy' ? 'selected' : ''}>+ Legacy / External Source</option>`;
   filtered.forEach(i => {
     let volText = (i.volumeMl !== undefined && i.volumeMl !== null) ? ` (${i.volumeMl} mL left)` : '';
-    optionsHtml += `<option value="${i.id}" ${selectedIdToSelect === i.id ? 'selected' : ''}>${i.id} - ${i.label}${volText}</option>`;
+    const shortId = (typeof i.id === 'string' && i.id.length >= 8) ? i.id.slice(0, 8) : (i.id || '');
+    const typeLabel = i.type || i.medium || (type === 'Liquid Culture' ? 'Liquid Culture' : (type === 'Agar' ? 'Agar' : 'Grain'));
+    const strainOrName = i.strain || i.labelName || i.label || 'Unknown';
+    optionsHtml += `<option value="${i.id}" ${selectedIdToSelect === i.id ? 'selected' : ''}>${strainOrName} (${typeLabel}) [${shortId}]${volText}</option>`;
   });
   parentSelect.innerHTML = optionsHtml;
   
@@ -386,6 +547,16 @@ function toggleInoculantTypeFields() {
           legacyContainer.classList.remove('hidden');
         } else {
           legacyContainer.classList.add('hidden');
+        }
+      }
+
+      // Automatically populate strain if a parent container is selected
+      const selectedParentId = parentSelect.value;
+      if (selectedParentId && selectedParentId !== 'legacy') {
+        const parentItem = db.items.find(i => i.id === selectedParentId);
+        const strainInput = document.getElementById('input-strain');
+        if (parentItem && parentItem.strain && parentItem.strain !== 'Uninoculated' && strainInput) {
+          strainInput.value = parentItem.strain;
         }
       }
     });
@@ -580,7 +751,7 @@ function importJSON(e) {
       //    - Maps label->name, medium->medium_type, pcBatch->batch_code, createdAt->created_at
       //    - Strips unmapped/extra keys (breakAndShake, parentItemId, legacy IDs, etc.)
       //    - Attaches user_id from the active session
-      //    - Executes: supabase.from('items').insert(cleanedPayload)
+      //    - Executes: supabase.from('items').upsert(cleanedPayload, { onConflict: 'id' })
       //    - Shows success notification with item count and refreshes dashboard
       if (isSupabaseConfigured()) {
         showToast('Uploading backup to cloud...', 'info', 3000);
@@ -646,6 +817,31 @@ function renderContainers() {
 }
 window.renderContainers = renderContainers;
 
+function populateSecondaryFilters() {
+  const mediumSelect = document.getElementById('filter-medium-select');
+  const batchSelect = document.getElementById('filter-batch-select');
+
+  if (mediumSelect) {
+    const currentMedVal = mediumSelect.value || 'all';
+    const mediums = Array.from(new Set(
+      (db.items || []).map(i => i.medium || i.medium_type).filter(Boolean)
+    )).sort();
+
+    mediumSelect.innerHTML = '<option value="all">All Mediums</option>' +
+      mediums.map(m => `<option value="${m}" ${currentMedVal === m ? 'selected' : ''}>${m}</option>`).join('');
+  }
+
+  if (batchSelect) {
+    const currentBatchVal = batchSelect.value || 'all';
+    const batches = Array.from(new Set(
+      (db.items || []).map(i => i.pcBatch || i.batch_code).filter(Boolean)
+    )).sort();
+
+    batchSelect.innerHTML = '<option value="all">All PC Batches</option>' +
+      batches.map(b => `<option value="${b}" ${currentBatchVal === b ? 'selected' : ''}>${b}</option>`).join('');
+  }
+}
+
 function render() {
   const stages = ['All', ...STAGES];
 
@@ -664,15 +860,60 @@ function render() {
   }
   document.getElementById('filter-bar').innerHTML = filterHtml;
 
+  populateSecondaryFilters();
   populateInoculantSources();
   populatePCBatchDropdown();
 
-  let filtered = currentFilter === 'All' ? db.items : db.items.filter(i => i.stage === currentFilter);
-  if (scannedItemId) {
-    filtered = db.items.filter(i => i.id === scannedItemId);
+  let filtered = db.items || [];
+
+  // 1. Stage filter
+  if (currentFilter !== 'All') {
+    filtered = filtered.filter(i => i.stage === currentFilter);
   }
 
-  // Location Selector filter
+  // 2. Scanned item override
+  if (scannedItemId) {
+    filtered = filtered.filter(i => i.id === scannedItemId || i.code === scannedItemId || i.custom_id === scannedItemId);
+  }
+
+  // 3. Search query filter (search strain, batch ID, medium, or short ID)
+  const searchInput = document.getElementById('dashboard-search');
+  const query = (searchInput?.value || '').trim().toLowerCase();
+  if (query) {
+    filtered = filtered.filter(i => {
+      const idStr = (i.id || '').toLowerCase();
+      const codeStr = (i.code || '').toLowerCase();
+      const shortId = idStr.slice(0, 8);
+      const strainStr = (i.strain || '').toLowerCase();
+      const batchStr = (i.pcBatch || i.batch_code || '').toLowerCase();
+      const mediumStr = (i.medium || i.medium_type || '').toLowerCase();
+      const labelStr = (i.label || i.name || '').toLowerCase();
+      const containerStr = (i.containerType || i.container_type || '').toLowerCase();
+
+      return idStr.includes(query) ||
+             codeStr.includes(query) ||
+             shortId.includes(query) ||
+             strainStr.includes(query) ||
+             batchStr.includes(query) ||
+             mediumStr.includes(query) ||
+             labelStr.includes(query) ||
+             containerStr.includes(query);
+    });
+  }
+
+  // 4. Secondary Medium filter
+  const medSelect = document.getElementById('filter-medium-select');
+  if (medSelect && medSelect.value && medSelect.value !== 'all') {
+    filtered = filtered.filter(i => (i.medium === medSelect.value || i.medium_type === medSelect.value));
+  }
+
+  // 5. Secondary Batch filter
+  const batchSelect = document.getElementById('filter-batch-select');
+  if (batchSelect && batchSelect.value && batchSelect.value !== 'all') {
+    filtered = filtered.filter(i => (i.pcBatch === batchSelect.value || i.batch_code === batchSelect.value));
+  }
+
+  // 6. Location Selector filter
   const locSelect = document.getElementById('header-location-select');
   if (locSelect && locSelect.value && locSelect.value !== 'all') {
     filtered = filtered.filter(i => i.location_id === locSelect.value);
@@ -687,8 +928,12 @@ function render() {
   }
 
   grid.innerHTML = filtered.map(item => {
-    const displayId = item.code || item.custom_id || item.id;
-    const itemCode = item.code || item.custom_id || '';
+    const rawId = item.code || item.custom_id || item.id || '';
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rawId);
+    const displayId = (typeof item.id === 'string' && item.id.length >= 8)
+      ? item.id.slice(0, 8)
+      : (isUuid ? rawId.substring(0, 8) : (item.code || rawId));
+    const itemCode = item.code || item.custom_id || displayId;
     return `
     <div id="card-${item.id}" data-item-id="${item.id}" data-item-code="${itemCode}" class="container-card bg-slate-800 border ${item.stage === 'Uninoculated' ? 'border-amber-500/50' : item.stage === 'Contaminated' ? 'border-red-500/50' : 'border-slate-700'} p-4 rounded-xl space-y-3 cursor-pointer hover:border-emerald-500 transition relative group" onclick="window.openItemDetailModal ? window.openItemDetailModal('${item.id}') : openModal('${item.id}')">
       <div class="flex justify-between items-start">
@@ -719,6 +964,14 @@ function render() {
         ` : ''}
         ${item.parentItemId ? `<div class="col-span-2"><strong class="text-slate-300">G2G Parent:</strong> <span class="text-emerald-400 font-mono">${item.parentItemId}</span></div>` : ''}
         ${item.contamType ? `<div class="col-span-2 text-red-400 font-medium">⚠️ ${item.contamType}</div>` : ''}
+        ${(item.stage === 'Fruiting' || item.stage === 'Harvest') ? `
+          <div class="col-span-2 pt-2 border-t border-slate-700/60 mt-1 flex justify-between items-center">
+            <span class="text-[11px] text-emerald-400 font-bold">Yield: ${item.yieldGrams || item.totalYield || 0}g</span>
+            <button onclick="event.stopPropagation(); openLogHarvestModal('${item.id}')" class="bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-300 border border-emerald-500/40 text-[11px] font-bold px-2 py-1 rounded transition flex items-center gap-1 shadow-sm">
+              🍄 Log Harvest
+            </button>
+          </div>
+        ` : ''}
       </div>
     </div>
   `;
@@ -1054,19 +1307,22 @@ document.getElementById('bulk-form').addEventListener('submit', async (e) => {
     supabasePayload.push(supabaseItem);
   }
 
-  // 1. Direct Immediate Insertion to Supabase
+  // 1. Direct Immediate Upsert to Supabase (keyed to 'id' for idempotent sync)
   if (isSupabaseConfigured() && client && user) {
+    const validSession = await ensureValidSession(true);
+    if (!validSession) return;
+
     try {
-      const { error: insertError } = await client.from('items').insert(supabasePayload);
+      const { error: insertError } = await client.from('items').upsert(supabasePayload, { onConflict: 'id' });
       if (insertError) {
-        console.error('Immediate Supabase insert error for Bulk PC Prep:', insertError);
+        console.error('Immediate Supabase upsert error for Bulk PC Prep:', insertError);
         if (isContainerLimitError(insertError)) {
           showToast(insertError.message || 'Container limit reached. Upgrade to add more containers.', 'error');
           return;
         }
       }
     } catch (err) {
-      console.error('Failed immediate insertion to Supabase:', err);
+      console.error('Failed immediate upsert to Supabase:', err);
     }
   }
 
@@ -1307,13 +1563,25 @@ if (itemForm) {
     if (submitBtn) submitBtn.disabled = true;
 
     try {
-      const strain = document.getElementById('input-strain').value;
+      let strain = (document.getElementById('input-strain')?.value || '').trim();
       const medium = document.getElementById('input-medium').value;
       const inoculantType = document.getElementById('input-inoculant-type').value;
-      let parentId = document.getElementById('input-parent').value || null;
+      let parentId = document.getElementById('input-parent')?.value || null;
       const legacySourceDesc = document.getElementById('input-legacy-source')?.value || null;
       const quantity = parseInt(document.getElementById('input-quantity').value) || 1;
       
+      let parentItemObj = null;
+      if (parentId && parentId !== 'legacy') {
+        parentItemObj = db.items.find(i => i.id === parentId);
+      }
+
+      // If strain field is blank or "Uninoculated", inherit from parent/LC source
+      if ((!strain || strain.toLowerCase() === 'uninoculated') && parentItemObj && parentItemObj.strain && parentItemObj.strain !== 'Uninoculated') {
+        strain = parentItemObj.strain;
+      } else if (!strain || strain.toLowerCase() === 'uninoculated') {
+        strain = 'Unknown Strain';
+      }
+
       if (parentId === 'legacy') {
         parentId = null;
       }
@@ -1444,8 +1712,10 @@ if (itemForm) {
             suffixNum++;
           }
 
+          const newUuid = generateId();
           const newItem = {
-            id: candidateId,
+            id: newUuid,
+            code: candidateId,
             label: `${medium} - ${strain} (#${itemIdx}/${quantity})`,
             name: `${medium} - ${strain} (#${itemIdx}/${quantity})`,
             strain: strain,
@@ -2138,6 +2408,53 @@ function dismissBulkPcOnboardingBanner() {
 }
 window.dismissBulkPcOnboardingBanner = dismissBulkPcOnboardingBanner;
 
+// Handle Square OAuth Callback route (/square-callback or ?code=...)
+async function handleSquareOAuthCallback() {
+  const pathname = window.location.pathname;
+  const searchParams = new URLSearchParams(window.location.search);
+  const hash = window.location.hash;
+
+  const isSquareCallback = pathname === '/square-callback' || 
+                           pathname.endsWith('/square-callback') || 
+                           hash.startsWith('#square-callback') ||
+                           (searchParams.has('code') && (searchParams.has('response_type') || sessionStorage.getItem('square_oauth_org_id')));
+
+  if (!isSquareCallback) return;
+
+  const code = searchParams.get('code');
+  const error = searchParams.get('error') || searchParams.get('error_description');
+
+  if (error) {
+    showToast(`Square Authorization Error: ${error}`, 'error', 8000);
+    window.history.replaceState({}, document.title, window.location.pathname.replace('/square-callback', '') || '/');
+    return;
+  }
+
+  if (code) {
+    showToast('Exchanging Square authorization code...', 'info', 5000);
+    try {
+      const { exchangeSquareAuthCode } = await import('./db.js');
+      const orgId = sessionStorage.getItem('square_oauth_org_id') || undefined;
+      sessionStorage.removeItem('square_oauth_org_id');
+
+      const result = await exchangeSquareAuthCode(code, orgId);
+      showToast(`✓ Square account connected successfully! (Merchant: ${result.merchant_id || 'Connected'})`, 'success', 6000);
+
+      // Clean URL query parameters
+      const cleanUrl = window.location.origin + (window.location.pathname.replace('/square-callback', '') || '/');
+      window.history.replaceState({}, document.title, cleanUrl);
+
+      // Refresh Organization Settings modal if open or user is viewing payments
+      if (typeof window.renderSquareStatus === 'function') {
+        window.renderSquareStatus();
+      }
+    } catch (err) {
+      console.error('Square OAuth callback processing failed:', err);
+      showToast(`Square connection failed: ${err.message}`, 'error', 8000);
+    }
+  }
+}
+
 // Handle path-based routing for /container/{id} URLs
 function handleContainerPath() {
   const path = window.location.pathname;
@@ -2165,10 +2482,15 @@ function handleContainerPath() {
   }
 }
 
-window.addEventListener('hashchange', handleURLHash);
+window.addEventListener('hashchange', () => {
+  handleURLHash();
+  handleSquareOAuthCallback();
+});
+
 window.addEventListener('DOMContentLoaded', () => {
   handleURLHash();
   handleContainerPath();
+  handleSquareOAuthCallback();
 });
 
 // --- Expose globals referenced by inline handlers ---
@@ -2230,6 +2552,9 @@ Object.assign(window, {
   showContainerDetails,
   openBatchModal,
   closeBatchModal,
+  openViewQRCodeModal,
+  closeViewQRCodeModal,
+  copyQRCodeLink,
   openG2GModal,
   closeG2GModal,
   switchG2GTab,
@@ -2257,6 +2582,14 @@ Object.assign(window, {
   openRecipeCalcModal,
   closeRecipeCalcModal,
   calculateCVG,
+  switchRecipeMode,
+  handleRecipePresetChange,
+  handleRecipeContainerChange,
+  handleMoistureSliderChange,
+  recalculateRecipeEngine,
+  handleSaveCurrentRecipeModal,
+  handleDeleteActiveCustomRecipe,
+  pushRecipeToBulkPrep,
   openPrintSettingsModal,
   openPrintModal,
   closePrintSettingsModal,
@@ -2328,12 +2661,21 @@ Object.assign(window, {
   saveOrgSettings,
   removeOrgLogo,
   updateOrgLogoPreviewUI,
+  addScannedItemToSale,
   // camera.js
   startScanner,
   stopScanner,
   startG2GCameraScan,
   stopG2GCameraScan,
-  applyFeatureToggles
+  applyFeatureToggles,
+  openLogHarvestModal,
+  closeLogHarvestModal,
+  handleHarvestContainerSelectChange,
+  handleHarvestContainerInputChange,
+  calculateHarvestGramsPreview,
+  handleLogHarvestSubmit,
+  startHarvestCameraScan,
+  stopHarvestCameraScan
 });
 
 // Set global function reference for modal interaction
@@ -2458,7 +2800,9 @@ onAuthStateChange((event, session) => {
     handleMultiTenantInit();
   } else if (event === 'USER_UPDATED') {
     updateContainerUsageUI();
-  } else if (event === 'SIGNED_OUT') {
+  } else if (event === 'SIGNED_OUT' || event === 'USER_DELETED' || (!session && event !== 'INITIAL_SESSION')) {
+    console.warn('Auth state changed to unauthenticated (event: ' + event + '). Clearing state and resetting UI.');
+    localStorage.removeItem('mycotrack_containers');
     showLandingPage();
     const locContainer = document.getElementById('header-location-container');
     if (locContainer) locContainer.classList.add('hidden');

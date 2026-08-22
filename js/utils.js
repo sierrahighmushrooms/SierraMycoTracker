@@ -110,9 +110,16 @@ export function updateModalActionVisibility(mediumType, stage, item) {
   }
 }
 
-// Generate a random human-friendly container ID.
+// Generate a valid v4 UUID client-side for container primary keys.
 export function generateId() {
-  return 'MY-' + Math.random().toString(36).substr(2, 5).toUpperCase();
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
 }
 
 // Format a Date as MMDDYY (e.g. 080726).

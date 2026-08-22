@@ -87,31 +87,156 @@ export function deleteCustomer(id) {
 
 // --- Sales Order CRUD Operations ---
 
-export function createOrder(orderData) {
-  const newOrder = {
-    id: generateId(),
-    organization_id: currentOrganizationId,
-    ...orderData,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
+export async function fetchOrders() {
+  const supabase = getSupabaseClient();
+  if (supabase && currentOrganizationId) {
+    const { data, error } = await supabase
+      .from('orders')
+      .select('*')
+      .eq('organization_id', currentOrganizationId)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching orders:', error);
+      return db.orders || [];
+    }
+
+    db.orders = data || [];
+    return data || [];
+  }
+
+  const orders = db.orders || [];
+  if (currentOrganizationId) {
+    return orders.filter(o => o.organization_id === currentOrganizationId);
+  }
+  return orders;
+}
+
+/**
+ * Create a payment payload for Square API including the platform revenue split (1% application fee).
+ * @param {number} orderTotalCents - Total order amount in cents
+ * @param {string} sourceId - Payment source (nonce, token, or cash/external)
+ * @param {string} currency - Currency code (default 'USD')
+ * @returns {object} Square Payment API payload
+ */
+export function buildSquarePaymentPayload(orderTotalCents, sourceId, currency = 'USD') {
+  return {
+    source_id: sourceId,
+    idempotency_key: crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15),
+    amount_money: {
+      amount: orderTotalCents,
+      currency: currency
+    },
+    app_fee_money: {
+      amount: Math.round(orderTotalCents * 0.01),
+      currency: currency
+    }
   };
-  
+}
+
+export async function createOrder(orderData) {
+  const newOrder = {
+    id: crypto.randomUUID ? crypto.randomUUID() : generateId(),
+    organization_id: currentOrganizationId,
+    customer_id: orderData.customerId || orderData.customer_id || null,
+    order_date: orderData.orderDate || orderData.order_date || new Date().toISOString().split('T')[0],
+    status: orderData.status || 'pending',
+    payment_status: orderData.paymentStatus || orderData.payment_status || 'unpaid',
+    payment_method: orderData.paymentMethod || orderData.payment_method || 'Cash',
+    tax_rate: Number(orderData.taxRate || orderData.tax_rate || 0),
+    discount: Number(orderData.discount || 0),
+    notes: orderData.notes || '',
+    line_items: orderData.lineItems || orderData.line_items || [],
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  };
+
+  const squarePaymentId = orderData.squarePaymentId || orderData.square_payment_id;
+  if (squarePaymentId) {
+    newOrder.square_payment_id = squarePaymentId;
+  }
+
+  const supabase = getSupabaseClient();
+  if (supabase) {
+    // Clone payload for insertion and sanitize undefined/null keys
+    const insertPayload = { ...newOrder };
+    if (!insertPayload.square_payment_id) {
+      delete insertPayload.square_payment_id;
+    }
+
+    let { data, error } = await supabase.from('orders').insert([insertPayload]).select();
+
+    // Fallback retry if square_payment_id is not yet in the Supabase schema cache (PGRST204)
+    if (error && (error.code === 'PGRST204' || (error.message && error.message.includes('square_payment_id')))) {
+      console.warn('square_payment_id column not found in schema cache, retrying insert without column...');
+      const fallbackPayload = { ...insertPayload };
+      delete fallbackPayload.square_payment_id;
+      const retryResult = await supabase.from('orders').insert([fallbackPayload]).select();
+      data = retryResult.data;
+      error = retryResult.error;
+    }
+
+    if (error) {
+      console.error('Error inserting order into Supabase:', error);
+      // Fallback to local storage if remote fails
+    } else if (data && data.length > 0) {
+      db.orders = db.orders || [];
+      db.orders.unshift(data[0]);
+      saveItems();
+      return data[0];
+    }
+  }
+
   db.orders = db.orders || [];
-  db.orders.push(newOrder);
+  db.orders.unshift(newOrder);
   saveItems();
   return newOrder;
 }
 
-export function updateOrder(id, updates) {
-  const order = db.orders.find(o => o.id === id);
+export async function updateOrder(id, updates) {
+  const supabase = getSupabaseClient();
+  const updatePayload = {
+    ...updates,
+    updated_at: new Date().toISOString()
+  };
+
+  if (updatePayload.square_payment_id === undefined || updatePayload.square_payment_id === null) {
+    delete updatePayload.square_payment_id;
+  }
+
+  if (supabase) {
+    let { data, error } = await supabase.from('orders').update(updatePayload).eq('id', id).select();
+
+    // Fallback retry if square_payment_id is missing from schema cache
+    if (error && (error.code === 'PGRST204' || (error.message && error.message.includes('square_payment_id')))) {
+      console.warn('square_payment_id column not found during update, retrying without column...');
+      const fallbackPayload = { ...updatePayload };
+      delete fallbackPayload.square_payment_id;
+      const retryResult = await supabase.from('orders').update(fallbackPayload).eq('id', id).select();
+      data = retryResult.data;
+      error = retryResult.error;
+    }
+
+    if (!error && data && data.length > 0) {
+      const idx = (db.orders || []).findIndex(o => o.id === id);
+      if (idx !== -1) db.orders[idx] = data[0];
+      saveItems();
+      return data[0];
+    }
+  }
+
+  const order = (db.orders || []).find(o => o.id === id);
   if (!order) return null;
-  
-  Object.assign(order, updates, { updatedAt: new Date().toISOString() });
+  Object.assign(order, updatePayload);
   saveItems();
   return order;
 }
 
-export function deleteOrder(id) {
+export async function deleteOrder(id) {
+  const supabase = getSupabaseClient();
+  if (supabase) {
+    await supabase.from('orders').delete().eq('id', id);
+  }
   db.orders = (db.orders || []).filter(o => o.id !== id);
   saveItems();
   return true;
@@ -119,7 +244,7 @@ export function deleteOrder(id) {
 
 // --- Customer Picker for Order Modal ---
 export async function populateCustomerPicker(selectElement, selectedId = null) {
-  if (!selectElement) return; // Add this null check
+  if (!selectElement) return;
   const customers = await fetchCustomers();
   
   let html = '<option value="">Select Customer...</option>';
@@ -182,7 +307,7 @@ export function closeAddCustomerModal() {
 }
 
 export async function renderCustomers() {
-  const list = document.getElementById('customers-list');
+  const list = document.getElementById('customers-list') || document.getElementById('customer-list');
   if (!list) return;
   
   const customers = await fetchCustomers();
@@ -190,22 +315,43 @@ export async function renderCustomers() {
     list.innerHTML = '<div class="col-span-full text-center text-slate-500 py-8">No customers found. Add one to get started.</div>';
     return;
   }
+
+  // Ensure customer list container has responsive grid classes
+  list.className = "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 w-full";
   
-  list.innerHTML = customers.map(c => `
-    <div class="bg-slate-800 border border-slate-700 rounded-lg p-4 space-y-2">
-      <div class="flex justify-between items-start">
-        <div>
-          <h3 class="font-bold text-emerald-400">${c.first_name || c.firstName} ${c.last_name || c.lastName}</h3>
-          ${c.company ? `<p class="text-xs text-slate-400">${c.company}</p>` : ''}
+  const escapeHtml = (unsafe) => {
+    const div = document.createElement('div');
+    div.textContent = (unsafe || '').toString();
+    return div.innerHTML;
+  };
+
+  list.innerHTML = customers.map(c => {
+    const firstName = c.first_name || c.firstName || '';
+    const lastName = c.last_name || c.lastName || '';
+    const fullName = `${firstName} ${lastName}`.trim() || 'Unnamed Customer';
+    const company = c.company || '';
+    const email = c.email || '';
+    const phone = c.phone || '';
+    const type = (c.type || 'Retail').toUpperCase();
+
+    return `
+      <div class="bg-slate-800 border border-slate-700 rounded-xl p-4 flex flex-col justify-between shadow-sm hover:border-slate-600 transition overflow-hidden">
+        <div class="overflow-hidden">
+          <div class="flex justify-between items-start gap-2 mb-2">
+            <h4 class="font-bold text-slate-100 truncate text-sm" title="${escapeHtml(fullName)}">${escapeHtml(fullName)}</h4>
+            <span class="text-[10px] font-semibold px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shrink-0 uppercase tracking-wider">${escapeHtml(type)}</span>
+          </div>
+          ${company ? `<p class="text-xs text-slate-400 mb-1 truncate break-words" title="${escapeHtml(company)}">🏢 ${escapeHtml(company)}</p>` : ''}
+          ${email ? `<p class="text-xs text-slate-300 mb-1 truncate break-words" title="${escapeHtml(email)}">📧 ${escapeHtml(email)}</p>` : ''}
+          ${phone ? `<p class="text-xs text-slate-300 mb-3 truncate break-words" title="${escapeHtml(phone)}">📱 ${escapeHtml(phone)}</p>` : ''}
+          ${!company && !email && !phone ? `<p class="text-xs text-slate-500 italic mb-3">No contact details</p>` : ''}
         </div>
-        <span class="text-[10px] uppercase tracking-wider bg-slate-900 px-2 py-1 rounded text-slate-300 border border-slate-700">${c.type || 'Retail'}</span>
+        <div class="flex gap-2 pt-2.5 border-t border-slate-700/50 mt-2">
+          <button onclick="if(typeof openRecordSaleModal==='function'){openRecordSaleModal('${c.id}');}else if(typeof openCreateOrderModal==='function'){openCreateOrderModal('${c.id}');}" class="text-xs bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-2.5 py-1 rounded transition flex items-center gap-1">+ New Order</button>
+        </div>
       </div>
-      <div class="text-xs text-slate-300 space-y-1 pt-2 border-t border-slate-700/50">
-        ${c.email ? `<p>📧 ${c.email}</p>` : ''}
-        ${c.phone ? `<p>📱 ${c.phone}</p>` : ''}
-      </div>
-    </div>
-  `).join('');
+    `;
+  }).join('');
 }
 
 document.addEventListener('DOMContentLoaded', () => {
