@@ -1,8 +1,8 @@
 // Supabase Edge Function: square-create-payment
 // Creates a payment / charge using connected merchant's credentials and attaches the 1% platform revenue split.
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { resolveAuthorizedOrg, isOrgAuthError } from "../_shared/auth.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -10,7 +10,7 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS"
 };
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
@@ -51,11 +51,22 @@ serve(async (req) => {
       });
     }
 
+    // Bind organization_id to the authenticated caller's verified membership
+    // rather than trusting the client-supplied value directly.
+    const authResult = await resolveAuthorizedOrg(req, supabaseUrl, supabaseServiceKey, organization_id);
+    if (isOrgAuthError(authResult)) {
+      return new Response(JSON.stringify({ error: authResult.error }), {
+        status: authResult.status,
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
+      });
+    }
+    const verifiedOrgId = authResult.organizationId;
+
     // Retrieve organization's Square access token and merchant ID
     const { data: org, error: orgError } = await supabase
       .from("organizations")
       .select("square_access_token, square_merchant_id, currency")
-      .eq("id", organization_id)
+      .eq("id", verifiedOrgId)
       .single();
 
     if (orgError || !org || !org.square_access_token) {
@@ -114,6 +125,7 @@ serve(async (req) => {
     }
 
     // If order_id provided, update order payment status in database
+    // (scoped to the verified org so a caller can't touch another org's order)
     if (order_id) {
       await supabase
         .from("orders")
@@ -122,7 +134,8 @@ serve(async (req) => {
           payment_method: "Square",
           notes: (note ? note + " | " : "") + `Square Payment ID: ${paymentData.payment?.id || 'Processed'}`
         })
-        .eq("id", order_id);
+        .eq("id", order_id)
+        .eq("organization_id", verifiedOrgId);
     }
 
     return new Response(JSON.stringify({

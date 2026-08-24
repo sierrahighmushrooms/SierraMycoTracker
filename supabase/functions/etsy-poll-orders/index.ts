@@ -1,13 +1,12 @@
 // Supabase Edge Function: etsy-poll-orders
 // Polls Etsy shop receipts, records orders, and deducts local inventory items.
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, GET, OPTIONS"
+export const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
 };
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -50,15 +49,41 @@ async function getValidEtsyAccessToken(supabaseAdmin: any, integration: any, ets
   return integration.access_token;
 }
 
-serve(async (req: Request) => {
+Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
+    return new Response("ok", { headers: corsHeaders, status: 200 });
   }
 
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
     const etsyClientId = Deno.env.get("ETSY_KEYSTRING") || "defw08dcohinep37tx3vdgmm";
+    // Etsy's Feb 9 2026 shared-secret enforcement requires "x-api-key" as
+    // "<keystring>:<shared secret>" on v3 REST calls, or they 403.
+    const etsySharedSecret = Deno.env.get("ETSY_SHARED_SECRET") || "";
+    if (!etsySharedSecret) {
+      console.error("etsy-poll-orders: ETSY_SHARED_SECRET is not set -- Etsy v3 REST calls will 403.");
+    }
+    const etsyApiKeyHeader = etsySharedSecret ? `${etsyClientId}:${etsySharedSecret}` : etsyClientId;
+
+    // This function has no end-user JWT to bind to an organization -- it's
+    // a system job that processes every tenant's Etsy integration in one
+    // pass, invoked by pg_cron (see migration 019) sending
+    // "Authorization: Bearer <service_role_key>". verify_jwt is disabled
+    // for this function at the platform level (the cron job's bearer
+    // value isn't a normal user JWT), which previously meant NO check at
+    // all existed here -- anyone who found the URL could trigger a full
+    // poll/write cycle across every organization with zero credentials.
+    // Require the caller to present the service role key directly instead.
+    const authHeader = req.headers.get("Authorization") || "";
+    const providedToken = authHeader.replace(/^Bearer\s+/i, "").trim();
+    if (!supabaseServiceKey || providedToken !== supabaseServiceKey) {
+      console.error("etsy-poll-orders: rejected request with missing/invalid Authorization -- this endpoint is cron-only.");
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
+      });
+    }
 
     const adminClient = createClient(supabaseUrl, supabaseServiceKey);
 
@@ -84,7 +109,7 @@ serve(async (req: Request) => {
         
         const res = await fetch(receiptsUrl, {
           headers: {
-            "x-api-key": etsyClientId,
+            "x-api-key": etsyApiKeyHeader,
             "Authorization": `Bearer ${accessToken}`
           }
         });

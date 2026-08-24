@@ -40,7 +40,8 @@ import {
   estimateDryYield,
   calculateCVGRecipe,
   getDrySubstrateWeightGrams,
-  calculateBE
+  calculateBE,
+  formatLocalDate
 } from './utils.js';
 import {
   APP_CONFIG,
@@ -170,6 +171,18 @@ export function openModal(itemOrId) {
   let containerInfo = item.containerType ? ` | Container: ${item.containerType}${item.containerWeight ? ` (${item.containerWeight})` : ''}` : '';
   document.getElementById('modal-lineage').innerText = `Batch: ${item.pcBatch} | ${parentText}${genText}${containerInfo}`;
 
+  const parentSourceId = item.parent_id || item.parentItemId || null;
+  const parentSourceEl = document.getElementById('modal-parent-source');
+  if (parentSourceEl) {
+    if (parentSourceId) {
+      parentSourceEl.innerText = `Parent Source: [${parentSourceId.substring(0, 8)}]`;
+      parentSourceEl.classList.remove('hidden');
+    } else {
+      parentSourceEl.innerText = '';
+      parentSourceEl.classList.add('hidden');
+    }
+  }
+
   // Render Spawn Lineage badge for bulk substrate items with a captured parent spawn source
   const lineageBadge = document.getElementById('modal-lineage-badge');
   
@@ -269,18 +282,59 @@ export function openModal(itemOrId) {
 
   toggleContamFields();
 
-  document.getElementById('modal-history').innerHTML = item.history.map(h => `
+  // The creation entry is the LAST element (history is built with a single
+  // entry, then later stage changes are unshifted in front of it). If the
+  // item carries an explicit user-entered date (e.g. from "Create Parent
+  // Asset"), prefer that over the entry's raw timestamp - which is always
+  // stamped with the real moment the form was submitted, and can silently
+  // diverge from a deliberately backdated asset.
+  const explicitCreationDate = formatLocalDate(item.prepDate || item.prep_date);
+  document.getElementById('modal-history').innerHTML = item.history.map((h, idx) => {
+    const isCreationEntry = idx === item.history.length - 1;
+    const displayTimestamp = (isCreationEntry && explicitCreationDate) ? explicitCreationDate : h.timestamp;
+    return `
     <div class="text-xs border-b border-slate-800 pb-2 last:border-0">
       <div class="flex justify-between text-slate-400">
         <span class="font-bold ${h.stage === 'Contaminated' ? 'text-red-400' : 'text-emerald-400'}">${h.stage} <span class="text-slate-500 font-normal">${h.env}</span></span>
-        <span>${h.timestamp}</span>
+        <span>${displayTimestamp}</span>
       </div>
       ${(h.temp !== undefined && h.temp !== null) || (h.humidity !== undefined && h.humidity !== null) ? `
         <div class="text-slate-500 mt-0.5">🌡️ ${h.temp !== undefined && h.temp !== null ? h.temp + '°F' : ''} ${h.humidity !== undefined && h.humidity !== null ? '| RH ' + h.humidity + '%' : ''}</div>
       ` : ''}
       ${h.notes ? `<p class="text-slate-300 mt-1">${h.notes}</p>` : ''}
     </div>
-  `).join('');
+  `;
+  }).join('');
+
+  // --- Lineage / Inoculated Containers (reverse lookup: items whose parent_id points here) ---
+  const childrenSection = document.getElementById('modal-children-section');
+  const childrenList = document.getElementById('modal-children-list');
+  if (childrenSection && childrenList) {
+    const childItems = db.items.filter(i =>
+      i.id !== item.id && (i.parent_id === item.id || i.parentItemId === item.id)
+    );
+
+    if (childItems.length === 0) {
+      childrenList.innerHTML = '';
+      childrenSection.classList.add('hidden');
+    } else {
+      childrenList.innerHTML = childItems.map(child => {
+        const shortId = (child.id || '').substring(0, 8);
+        const containerType = child.containerType || child.container_type || 'Unknown Container';
+        const batchId = child.pcBatch || child.batch_code || 'N/A';
+        const stage = child.stage || 'Unknown';
+        return `
+          <a href="#" onclick="openModal('${child.id}'); return false;"
+             class="flex items-center justify-between text-xs border-b border-slate-800 last:border-0 py-1.5 px-1 -mx-1 rounded hover:bg-slate-800 transition text-slate-300">
+            <span class="font-mono text-emerald-400">[${shortId}]</span>
+            <span class="flex-1 mx-2 truncate">${containerType} - ${batchId}</span>
+            <span class="font-semibold ${stage === 'Contaminated' ? 'text-red-400' : 'text-slate-400'}">${stage}</span>
+          </a>
+        `;
+      }).join('');
+      childrenSection.classList.remove('hidden');
+    }
+  }
 
   document.body.classList.add('overflow-hidden');
 
@@ -1460,23 +1514,19 @@ export function openPrintSettingsModal(itemList = null) {
   }
 
   // Company logo toggle initialization and visibility
-  const orgLogoData = localStorage.getItem(APP_CONFIG.STORAGE_KEYS.ORG_LOGO_DATA);
-  const showLogoContainer = document.getElementById('print-show-logo-container');
-  const showLogoCheckbox = document.getElementById('print-show-logo');
-  if (showLogoContainer) {
-    if (orgLogoData) {
-      showLogoContainer.classList.remove('hidden');
+  const lblShowLogo = document.getElementById('lblShowLogo');
+  const showLogoCheckbox = document.getElementById('chkShowLogo') || document.getElementById('print-show-logo');
+  if (lblShowLogo) {
+    const is4x5Preset = labelModel === '4x5' || labelModel === 'generic-4x5';
+    if (is4x5Preset) {
+      lblShowLogo.classList.remove('hidden');
       if (showLogoCheckbox) {
         showLogoCheckbox.disabled = false;
         const savedLogoPref = localStorage.getItem(APP_CONFIG.STORAGE_KEYS.PRINT_SHOW_LOGO);
-        showLogoCheckbox.checked = savedLogoPref === 'true';
+        showLogoCheckbox.checked = savedLogoPref !== 'false';
       }
     } else {
-      showLogoContainer.classList.add('hidden');
-      if (showLogoCheckbox) {
-        showLogoCheckbox.checked = false;
-        showLogoCheckbox.disabled = true;
-      }
+      lblShowLogo.classList.add('hidden');
     }
   }
 
@@ -1619,6 +1669,19 @@ export function refreshPrintSettingsUI(shouldSave = true) {
     }
   }
 
+  // Company logo toggle dynamic visibility: 4x5 preset only
+  const lblShowLogo = document.getElementById('lblShowLogo');
+  const showLogoCheckbox = document.getElementById('chkShowLogo') || document.getElementById('print-show-logo');
+  if (lblShowLogo) {
+    const is4x5Preset = labelModel === '4x5' || labelModel === 'generic-4x5';
+    if (is4x5Preset) {
+      lblShowLogo.classList.remove('hidden');
+      if (showLogoCheckbox) showLogoCheckbox.disabled = false;
+    } else {
+      lblShowLogo.classList.add('hidden');
+    }
+  }
+
   const offsetContainer = document.getElementById('print-offset-container');
   const offsetSelect = document.getElementById('print-offset-select');
   if (offsetContainer) {
@@ -1729,7 +1792,7 @@ export function applyOrExecutePrintSettings() {
     localStorage.setItem(APP_CONFIG.STORAGE_KEYS.PRINT_SHOW_DATES, showDatesCheckbox.checked ? 'true' : 'false');
   }
 
-  const showLogoCheckbox = document.getElementById('print-show-logo');
+  const showLogoCheckbox = document.getElementById('chkShowLogo') || document.getElementById('print-show-logo');
   if (showLogoCheckbox) {
     localStorage.setItem(APP_CONFIG.STORAGE_KEYS.PRINT_SHOW_LOGO, showLogoCheckbox.checked ? 'true' : 'false');
   }
@@ -1789,6 +1852,482 @@ export function printSingleLabel(id = null) {
 }
 
 window.printSingleLabel = printSingleLabel;
+
+// --- Helper Formatting Utilities for Labels ---
+export const formatCleanDate = (dateVal) => {
+  if (!dateVal) return '';
+  let d = new Date(dateVal);
+  if (isNaN(d.getTime())) {
+    d = new Date(dateVal + 'T12:00:00');
+  }
+  if (isNaN(d.getTime())) return String(dateVal);
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+};
+
+export const isInoculated = (item) => {
+  if (!item) return false;
+  if (item.stage === 'Preparation' || item.stage === 'Uninoculated') return false;
+  if (!item.strain || item.strain === 'Uninoculated') return false;
+  return true;
+};
+
+// --- Dedicated Layout Generator: 2.6" x 1" Small Label Preset (Strictly Preserved) ---
+export function render2x1SmallHTML(item, options = {}) {
+  const {
+    index = 0,
+    total = 1,
+    showLogo = false,
+    orgLogoData = null
+  } = options;
+
+  const rawId = item.code || item.custom_id || item.id || '';
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rawId);
+  const displayId = isUuid ? rawId.substring(0, 8) : rawId;
+  const containerName = item.name || item.label || '';
+
+  // 1. Line 1 (Bold, 12pt max): Clean species/strain name ONLY (Never output item.title, item.name, or compound strings)
+  let cleanSpecies = '';
+  const rawCandidate = item.strain && item.strain !== 'Uninoculated'
+    ? item.strain
+    : (item.species && item.species !== 'Uninoculated'
+        ? item.species
+        : (containerName || 'Uninoculated'));
+
+  // Aggressively sanitize raw string: strip leading "Substrate - " prefixes, brackets, trailing sequence "(#1/4)", "(#1 of 4)"
+  cleanSpecies = String(rawCandidate)
+    .replace(/^[^-]+-\s*/, '')
+    .replace(/\s*\(#\d+[\/\s\w]*\)$/i, '')
+    .replace(/\s*\([^)]*\)$/, '')
+    .trim();
+
+  if (!cleanSpecies || cleanSpecies.toLowerCase() === 'uninoculated') {
+    cleanSpecies = (item.strain && item.strain !== 'Uninoculated') ? item.strain : (containerName ? containerName.replace(/^[^-]+-\s*/, '').replace(/\s*\([^)]*\)$/, '').trim() : 'Uninoculated');
+  }
+
+  // 2. ID & Unit: ID: [Short ID] | Unit #[X] of [Total]
+  let unitNum = index + 1;
+  let totalItems = total || 1;
+  const rawSearchStr = `${item.label || ''} ${item.name || ''} ${item.title || ''}`;
+  const seqMatch = rawSearchStr.match(/#(\d+)[\/](\d+)/) || rawSearchStr.match(/#(\d+)\s+of\s+(\d+)/i) || rawSearchStr.match(/Unit\s+#?(\d+)\s+of\s+(\d+)/i);
+  if (seqMatch) {
+    unitNum = parseInt(seqMatch[1], 10) || unitNum;
+    totalItems = parseInt(seqMatch[2], 10) || totalItems;
+  }
+  const idAndUnitText = `ID: ${displayId} | Unit #${unitNum} of ${totalItems}`;
+
+  // 3. Dates: Prep: [Prep Date] | Inoc: [Inoc Date]
+  let dateParts = [];
+  const pDate = formatCleanDate(item.prepDate || item.prep_date);
+  if (pDate) {
+    dateParts.push(`Prep: ${pDate}`);
+  }
+  if (isInoculated(item)) {
+    const rawInocDate = item.inoculationDate || item.inoculatedAt || item.createdAt || item.created_at;
+    const iDate = formatCleanDate(rawInocDate);
+    if (iDate) {
+      dateParts.push(`Inoc: ${iDate}`);
+    }
+  }
+  if (dateParts.length === 0) {
+    const rawFallback = item.createdAt || item.created_at;
+    const cDate = formatCleanDate(rawFallback);
+    if (cDate) {
+      dateParts.push(`Prep: ${cDate}`);
+    } else {
+      dateParts.push('Inoc: N/A');
+    }
+  }
+  const datesLine = dateParts.join(' | ');
+
+  // 4. Medium: Medium: [Substrate Type]
+  const mediumVal = item.medium || item.medium_type || item.substrate || 'Whole Oats';
+  const mediumLine = `Medium: ${mediumVal}`;
+
+  const innerContentHtml = `
+    ${showLogo && orgLogoData ? `<img src="${orgLogoData}" alt="Company Logo" class="print-logo" />` : ''}
+    <div class="print-title print-name font-bold" style="font-size: 11pt; line-height: 1.15; max-height: 2.3em; overflow: hidden;" title="${cleanSpecies}">${cleanSpecies}</div>
+    <div class="print-id font-mono font-semibold" style="white-space: nowrap; overflow: visible; font-size: 8.5pt;">${idAndUnitText}</div>
+    <div class="print-date text-slate-600" style="font-size: 8pt; white-space: nowrap;">${datesLine}</div>
+    <div class="print-extra text-slate-600" style="font-size: 8pt; white-space: nowrap;">${mediumLine}</div>
+  `;
+
+  return {
+    innerContentHtml,
+    fullWidthHandwritingHtml: '',
+    isSmall2x1Preset: true,
+    displayId
+  };
+}
+
+// --- Dedicated Layout Generator: 4" x 5" Standard Digital Layout (render4x5StandardHTML) ---
+export function render4x5StandardHTML(item, options = {}) {
+  const {
+    index = 0,
+    total = 1,
+    showLogo = false,
+    orgLogoData = null,
+    showName = true,
+    showBatchId = true,
+    showStrain = true,
+    showDates = true,
+    includeContainer = false
+  } = options;
+
+  const rawId = item.code || item.custom_id || item.id || '';
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rawId);
+  const displayId = isUuid ? rawId.substring(0, 8) : rawId;
+  const containerName = item.name || item.label || '';
+
+  // Clean species / strain name
+  let strainName = '';
+  const rawCandidate = item.strain && item.strain !== 'Uninoculated'
+    ? item.strain
+    : (item.species && item.species !== 'Uninoculated'
+        ? item.species
+        : (containerName || 'Uninoculated'));
+
+  strainName = String(rawCandidate)
+    .replace(/^[^-]+-\s*/, '')
+    .replace(/\s*\(#\d+[\/\s\w]*\)$/i, '')
+    .replace(/\s*\([^)]*\)$/, '')
+    .trim() || 'Uninoculated';
+
+  // Unit Sequence (#1 of 4)
+  let unitNum = index + 1;
+  let totalItems = total || 1;
+  const rawSearchStr = `${item.label || ''} ${item.name || ''} ${item.title || ''}`;
+  const seqMatch = rawSearchStr.match(/#(\d+)[\/](\d+)/) || rawSearchStr.match(/#(\d+)\s+of\s+(\d+)/i) || rawSearchStr.match(/Unit\s+#?(\d+)\s+of\s+(\d+)/i);
+  if (seqMatch) {
+    unitNum = parseInt(seqMatch[1], 10) || unitNum;
+    totalItems = parseInt(seqMatch[2], 10) || totalItems;
+  }
+  const idAndUnitText = `ID: ${displayId}  •  Unit #${unitNum} of ${totalItems}`;
+
+  // Dates
+  const prepDate = formatCleanDate(item.prepDate || item.prep_date || item.createdAt || item.created_at) || 'N/A';
+  let inocDate = 'Uninoculated / Pending';
+  if (isInoculated(item)) {
+    const rawInoc = item.inoculationDate || item.inoculatedAt || item.createdAt || item.created_at;
+    inocDate = formatCleanDate(rawInoc) || 'N/A';
+  }
+  const datesRowText = `Prep: ${prepDate}  |  Inoc: ${inocDate}`;
+
+  // Medium / Substrate
+  const mediumVal = item.medium || item.medium_type || item.substrate || 'Whole Oats';
+  const cType = item.containerType || item.container_type || '';
+  const cWeight = item.containerWeight || item.container_weight || '';
+  const containerSpecs = cType ? ` (${cType}${cWeight ? ` - ${cWeight}` : ''})` : '';
+  const mediumRowText = `Medium: ${mediumVal}${containerSpecs}`;
+
+  // Top branding / logo
+  const logoSrc = (showLogo && (orgLogoData || options.logoUrl)) ? (orgLogoData || options.logoUrl) : null;
+  const logoHtml = logoSrc ? `
+    <div class="branding-header text-center w-full">
+      <img src="${logoSrc}" alt="Organization Logo" style="max-height: 50px; margin: 0 auto 10px auto; display: block;" />
+    </div>
+  ` : '';
+
+  const innerContentHtml = `
+    <div class="label-4x5-standard-centered flex flex-col items-center justify-between w-full h-full text-center text-slate-900 font-sans px-2 py-1" style="font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+      
+      <!-- Top Header - Logo / Branding Zone (Only if showLogo & logo exists) -->
+      ${logoHtml}
+
+      <!-- Center-Aligned Metadata Hierarchy -->
+      <div class="w-full flex flex-col items-center justify-center space-y-2.5 my-auto">
+        <!-- Strain Title: Prominent bold header (18pt - 20pt) -->
+        <div class="w-full border-b border-slate-300 pb-2">
+          <div class="font-black text-slate-950 tracking-tight leading-tight uppercase truncate" style="font-size: 19pt; line-height: 1.15;" title="${strainName}">${strainName}</div>
+        </div>
+
+        <!-- Unit & ID Row -->
+        <div class="font-mono font-bold tracking-wide" style="font-size: 11pt; color: #475569;">
+          ${idAndUnitText}
+        </div>
+
+        <!-- Dates Row -->
+        <div class="text-slate-700 font-medium" style="font-size: 10pt;">
+          ${datesRowText}
+        </div>
+
+        <!-- Substrate / Medium -->
+        <div class="text-slate-900" style="font-size: 10pt; font-weight: 600;">
+          ${mediumRowText}
+        </div>
+      </div>
+
+    </div>
+  `;
+
+  return {
+    innerContentHtml,
+    fullWidthHandwritingHtml: '',
+    isSmall2x1Preset: false,
+    displayId
+  };
+}
+
+// --- Dedicated Layout Generator: 4" x 5" Handwriting Layout (render4x5HandwritingHTML) ---
+export function render4x5HandwritingHTML(item, options = {}) {
+  const {
+    index = 0,
+    total = 1,
+    showLogo = false,
+    orgLogoData = null,
+    customHandwritingStr = ''
+  } = options;
+
+  const rawId = item.code || item.custom_id || item.id || '';
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rawId);
+  const displayId = isUuid ? rawId.substring(0, 8) : rawId;
+  const containerName = item.name || item.label || '';
+
+  // Clean strain name
+  let strainName = '';
+  const rawCandidate = item.strain && item.strain !== 'Uninoculated'
+    ? item.strain
+    : (item.species && item.species !== 'Uninoculated'
+        ? item.species
+        : (containerName || ''));
+
+  strainName = String(rawCandidate)
+    .replace(/^[^-]+-\s*/, '')
+    .replace(/\s*\(#\d+[\/\s\w]*\)$/i, '')
+    .replace(/\s*\([^)]*\)$/, '')
+    .trim();
+
+  // Unit Sequence (#1 of 4)
+  let unitNum = index + 1;
+  let totalItems = total || 1;
+  const rawSearchStr = `${item.label || ''} ${item.name || ''} ${item.title || ''}`;
+  const seqMatch = rawSearchStr.match(/#(\d+)[\/](\d+)/) || rawSearchStr.match(/#(\d+)\s+of\s+(\d+)/i) || rawSearchStr.match(/Unit\s+#?(\d+)\s+of\s+(\d+)/i);
+  if (seqMatch) {
+    unitNum = parseInt(seqMatch[1], 10) || unitNum;
+    totalItems = parseInt(seqMatch[2], 10) || totalItems;
+  }
+  const idAndUnitText = `ID: ${displayId}  •  Unit #${unitNum} of ${totalItems}`;
+
+  // Top branding / logo
+  const logoSrc = (showLogo && (orgLogoData || options.logoUrl)) ? (orgLogoData || options.logoUrl) : null;
+  const logoHtml = logoSrc ? `
+    <div class="branding-header text-center w-full">
+      <img src="${logoSrc}" alt="Organization Logo" style="max-height: 50px; margin: 0 auto 10px auto; display: block;" />
+    </div>
+  ` : '';
+
+  // Build custom or standard ruled lines (4-5 lines total)
+  let customFields = [];
+  if (customHandwritingStr) {
+    customFields = customHandwritingStr.split(',').map(s => s.trim()).filter(Boolean);
+  }
+
+  // 4-5 Spacious centered ruled handwriting lines
+  const standardRuledLines = [
+    { label: 'Date / Stage' },
+    { label: 'Observed Growth' },
+    { label: 'Flushes / Yield' },
+    { label: 'Contam / Notes' }
+  ];
+
+  const fullWidthHandwritingHtml = `
+    <div class="label-4x5-handwriting-container w-full flex flex-col justify-start mt-3 pt-2 border-t-2 border-slate-900" style="font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+      
+      <!-- Centered Spacious Ruled Handwriting Lines -->
+      <div class="space-y-3.5 pt-1 w-full">
+        ${standardRuledLines.map(line => `
+          <div class="ruled-line-row w-full flex flex-col">
+            <div class="flex items-baseline justify-between w-full px-1">
+              <span class="font-bold text-[11pt] text-slate-900 tracking-wide uppercase">${line.label}:</span>
+            </div>
+            <div class="w-full border-b-2 border-dashed border-slate-600 min-h-[26px] mt-0.5"></div>
+          </div>
+        `).join('')}
+
+        ${customFields.map(field => `
+          <div class="ruled-line-row w-full flex flex-col">
+            <div class="flex items-baseline justify-between w-full px-1">
+              <span class="font-bold text-[11pt] text-slate-900 tracking-wide uppercase">${field}:</span>
+            </div>
+            <div class="w-full border-b-2 border-dashed border-slate-600 min-h-[26px] mt-0.5"></div>
+          </div>
+        `).join('')}
+      </div>
+
+    </div>
+  `;
+
+  const innerContentHtml = `
+    <div class="label-4x5-hw-header flex flex-col items-center justify-center w-full text-center font-sans px-2" style="font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+      ${logoHtml}
+
+      <div class="font-black text-slate-950 uppercase tracking-tight leading-tight truncate w-full" style="font-size: 18pt; line-height: 1.15;" title="${strainName || 'Blank Field'}">${strainName || '____________________'}</div>
+      
+      <div class="font-mono font-bold tracking-wide mt-1" style="font-size: 10.5pt; color: #475569;">
+        ${idAndUnitText}
+      </div>
+    </div>
+  `;
+
+  return {
+    innerContentHtml,
+    fullWidthHandwritingHtml,
+    isSmall2x1Preset: false,
+    displayId
+  };
+}
+
+// --- Fallback Default Preset Layout Generator (Preserving All Other Sheet / Roll Presets) ---
+export function renderDefaultPresetHTML(item, options = {}) {
+  const {
+    showLogo = false,
+    orgLogoData = null,
+    enableHandwriting = false,
+    customHandwritingStr = '',
+    showName = true,
+    showBatchId = true,
+    showStrain = true,
+    showDates = true,
+    includeContainer = false,
+    isLargeLabel = false
+  } = options;
+
+  const rawId = item.code || item.custom_id || item.id || '';
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rawId);
+  const displayId = isUuid ? rawId.substring(0, 8) : rawId;
+  const containerName = item.name || item.label || '';
+
+  let nameHtml = '';
+  if (showName && containerName) {
+    nameHtml = `<div class="print-name" title="${containerName}">${containerName}</div>`;
+  }
+
+  let batchIdHtml = '';
+  if (showBatchId && displayId) {
+    batchIdHtml = `<div class="print-id">ID: ${displayId}</div>`;
+  }
+
+  let innerContentHtml = '';
+  let fullWidthHandwritingHtml = '';
+
+  if (enableHandwriting) {
+    let fillLines = [
+      '<div class="fill-line"><span class="line-label">Strain:</span><span class="line-blank"></span></div>',
+      '<div class="fill-line"><span class="line-label">Date:</span><span class="line-blank"></span></div>'
+    ];
+
+    if (customHandwritingStr) {
+      const customLines = customHandwritingStr.split(',').map(s => s.trim()).filter(Boolean);
+      customLines.forEach(line => {
+        fillLines.push(`<div class="fill-line"><span class="line-label">${line}:</span><span class="line-blank"></span></div>`);
+      });
+    }
+
+    fillLines.push('<div class="fill-line"><span class="line-label">Notes:</span><span class="line-blank"></span></div>');
+
+    if (isLargeLabel) {
+      fullWidthHandwritingHtml = `
+        <div class="print-card-footer print-handwriting-zone">
+          ${fillLines.join('')}
+        </div>
+      `;
+      innerContentHtml = `
+        ${!isLargeLabel && showLogo && orgLogoData ? `<img src="${orgLogoData}" alt="Company Logo" class="print-logo" />` : ''}
+        ${nameHtml}
+        ${batchIdHtml}
+      `;
+    } else {
+      innerContentHtml = `
+        ${!isLargeLabel && showLogo && orgLogoData ? `<img src="${orgLogoData}" alt="Company Logo" class="print-logo" />` : ''}
+        ${nameHtml}
+        ${batchIdHtml}
+        <div class="handwriting-lines-container">
+          ${fillLines.join('')}
+        </div>
+      `;
+    }
+  } else {
+    let strainHtml = '';
+    if (showStrain && isInoculated(item)) {
+      const strainText = item.strain;
+      strainHtml = `<div class="print-strain">${strainText}</div>`;
+    }
+
+    let dateHtml = '';
+    if (showDates) {
+      let dateParts = [];
+      if (item.prepDate || item.prep_date) {
+        const pDate = formatCleanDate(item.prepDate || item.prep_date);
+        if (pDate) dateParts.push(`Prep: ${pDate}`);
+      }
+      if (isInoculated(item)) {
+        const rawInocDate = item.inoculationDate || item.inoculatedAt || item.createdAt || item.created_at;
+        if (rawInocDate && rawInocDate !== 'null' && rawInocDate !== 'undefined') {
+          const formattedInoc = formatCleanDate(rawInocDate);
+          if (formattedInoc) dateParts.push(`Inoc: ${formattedInoc}`);
+        }
+      }
+      if (dateParts.length > 0) {
+        dateHtml = `<div class="print-date">${dateParts.join(' | ')}</div>`;
+      }
+    }
+
+    let containerElement = '';
+    if (includeContainer && (item.containerType || item.container_type)) {
+      const cType = item.containerType || item.container_type;
+      const cWeight = item.containerWeight || item.container_weight;
+      containerElement = `<div class="print-extra font-semibold text-emerald-800">${cType}${cWeight ? ` (${cWeight})` : ''}</div>`;
+    }
+
+    innerContentHtml = `
+      ${!isLargeLabel && showLogo && orgLogoData ? `<img src="${orgLogoData}" alt="Company Logo" class="print-logo" />` : ''}
+      ${nameHtml}
+      ${batchIdHtml}
+      ${strainHtml}
+      ${dateHtml}
+      <div class="print-extra">${item.medium || item.medium_type || ''}</div>
+      ${containerElement}
+    `;
+  }
+
+  return {
+    innerContentHtml,
+    fullWidthHandwritingHtml,
+    isSmall2x1Preset: false,
+    displayId
+  };
+}
+
+// --- Modular Router Architecture: Central Router for Label Templates ---
+export function renderLabelHTML(item, options = {}) {
+  const {
+    preset = 'default',
+    enableHandwriting = false,
+    isHandwriting = false,
+    labelWidth = 2.625,
+    labelHeight = 1.0,
+    isLargeLabel = false
+  } = options;
+
+  const handwritingActive = Boolean(enableHandwriting || isHandwriting);
+
+  // Normalize preset key to identify 4x5, 2.6x1, etc.
+  const is4x5Preset = (preset === '4x5' || preset === 'generic-4x5' || (Math.abs(labelWidth - 4.0) < 0.2 && Math.abs(labelHeight - 5.0) < 0.2));
+  const is2x1SmallPreset = (preset === 'avery-5160' || preset === '30-up' || preset === '2.625x1' || preset === '2.6x1' ||
+    (labelWidth <= 2.75 && labelHeight <= 1.3 && !isLargeLabel && !is4x5Preset));
+
+  if (is4x5Preset) {
+    return handwritingActive
+      ? render4x5HandwritingHTML(item, options)
+      : render4x5StandardHTML(item, options);
+  } else if (is2x1SmallPreset && !handwritingActive) {
+    return render2x1SmallHTML(item, options);
+  } else {
+    // Preserve all existing fallback presets intact
+    return renderDefaultPresetHTML(item, options);
+  }
+}
+
+window.renderLabelHTML = renderLabelHTML;
 
 export function triggerPrint(itemList, layoutKey, offset) {
   try {
@@ -1876,7 +2415,8 @@ export function executePrint(itemList, layoutKey, offset) {
   const showBatchId = localStorage.getItem(APP_CONFIG.STORAGE_KEYS.PRINT_SHOW_BATCH_ID) !== 'false';
   const showStrain = localStorage.getItem(APP_CONFIG.STORAGE_KEYS.PRINT_SHOW_STRAIN) !== 'false';
   const showDates = localStorage.getItem(APP_CONFIG.STORAGE_KEYS.PRINT_SHOW_DATES) !== 'false';
-  const showLogo = localStorage.getItem(APP_CONFIG.STORAGE_KEYS.PRINT_SHOW_LOGO) === 'true';
+  const showLogoCheckbox = document.getElementById('chkShowLogo') || document.getElementById('print-show-logo');
+  const showLogo = showLogoCheckbox ? showLogoCheckbox.checked : (localStorage.getItem(APP_CONFIG.STORAGE_KEYS.PRINT_SHOW_LOGO) !== 'false');
   const orgLogoData = localStorage.getItem(APP_CONFIG.STORAGE_KEYS.ORG_LOGO_DATA);
   const enableHandwriting = localStorage.getItem(APP_CONFIG.STORAGE_KEYS.PRINT_ENABLE_HANDWRITING) === 'true';
   const customHandwritingStr = localStorage.getItem(APP_CONFIG.STORAGE_KEYS.PRINT_CUSTOM_HANDWRITING_LINES) || '';
@@ -1884,27 +2424,7 @@ export function executePrint(itemList, layoutKey, offset) {
   // Helper to generate QR code canvas/image and return a Promise that resolves when ready
   const qrPromises = [];
 
-  // Helper to format dates cleanly without raw ISO strings
-  const formatCleanDate = (dateVal) => {
-    if (!dateVal) return '';
-    // Handle standard YYYY-MM-DD or ISO strings
-    let d = new Date(dateVal);
-    if (isNaN(d.getTime())) {
-      d = new Date(dateVal + 'T12:00:00');
-    }
-    if (isNaN(d.getTime())) return String(dateVal);
-    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-  };
-
-  // Helper to determine if an item is truly inoculated
-  const isInoculatedItem = (item) => {
-    if (!item) return false;
-    if (item.stage === 'Preparation' || item.stage === 'Uninoculated') return false;
-    if (!item.strain || item.strain === 'Uninoculated') return false;
-    return true;
-  };
-
-  // Render actual active labels
+  // Render actual active labels through central renderLabelHTML generator
   itemList.forEach((item, index) => {
     const card = document.createElement('div');
     const isLargeLabel = labelHeight >= 2.0;
@@ -1923,140 +2443,64 @@ export function executePrint(itemList, layoutKey, offset) {
     card.style.width = `${labelWidth}in`;
     card.style.height = `${labelHeight}in`;
 
-    const rawId = item.code || item.custom_id || item.id || '';
-    // Format long UUIDs cleanly (first 8 chars) or use readable code
-    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rawId);
-    const displayId = isUuid ? rawId.substring(0, 8) : rawId;
-    const containerName = item.name || item.label || '';
+    // Call central renderLabelHTML generator
+    const { innerContentHtml, fullWidthHandwritingHtml, isSmall2x1Preset, displayId } = renderLabelHTML(item, {
+      preset: labelModel,
+      index,
+      total: itemList.length,
+      labelWidth,
+      labelHeight,
+      isLargeLabel,
+      showLogo,
+      orgLogoData,
+      enableHandwriting,
+      customHandwritingStr,
+      showName,
+      showBatchId,
+      showStrain,
+      showDates,
+      includeContainer
+    });
 
-    // Always attach label model / preset identifier
+    // Attach label model / preset identifier
     card.setAttribute('data-preset', labelModel || 'default');
-    if (labelModel === 'avery-5160' || (Math.abs(labelWidth - 2.625) < 0.1 && Math.abs(labelHeight - 1.0) < 0.1)) {
+    if (isSmall2x1Preset) {
       card.setAttribute('data-preset', '2.625x1');
-    }
-
-    // Build text elements conditionally based on user toggles
-    let nameHtml = '';
-    if (showName && containerName) {
-      nameHtml = `<div class="print-name" title="${containerName}">${containerName}</div>`;
-    }
-
-    let batchIdHtml = '';
-    if (showBatchId && displayId) {
-      batchIdHtml = `<div class="print-id">ID: ${displayId}</div>`;
-    }
-
-    let innerContentHtml = '';
-
-    let fullWidthHandwritingHtml = '';
-
-    if (enableHandwriting) {
-      // Handwriting mode: Keep Container Name & Batch ID at top, replace remaining data with blank fillable lines
-      let fillLines = [
-        '<div class="fill-line"><span class="line-label">Strain:</span><span class="line-blank"></span></div>',
-        '<div class="fill-line"><span class="line-label">Date:</span><span class="line-blank"></span></div>'
-      ];
-
-      // Parse custom handwriting lines
-      if (customHandwritingStr) {
-        const customLines = customHandwritingStr.split(',').map(s => s.trim()).filter(Boolean);
-        customLines.forEach(line => {
-          fillLines.push(`<div class="fill-line"><span class="line-label">${line}:</span><span class="line-blank"></span></div>`);
-        });
-      }
-
-      fillLines.push('<div class="fill-line"><span class="line-label">Notes:</span><span class="line-blank"></span></div>');
-
-      if (isLargeLabel) {
-        // Large templates: move handwriting lines to a dedicated full-width container below the body row
-        fullWidthHandwritingHtml = `
-          <div class="print-card-footer print-handwriting-zone">
-            ${fillLines.join('')}
-          </div>
-        `;
-        innerContentHtml = `
-          ${!isLargeLabel && showLogo && orgLogoData ? `<img src="${orgLogoData}" alt="Company Logo" class="print-logo" />` : ''}
-          ${nameHtml}
-          ${batchIdHtml}
-        `;
-      } else {
-        innerContentHtml = `
-          ${!isLargeLabel && showLogo && orgLogoData ? `<img src="${orgLogoData}" alt="Company Logo" class="print-logo" />` : ''}
-          ${nameHtml}
-          ${batchIdHtml}
-          <div class="handwriting-lines-container">
-            ${fillLines.join('')}
-          </div>
-        `;
-      }
-    } else {
-      // Standard Digital Rendering: Only render strain if container is truly inoculated (suppress 'Uninoculated')
-      let strainHtml = '';
-      if (showStrain && isInoculatedItem(item)) {
-        const strainText = item.strain;
-        strainHtml = `<div class="print-strain">${strainText}</div>`;
-      }
-
-      let dateHtml = '';
-      if (showDates) {
-        let dateParts = [];
-        // 1. Prepped Date
-        if (item.prepDate || item.prep_date) {
-          const pDate = formatCleanDate(item.prepDate || item.prep_date);
-          if (pDate) dateParts.push(`Prep: ${pDate}`);
-        }
-        // 2. Inoculation Date (only if container is actually inoculated)
-        if (isInoculatedItem(item)) {
-          const rawInocDate = item.inoculationDate || item.inoculatedAt || item.createdAt || item.created_at;
-          if (rawInocDate && rawInocDate !== 'null' && rawInocDate !== 'undefined') {
-            const formattedInoc = formatCleanDate(rawInocDate);
-            if (formattedInoc) dateParts.push(`Inoc: ${formattedInoc}`);
-          }
-        }
-        if (dateParts.length > 0) {
-          dateHtml = `<div class="print-date">${dateParts.join(' | ')}</div>`;
-        }
-      }
-
-      let containerElement = '';
-      if (includeContainer && (item.containerType || item.container_type)) {
-        const cType = item.containerType || item.container_type;
-        const cWeight = item.containerWeight || item.container_weight;
-        containerElement = `<div class="print-extra font-semibold text-emerald-800">${cType}${cWeight ? ` (${cWeight})` : ''}</div>`;
-      }
-
-      innerContentHtml = `
-        ${!isLargeLabel && showLogo && orgLogoData ? `<img src="${orgLogoData}" alt="Company Logo" class="print-logo" />` : ''}
-        ${nameHtml}
-        ${batchIdHtml}
-        ${strainHtml}
-        ${dateHtml}
-        <div class="print-extra">${item.medium || item.medium_type || ''}</div>
-        ${containerElement}
-      `;
     }
 
     const qrContainerId = `print-qr-${item.id || index}`;
 
     if (isLargeLabel) {
-      // Large label structure: Optional full-width logo header banner across top, top-aligned side-by-side QR & details below, optional full-width handwriting footer
-      const headerHtml = (showLogo && orgLogoData) ? `
-        <div class="print-card-header">
-          <img src="${orgLogoData}" alt="Company Logo" class="print-logo" />
-        </div>` : '';
-
-      card.innerHTML = `
-        ${headerHtml}
-        <div class="print-card-body">
-          <div class="print-qr-container" id="${qrContainerId}"></div>
-          <div class="print-text-container">
-            ${innerContentHtml}
+      const is4x5 = labelModel === 'generic-4x5' || labelModel === '4x5' || (Math.abs(labelWidth - 4.0) < 0.2 && Math.abs(labelHeight - 5.0) < 0.2);
+      
+      if (is4x5) {
+        card.innerHTML = `
+          <div class="print-card-4x5-container flex flex-col items-center justify-between w-full h-full text-center">
+            <div class="print-text-container w-full">
+              ${innerContentHtml}
+            </div>
+            <div class="print-qr-container flex items-center justify-center my-2" id="${qrContainerId}"></div>
+            ${fullWidthHandwritingHtml ? `<div class="w-full">${fullWidthHandwritingHtml}</div>` : ''}
           </div>
-        </div>
-        ${fullWidthHandwritingHtml}
-      `;
+        `;
+      } else {
+        const headerHtml = (showLogo && orgLogoData) ? `
+          <div class="print-card-header">
+            <img src="${orgLogoData}" alt="Company Logo" class="print-logo" />
+          </div>` : '';
+
+        card.innerHTML = `
+          ${headerHtml}
+          <div class="print-card-body">
+            <div class="print-qr-container" id="${qrContainerId}"></div>
+            <div class="print-text-container">
+              ${innerContentHtml}
+            </div>
+          </div>
+          ${fullWidthHandwritingHtml}
+        `;
+      }
     } else {
-      // Standard or compact label structure
       card.innerHTML = `
         <div class="print-qr-container" id="${qrContainerId}"></div>
         <div class="print-text-container">
@@ -3567,6 +4011,27 @@ export async function refreshBillingInfo() {
     window.loadOrgSettings = loadOrgSettings;
     window.populateOrgSettings = populateOrgSettings;
 
+    // Initialize Org Settings modal event delegation for tabs
+    export function initOrgSettingsModalListener() {
+      const modal = document.getElementById('org-settings-modal');
+      if (!modal || modal.hasAttribute('data-delegated-listener')) return;
+
+      modal.addEventListener('click', (e) => {
+        const tabBtn = e.target.closest('#org-tab-integrations, #org-tab-general, #org-tab-features');
+        if (tabBtn) {
+          if (tabBtn.id === 'org-tab-integrations') {
+            switchOrgTab('integrations');
+          } else if (tabBtn.id === 'org-tab-general') {
+            switchOrgTab('general');
+          } else if (tabBtn.id === 'org-tab-features') {
+            switchOrgTab('features');
+          }
+        }
+      });
+
+      modal.setAttribute('data-delegated-listener', 'true');
+    }
+
     // Open organization settings modal
     export function openOrgSettings() {
       const modal = document.getElementById('org-settings-modal');
@@ -3575,11 +4040,22 @@ export async function refreshBillingInfo() {
         return;
       }
 
+      initOrgSettingsModalListener();
+
       if (!currentOrganizationId && userOrganizations.length > 0) {
         setCurrentOrganizationId(userOrganizations[0].id);
       }
 
       loadOrgSettings();
+
+      // Ensure live integration statuses are always updated on modal open
+      const activeOrgId = currentOrganizationId || (userOrganizations.length > 0 ? userOrganizations[0].id : null);
+      if (typeof window.renderSquareStatus === 'function') {
+        window.renderSquareStatus(activeOrgId);
+      }
+      if (typeof window.renderEtsyStatus === 'function') {
+        window.renderEtsyStatus(activeOrgId);
+      }
 
       showModal(modal);
     }
@@ -3625,22 +4101,45 @@ export function closeOrgSettings() {
 export function switchOrgTab(tab) {
   const generalTab = document.getElementById('org-tab-general');
   const featuresTab = document.getElementById('org-tab-features');
+  const integrationsTab = document.getElementById('org-tab-integrations');
   const generalPanel = document.getElementById('org-panel-general');
   const featuresPanel = document.getElementById('org-panel-features');
+  const integrationsPanel = document.getElementById('org-panel-integrations');
 
-  if (generalTab && featuresTab && generalPanel && featuresPanel) {
-    if (tab === 'general') {
-      generalTab.className = 'px-4 py-2 text-xs font-bold border-b-2 border-emerald-500 text-emerald-400 transition';
-      featuresTab.className = 'px-4 py-2 text-xs font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-200 transition';
-      generalPanel.classList.remove('hidden');
-      featuresPanel.classList.add('hidden');
-    } else {
-      featuresTab.className = 'px-4 py-2 text-xs font-bold border-b-2 border-emerald-500 text-emerald-400 transition';
-      generalTab.className = 'px-4 py-2 text-xs font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-200 transition';
-      featuresPanel.classList.remove('hidden');
-      generalPanel.classList.add('hidden');
+  const tabs = [
+    { id: 'general', btn: generalTab, panel: generalPanel },
+    { id: 'features', btn: featuresTab, panel: featuresPanel },
+    { id: 'integrations', btn: integrationsTab, panel: integrationsPanel }
+  ];
+
+  tabs.forEach(t => {
+    if (t.btn && t.panel) {
+      if (t.id === tab) {
+        t.btn.className = 'px-4 py-2 text-xs font-bold border-b-2 border-emerald-500 text-emerald-400 transition flex items-center gap-1.5';
+        t.panel.classList.remove('hidden');
+      } else {
+        t.btn.className = 'px-4 py-2 text-xs font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-200 transition flex items-center gap-1.5';
+        t.panel.classList.add('hidden');
+      }
+    }
+  });
+
+  // Load live integration statuses every time integrations tab is opened
+  if (tab === 'integrations') {
+    const activeOrgId = currentOrganizationId || (userOrganizations.length > 0 ? userOrganizations[0].id : null);
+    if (typeof window.renderSquareStatus === 'function') {
+      window.renderSquareStatus(activeOrgId);
+    }
+    if (typeof window.renderEtsyStatus === 'function') {
+      window.renderEtsyStatus(activeOrgId);
     }
   }
+}
+
+// Helper to open Org Settings modal directly to the Integrations tab
+export function openOrgIntegrationsTab() {
+  openOrgSettings();
+  switchOrgTab('integrations');
 }
 
 // Save organization settings

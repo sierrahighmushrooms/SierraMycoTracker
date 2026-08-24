@@ -4,5 +4,18 @@
 			"path": ".."
 		}
 	],
-	"settings": {}
+	"settings": {
+		"sqltools.connections": [
+			{
+				"ssh": "Disabled",
+				"previewLimit": 50,
+				"server": "db.wsalxxsjnxptoeduwfqw.supabase.co",
+				"port": 5432,
+				"driver": "PostgreSQL",
+				"name": "Supabase - Sierra Myco Lab",
+				"database": "postgres",
+				"username": "postgres"
+			}
+		]
+	}
 }

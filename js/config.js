@@ -56,6 +56,13 @@ export const MEDIUM_CATEGORIES = {
       { name: "Master's Mix", value: "Master's Mix" },
       { name: 'Hardwood Sawdust', value: 'Hardwood Sawdust' }
     ]
+  },
+  ALL_IN_ONE: {
+    label: 'All-In-One',
+    icon: '📦',
+    items: [
+      { name: 'All In One (AIO)', value: 'All In One' }
+    ]
   }
 };
 
@@ -67,9 +74,9 @@ export const CONTAINER_CATEGORIES = {
     icon: '🫙',
     primaryMediums: ['GRAIN', 'SUBSTRATE'],
     items: [
-      { name: 'Pint Wide Mouth', value: 'Pint Wide Mouth', capacityMl: 473 },
-      { name: 'Quart Wide Mouth', value: 'Quart Wide Mouth', capacityMl: 950 },
-      { name: 'Half Gallon Wide Mouth', value: 'Half Gallon Wide Mouth', capacityMl: 1893 }
+      { name: 'Pint Wide Mouth', value: 'Pint Wide Mouth', capacityMl: 473, defaultWeightLbs: 0.65 },
+      { name: 'Quart Wide Mouth', value: 'Quart Wide Mouth', capacityMl: 950, defaultWeightLbs: 1.25 },
+      { name: 'Half Gallon Wide Mouth', value: 'Half Gallon Wide Mouth', capacityMl: 1893, defaultWeightLbs: 2.50 }
     ]
   },
   BAG: {
@@ -77,10 +84,10 @@ export const CONTAINER_CATEGORIES = {
     icon: '🛍️',
     primaryMediums: ['GRAIN', 'SUBSTRATE'],
     items: [
-      { name: 'Unicorn Bag 3lb', value: 'Unicorn Bag 3lb', capacityMl: 1360 },
-      { name: 'Unicorn Bag 4lb', value: 'Unicorn Bag 4lb', capacityMl: 1814 },
-      { name: 'Unicorn Bag 5lb', value: 'Unicorn Bag 5lb', capacityMl: 2268 },
-      { name: 'Micro-perforated', value: 'Micro-perforated', capacityMl: 1000 }
+      { name: 'Unicorn Bag 3lb', value: 'Unicorn Bag 3lb', capacityMl: 1360, defaultWeightLbs: 3.00 },
+      { name: 'Unicorn Bag 4lb', value: 'Unicorn Bag 4lb', capacityMl: 1814, defaultWeightLbs: 4.00 },
+      { name: 'Unicorn Bag 5lb', value: 'Unicorn Bag 5lb', capacityMl: 2268, defaultWeightLbs: 5.00 },
+      { name: 'Micro-perforated', value: 'Micro-perforated', capacityMl: 1000, defaultWeightLbs: 2.00 }
     ]
   },
   MEDIA_BOTTLE: {
@@ -88,8 +95,8 @@ export const CONTAINER_CATEGORIES = {
     icon: '🧪',
     primaryMediums: ['LIQUID', 'AGAR'],
     items: [
-      { name: '500ml GL45', value: '500ml GL45', capacityMl: 500 },
-      { name: '1000ml GL45', value: '1000ml GL45', capacityMl: 1000 }
+      { name: '500ml GL45', value: '500ml GL45', capacityMl: 500, defaultWeightLbs: 1.10 },
+      { name: '1000ml GL45', value: '1000ml GL45', capacityMl: 1000, defaultWeightLbs: 2.20 }
     ]
   },
   FLASK: {
@@ -97,11 +104,27 @@ export const CONTAINER_CATEGORIES = {
     icon: '⚗️',
     primaryMediums: ['LIQUID', 'AGAR'],
     items: [
-      { name: '500ml Erlenmeyer', value: '500ml Erlenmeyer', capacityMl: 500 },
-      { name: '1000ml Erlenmeyer', value: '1000ml Erlenmeyer', capacityMl: 1000 },
-      { name: '2000ml Erlenmeyer', value: '2000ml Erlenmeyer', capacityMl: 2000 }
+      { name: '500ml Erlenmeyer', value: '500ml Erlenmeyer', capacityMl: 500, defaultWeightLbs: 1.10 },
+      { name: '1000ml Erlenmeyer', value: '1000ml Erlenmeyer', capacityMl: 1000, defaultWeightLbs: 2.20 },
+      { name: '2000ml Erlenmeyer', value: '2000ml Erlenmeyer', capacityMl: 2000, defaultWeightLbs: 4.40 }
     ]
   }
+};
+
+// Built-in fallback container default weights (in lbs)
+export const DEFAULT_CONTAINER_WEIGHTS = {
+  'Quart Wide Mouth': 1.25,
+  'Pint Wide Mouth': 0.65,
+  'Half Gallon Wide Mouth': 2.50,
+  'Unicorn Bag 3lb': 3.00,
+  'Unicorn Bag 4lb': 4.00,
+  'Unicorn Bag 5lb': 5.00,
+  'Micro-perforated': 2.00,
+  '500ml GL45': 1.10,
+  '1000ml GL45': 2.20,
+  '500ml Erlenmeyer': 1.10,
+  '1000ml Erlenmeyer': 2.20,
+  '2000ml Erlenmeyer': 4.40
 };
 
 // Map a medium value to its category key

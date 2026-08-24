@@ -1,13 +1,12 @@
 // Supabase Edge Function: etsy-import-listings
 // Imports active listings from Etsy API v3, supports auto-token refresh & 250ms rate limit delay
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const corsHeaders = {
+export const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS"
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS"
 };
 
 // Helper: Sleep delay for rate-limiting (5 QPS max)
@@ -56,9 +55,9 @@ async function getValidEtsyAccessToken(supabaseAdmin: any, integration: any, ets
   return integration.access_token;
 }
 
-serve(async (req: Request) => {
+Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
+    return new Response("ok", { headers: corsHeaders, status: 200 });
   }
 
   try {
@@ -66,6 +65,13 @@ serve(async (req: Request) => {
     const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY") || "";
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
     const etsyClientId = Deno.env.get("ETSY_KEYSTRING") || "defw08dcohinep37tx3vdgmm";
+    // Etsy's Feb 9 2026 shared-secret enforcement requires "x-api-key" as
+    // "<keystring>:<shared secret>" on v3 REST calls, or they 403.
+    const etsySharedSecret = Deno.env.get("ETSY_SHARED_SECRET") || "";
+    if (!etsySharedSecret) {
+      console.error("etsy-import-listings: ETSY_SHARED_SECRET is not set -- Etsy v3 REST calls will 403.");
+    }
+    const etsyApiKeyHeader = etsySharedSecret ? `${etsyClientId}:${etsySharedSecret}` : etsyClientId;
 
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
@@ -104,6 +110,33 @@ serve(async (req: Request) => {
       });
     }
 
+    // organization_id is never accepted from the client here -- it always
+    // comes from this user's own etsy_integrations row (looked up by the
+    // JWT-verified user.id above), and that row's organization_id was only
+    // ever set by etsy-auth-start's own verified membership check. As
+    // defense in depth, re-confirm membership hasn't been revoked since
+    // the Etsy connection was made, so sku_mappings can't be written under
+    // an organization the caller is no longer part of.
+    if (integration.organization_id) {
+      const { data: membership } = await adminClient
+        .from("organization_members")
+        .select("organization_id")
+        .eq("user_id", user.id)
+        .eq("organization_id", integration.organization_id)
+        .maybeSingle();
+
+      if (!membership) {
+        console.error("etsy-import-listings: caller is no longer a member of the organization bound to their Etsy integration.", {
+          userId: user.id,
+          organizationId: integration.organization_id
+        });
+        return new Response(JSON.stringify({ error: "You are no longer authorized for the organization linked to this Etsy connection." }), {
+          status: 403,
+          headers: { ...corsHeaders, "Content-Type": "application/json" }
+        });
+      }
+    }
+
     // Ensure valid access token
     const accessToken = await getValidEtsyAccessToken(adminClient, integration, etsyClientId);
     const shopId = integration.etsy_shop_id;
@@ -120,7 +153,7 @@ serve(async (req: Request) => {
       
       const res = await fetch(url, {
         headers: {
-          "x-api-key": etsyClientId,
+          "x-api-key": etsyApiKeyHeader,
           "Authorization": `Bearer ${accessToken}`
         }
       });

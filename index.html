@@ -199,39 +199,107 @@
 
   <div class="max-w-7xl mx-auto space-y-6">
     <!-- Header & Action Bar -->
-    <header class="border-b border-slate-700 pb-4 space-y-4">
-      <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div class="flex flex-col sm:flex-row sm:items-center gap-4">
-          <div>
-            <h1 class="text-2xl font-bold text-emerald-400">🍄 Sierra Myco Lab</h1>
-            <p class="text-xs text-slate-400">Workflow, Lineage, Bulk PC Prep & Audit System</p>
-          </div>
-          <!-- Location selector dropdown -->
-          <div id="header-location-container" class="hidden flex items-center gap-2 bg-slate-800/60 border border-slate-700/60 rounded-xl px-3 py-1.5 self-start sm:self-center">
-            <span class="text-xs">📍</span>
-            <select id="header-location-select" class="bg-transparent text-xs text-slate-200 font-bold focus:outline-none cursor-pointer">
-              <option value="all" class="bg-slate-900">All Locations</option>
-            </select>
-          </div>
+    <header class="w-full flex flex-row items-center justify-between gap-4 py-3 px-4 bg-slate-900 border-b border-slate-800 rounded-xl">
+      
+      <!-- Left Group (Brand Logo, Location Dropdown, Primary Actions) -->
+      <div class="flex items-center gap-3 shrink-0 flex-wrap sm:flex-nowrap">
+        <a href="/" class="flex items-center gap-2 mr-1 h-9 shrink-0">
+          <span class="text-2xl leading-none">🍄</span>
+          <span class="text-base font-bold text-white tracking-tight leading-none whitespace-nowrap">Sierra <span class="text-amber-400">Myco Lab</span></span>
+        </a>
+
+        <!-- Location selector dropdown -->
+        <div id="header-location-container" class="hidden flex items-center gap-2 bg-slate-800/80 border border-slate-700/80 rounded-lg px-3 h-9 shrink-0">
+          <span class="text-xs">📍</span>
+          <select id="header-location-select" class="bg-transparent text-xs text-slate-200 font-bold focus:outline-none cursor-pointer">
+            <option value="all" class="bg-slate-900">All Locations</option>
+          </select>
         </div>
-        <div class="flex flex-wrap gap-2">
-          <button onclick="openLogHarvestModal()" class="bg-emerald-600 hover:bg-emerald-500 text-slate-950 px-3 py-1.5 rounded text-xs font-bold transition flex items-center gap-1 shadow-md shadow-emerald-950/20">🍄 Log Harvest</button>
-          <button onclick="openBatchModal()" class="bg-amber-600 hover:bg-amber-500 text-slate-950 px-3 py-1.5 rounded text-xs font-bold transition">📋 PC Batch Log</button>
-          <button onclick="document.getElementById('import-file').click()" class="bg-slate-700 hover:bg-slate-600 px-3 py-1.5 rounded text-xs transition">Restore JSON</button>
-          <input type="file" id="import-file" class="hidden" accept=".json" onchange="importJSON(event)">
-          <button onclick="exportJSON()" class="bg-slate-700 hover:bg-slate-600 px-3 py-1.5 rounded text-xs transition">Backup JSON</button>
-          <button onclick="exportCSV()" class="bg-blue-600 hover:bg-blue-500 px-3 py-1.5 rounded text-xs transition">Export CSV</button>
-          <button onclick="openPrintSettingsModal()" class="bg-indigo-600 hover:bg-indigo-500 px-3 py-1.5 rounded text-xs font-bold transition flex items-center gap-1">🖨️ Label Settings</button>
-          <button onclick="startScanner()" class="bg-emerald-600 hover:bg-emerald-500 px-3 py-1.5 rounded text-xs font-bold transition flex items-center gap-1">📷 Scan QR</button>
-          <button onclick="openRecipeCalcModal()" class="bg-teal-600 hover:bg-teal-500 px-3 py-1.5 rounded text-xs font-bold transition flex items-center gap-1">🧮 Recipe Calc</button>
-          <button onclick="openFeedbackModal()" class="bg-fuchsia-600 hover:bg-fuchsia-500 px-3 py-1.5 rounded text-xs font-bold transition flex items-center gap-1">💡 Request Feature</button>
-          <button onclick="openBillingSettings()" class="bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 px-3 py-1.5 rounded text-xs font-bold transition flex items-center gap-1">💳 Billing</button>
-          <button id="setup-wizard-header-btn" onclick="window.location.hash = '#onboarding/setup'" class="hidden bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 px-3 py-1.5 rounded text-xs font-bold transition flex items-center gap-1 shadow-lg shadow-emerald-500/10">🚀 Setup Wizard</button>
-          <button onclick="openOrgSettings()" class="bg-slate-700 hover:bg-slate-600 px-3 py-1.5 rounded text-xs font-bold transition flex items-center gap-1">🏢 Org Settings</button>
-          <button id="account-sync-button" type="button" onclick="openAuthModal('account')" class="bg-slate-700 hover:bg-slate-600 px-3 py-1.5 rounded text-xs font-bold transition flex items-center gap-1">👤 Account / Sync</button>
-          <span id="cloud-sync-status" class="hidden items-center gap-1 text-[10px] font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-700/60 px-2 py-1 rounded-full self-center whitespace-nowrap">☁️ Cloud Synced</span>
-        </div>
+
+        <!-- Primary Daily Action Buttons -->
+        <button id="btn-log-harvest" onclick="openLogHarvestModal()" class="h-9 bg-emerald-600 hover:bg-emerald-500 text-slate-950 px-3.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 shadow-md shadow-emerald-950/20 whitespace-nowrap shrink-0">
+          <span>🍄</span> Log Harvest
+        </button>
+        <button id="btn-pc-log" onclick="openBatchModal()" class="h-9 bg-amber-600 hover:bg-amber-500 text-slate-950 px-3.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 whitespace-nowrap shrink-0">
+          <span>📋</span> PC Batch Log
+        </button>
+        <button id="btn-scan-qr" onclick="startScanner()" class="h-9 bg-slate-800 hover:bg-slate-700 text-emerald-400 border border-slate-700 hover:border-slate-600 px-3.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 whitespace-nowrap shrink-0">
+          <span>📷</span> Scan QR
+        </button>
       </div>
+
+      <!-- Right Group (Data & Tools dropdown, Settings dropdown, Cloud Sync badge) -->
+      <div class="flex items-center gap-3 ml-auto shrink-0">
+        
+        <!-- Hidden File Input for Restore JSON -->
+        <input type="file" id="import-file" class="hidden" accept=".json" onchange="importJSON(event)">
+
+        <!-- Data & Tools Dropdown -->
+        <details class="relative group">
+          <summary class="h-9 list-none cursor-pointer bg-slate-800 hover:bg-slate-700 border border-slate-700 hover:border-slate-600 text-slate-200 px-3.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 select-none whitespace-nowrap">
+            <span>🛠️</span> Data & Tools <span class="text-[10px] text-slate-400">▾</span>
+          </summary>
+          <div class="absolute right-0 mt-2 w-48 bg-slate-900 border border-slate-700/90 rounded-xl shadow-2xl z-50 p-1.5 space-y-1 animate-fade-in divide-y divide-slate-800">
+            <div class="space-y-1">
+              <button id="btn-recipe-calc" onclick="openRecipeCalcModal(); this.closest('details').removeAttribute('open')" class="w-full text-left px-3 py-2 rounded-lg text-xs font-semibold text-slate-200 hover:bg-slate-800 hover:text-teal-300 transition flex items-center gap-2">
+                <span>🧮</span> Recipe Calc
+              </button>
+              <button id="btn-export-csv" onclick="exportCSV(); this.closest('details').removeAttribute('open')" class="w-full text-left px-3 py-2 rounded-lg text-xs font-semibold text-slate-200 hover:bg-slate-800 hover:text-blue-300 transition flex items-center gap-2">
+                <span>📊</span> Export CSV
+              </button>
+            </div>
+            <div class="pt-1 space-y-1">
+              <button id="btn-backup-json" onclick="exportJSON(); this.closest('details').removeAttribute('open')" class="w-full text-left px-3 py-2 rounded-lg text-xs font-semibold text-slate-200 hover:bg-slate-800 hover:text-amber-300 transition flex items-center gap-2">
+                <span>💾</span> Backup JSON
+              </button>
+              <button id="btn-restore-json" onclick="document.getElementById('import-file').click(); this.closest('details').removeAttribute('open')" class="w-full text-left px-3 py-2 rounded-lg text-xs font-semibold text-slate-200 hover:bg-slate-800 hover:text-emerald-300 transition flex items-center gap-2">
+                <span>📥</span> Restore JSON
+              </button>
+            </div>
+          </div>
+        </details>
+
+        <!-- Settings & Account Dropdown -->
+        <details class="relative group">
+          <summary class="h-9 list-none cursor-pointer bg-slate-800 hover:bg-slate-700 border border-slate-700 hover:border-slate-600 text-slate-200 px-3.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 select-none whitespace-nowrap">
+            <span>⚙️</span> Settings <span class="text-[10px] text-slate-400">▾</span>
+          </summary>
+          <div class="absolute right-0 mt-2 w-52 bg-slate-900 border border-slate-700/90 rounded-xl shadow-2xl z-50 p-1.5 space-y-1 animate-fade-in divide-y divide-slate-800">
+            <div class="space-y-1">
+              <button id="btn-label-settings" onclick="openPrintSettingsModal(); this.closest('details').removeAttribute('open')" class="w-full text-left px-3 py-2 rounded-lg text-xs font-semibold text-slate-200 hover:bg-slate-800 hover:text-indigo-300 transition flex items-center gap-2">
+                <span>🖨️</span> Label Settings
+              </button>
+              <button id="btn-org-settings" onclick="openOrgSettings(); this.closest('details').removeAttribute('open')" class="w-full text-left px-3 py-2 rounded-lg text-xs font-semibold text-slate-200 hover:bg-slate-800 hover:text-emerald-300 transition flex items-center gap-2">
+                <span>🏢</span> Org Settings
+              </button>
+              <button id="setup-wizard-header-btn" onclick="window.location.hash = '#onboarding/setup'; this.closest('details').removeAttribute('open')" class="hidden w-full text-left px-3 py-2 rounded-lg text-xs font-semibold text-slate-200 hover:bg-slate-800 hover:text-teal-300 transition flex items-center gap-2">
+                <span>🚀</span> Setup Wizard
+              </button>
+              <button id="btn-billing" onclick="openBillingSettings(); this.closest('details').removeAttribute('open')" class="w-full text-left px-3 py-2 rounded-lg text-xs font-semibold text-slate-200 hover:bg-slate-800 hover:text-amber-300 transition flex items-center gap-2">
+                <span>💳</span> Billing
+              </button>
+            </div>
+            <div class="pt-1 space-y-1">
+              <button id="account-sync-button" type="button" onclick="openAuthModal('account'); this.closest('details').removeAttribute('open')" class="w-full text-left px-3 py-2 rounded-lg text-xs font-semibold text-slate-200 hover:bg-slate-800 hover:text-emerald-300 transition flex items-center gap-2">
+                <span>👤</span> Account / Sync
+              </button>
+              <button id="btn-request-feature" onclick="openFeedbackModal(); this.closest('details').removeAttribute('open')" class="w-full text-left px-3 py-2 rounded-lg text-xs font-semibold text-slate-200 hover:bg-slate-800 hover:text-fuchsia-300 transition flex items-center gap-2">
+                <span>💡</span> Request Feature
+              </button>
+            </div>
+          </div>
+        </details>
+
+        <!-- Cloud Synced Status Badge -->
+        <span id="cloud-sync-status" class="hidden h-9 items-center gap-1.5 text-[11px] font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-700/60 px-3 rounded-lg whitespace-nowrap">
+          ☁️ Cloud Synced
+        </span>
+      </div>
+
+    </header>
+
+    <!-- Dashboard Stats Block -->
+    <div class="space-y-4">
 
       <!-- Dashboard Stats -->
       <div id="dashboard-stats" class="grid grid-cols-2 md:grid-cols-5 gap-4">
@@ -281,7 +349,13 @@
           </h2>
           <p class="text-xs text-slate-400 mt-0.5">Manage customer directory, contact profiles, and orders.</p>
         </div>
-        <div class="flex items-center gap-2">
+        <div class="flex items-center gap-2 flex-wrap">
+          <button type="button" onclick="openSkuMappingModal()" class="text-xs bg-orange-950/60 hover:bg-orange-900/60 text-orange-300 border border-orange-700/60 px-3 py-1.5 rounded-lg font-bold transition flex items-center gap-1.5 shadow-sm">
+            <span>🔗</span> SKU Mappings
+          </button>
+          <button type="button" onclick="openOrgIntegrationsTab()" class="text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 hover:border-slate-600 px-3 py-1.5 rounded-lg font-bold transition flex items-center gap-1.5 shadow-sm">
+            <span>🔌</span> Integrations
+          </button>
           <span class="text-[10px] bg-emerald-500/10 text-emerald-300 font-semibold px-2.5 py-1 rounded-full border border-emerald-500/20 uppercase tracking-wider">Active Workspace</span>
         </div>
       </div>
@@ -755,6 +829,7 @@
                 <select id="add-supply-category" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-500/60">
                   <option value="Grain">Grain</option>
                   <option value="Substrate">Substrate</option>
+                  <option value="Lab / Raw Ingredients">Lab / Raw Ingredients</option>
                   <option value="Agar & Petri">Agar & Petri</option>
                   <option value="Liquid Culture">Liquid Culture</option>
                   <option value="Packaging">Packaging</option>
@@ -851,18 +926,116 @@
           </div>
 
           <form id="bulk-form" class="space-y-4">
-            <div class="grid grid-cols-2 gap-3">
+            <div class="grid grid-cols-2 gap-3 items-end">
               <div>
-                <label class="block text-xs font-semibold font-sans-custom uppercase tracking-wider text-slate-400 mb-1.5">Medium</label>
+                <div class="flex justify-between items-baseline mb-1.5 min-h-[1.25rem]">
+                  <label class="block text-xs font-semibold font-sans-custom uppercase tracking-wider text-slate-400">Medium</label>
+                  <button id="btnManageMediums" type="button" onclick="openManagePresetsModal('mediums')" class="text-[11px] text-slate-400 hover:text-emerald-400 underline leading-none">Manage Custom</button>
+                </div>
                 <select id="bulk-medium" onchange="handleBulkMediumChange()" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/50 rounded-lg p-2.5 text-sm text-slate-100 transition duration-150 outline-none">
                   <!-- Populated dynamically by populateMediumDropdown() -->
                 </select>
               </div>
               <div>
-                <label class="block text-xs font-semibold font-sans-custom uppercase tracking-wider text-slate-400 mb-1.5">Container</label>
+                <div class="flex justify-between items-baseline mb-1.5 min-h-[1.25rem]">
+                  <label class="block text-xs font-semibold font-sans-custom uppercase tracking-wider text-slate-400">Container</label>
+                  <button id="btnManageContainers" type="button" onclick="openManagePresetsModal('containers')" class="text-[11px] text-slate-400 hover:text-emerald-400 underline leading-none">Manage Custom</button>
+                </div>
                 <select id="bulk-container" onchange="handleBulkContainerChange()" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/50 rounded-lg p-2.5 text-sm text-slate-100 transition duration-150 outline-none">
                   <!-- Populated dynamically by populateContainerDropdownSmart() -->
                 </select>
+              </div>
+            </div>
+
+            <!-- Unit Fill Weight & Default Toggle -->
+            <div id="unit-weight-container">
+              <div class="flex justify-between items-center mb-1.5">
+                <label class="block text-xs font-semibold font-sans-custom uppercase tracking-wider text-slate-400">UNIT FILL WEIGHT</label>
+              </div>
+              <div class="flex gap-2">
+                <input type="number" id="txtUnitWeight" step="0.01" min="0" placeholder="e.g. 1.25" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/50 rounded-lg p-2.5 text-sm text-slate-100 font-mono-custom transition duration-150 outline-none">
+                <select id="selWeightUnit" class="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 font-mono font-bold focus:outline-none focus:ring-1 focus:ring-amber-500">
+                  <option value="lbs" selected>lbs</option>
+                  <option value="g">g</option>
+                  <option value="kg">kg</option>
+                </select>
+              </div>
+              <label class="flex items-center gap-2 text-xs text-slate-400 mt-1.5 cursor-pointer select-none">
+                <input type="checkbox" id="chkSaveContainerWeight" class="rounded text-amber-500 focus:ring-amber-500 bg-slate-950 border-slate-800">
+                Save as default weight for this container
+              </label>
+            </div>
+
+            <!-- All-In-One (AIO) Composition Panel -->
+            <div id="aio-composition-panel" class="hidden bg-slate-950/80 border border-amber-500/30 rounded-xl p-3.5 space-y-3">
+              <div class="flex justify-between items-center border-b border-slate-800 pb-2">
+                <span class="text-xs font-bold text-amber-400 flex items-center gap-1.5 font-display-custom">
+                  <span>📦</span> All-In-One (AIO) Composition
+                </span>
+                <span id="aio-split-preview" class="text-[11px] font-mono text-slate-400">50% Grain / 50% Substrate</span>
+              </div>
+
+              <div class="grid grid-cols-2 gap-3">
+                <!-- Grain Component -->
+                <div>
+                  <div class="flex justify-between items-center mb-1">
+                    <label class="block text-[10px] font-semibold uppercase text-slate-400">Grain Component</label>
+                    <span id="aio-grain-weight-calc" class="text-[10px] font-mono text-amber-300 font-bold">0.00 lbs</span>
+                  </div>
+                  <select id="aio-grain-select" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-amber-500">
+                    <option value="Whole Oats" selected>Whole Oats</option>
+                    <option value="Millet">Millet</option>
+                    <option value="Rye Berries">Rye Berries</option>
+                    <option value="Wheat Berries">Wheat Berries</option>
+                    <option value="Corn/Popcorn">Corn/Popcorn</option>
+                    <option value="Sorghum">Sorghum</option>
+                  </select>
+                  <div id="aio-grain-supply-warning" class="mt-1"></div>
+                </div>
+
+                <!-- Substrate Component -->
+                <div>
+                  <div class="flex justify-between items-center mb-1">
+                    <label class="block text-[10px] font-semibold uppercase text-slate-400">Substrate Component</label>
+                    <span id="aio-sub-weight-calc" class="text-[10px] font-mono text-amber-300 font-bold">0.00 lbs</span>
+                  </div>
+                  <select id="aio-substrate-select" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-amber-500">
+                    <option value="Coco Coir" selected>Coco Coir</option>
+                    <option value="Master's Mix">Master's Mix</option>
+                    <option value="Hardwood Sawdust">Hardwood Sawdust</option>
+                    <option value="CVG Bulk">CVG Bulk</option>
+                  </select>
+                  <div id="aio-sub-supply-warning" class="mt-1"></div>
+                </div>
+              </div>
+
+              <!-- Ratio Selector -->
+              <div class="pt-1">
+                <div class="flex justify-between items-center mb-1">
+                  <label class="block text-[10px] font-semibold uppercase text-slate-400">Grain : Substrate Ratio</label>
+                  <span id="aio-ratio-label" class="text-[10px] font-mono font-bold text-amber-400">50% Grain / 50% Substrate</span>
+                </div>
+                <select id="aio-ratio-select" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-amber-500">
+                  <option value="10-90">1 : 9 (10% Grain / 90% Substrate)</option>
+                  <option value="20-80">1 : 4 (20% Grain / 80% Substrate)</option>
+                  <option value="30-70">3 : 7 (30% Grain / 70% Substrate)</option>
+                  <option value="50-50" selected>1 : 1 (50% Grain / 50% Substrate)</option>
+                  <option value="custom">Custom...</option>
+                </select>
+
+                <!-- Custom Grain % (shown only when "Custom..." is selected) -->
+                <div id="aio-custom-ratio-container" class="hidden mt-2">
+                  <label class="block text-[10px] font-semibold uppercase text-slate-400 mb-1">Custom Grain %</label>
+                  <div class="flex items-center gap-2">
+                    <input type="number" id="aio-custom-grain-pct" min="1" max="99" step="1" value="50" placeholder="e.g. 25" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-xs text-slate-100 font-mono-custom focus:outline-none focus:ring-1 focus:ring-amber-500">
+                    <span class="text-[10px] text-slate-400 font-mono whitespace-nowrap">% Grain</span>
+                  </div>
+                </div>
+
+                <label class="flex items-center gap-2 text-xs text-slate-400 mt-2 cursor-pointer select-none">
+                  <input type="checkbox" id="chkSaveAIORatio" class="rounded text-amber-500 focus:ring-amber-500 bg-slate-950 border-slate-800">
+                  Save as default AIO ratio
+                </label>
               </div>
             </div>
 
@@ -884,8 +1057,8 @@
             <!-- Media Bottle Fields -->
             <div id="media-bottle-fields" class="hidden grid grid-cols-2 gap-3">
               <div>
-                <label class="block text-xs font-semibold font-sans-custom uppercase tracking-wider text-slate-400 mb-1.5">Volume per Container (mL)</label>
-                <input type="number" id="bulk-volume-ml" placeholder="e.g., 500" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/50 rounded-lg p-2.5 text-sm text-slate-100 transition duration-150 outline-none font-mono-custom">
+                <label class="block text-xs font-semibold font-sans-custom uppercase tracking-wider text-slate-400 mb-1.5">Volume (mL)</label>
+                <input type="number" id="bulk-volume-ml" placeholder="e.g., 500" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/50 rounded-lg p-2.5 text-sm text-slate-100 transition duration-150 outline-none font-mono-custom" oninput="handleVolumeMlChange(this.value)">
               </div>
               <div>
                 <label class="block text-xs font-semibold font-sans-custom uppercase tracking-wider text-slate-400 mb-1.5">Color / Variant</label>
@@ -893,38 +1066,38 @@
               </div>
             </div>
 
-            <!-- LIQUID CULTURE RECIPE CALCULATOR -->
-            <div id="lc-calculator-box" class="hidden bg-emerald-950/10 p-3 rounded-lg border border-emerald-900/30 space-y-2.5">
-              <h4 class="text-xs font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-1.5 font-display-custom">
-                <span>🧪</span> Liquid Culture Recipe Calculator
-              </h4>
+            <!-- LIQUID & AGAR RECIPE CALCULATOR -->
+            <div id="lc-calculator-box" class="hidden bg-emerald-950/10 p-3.5 rounded-xl border border-emerald-900/40 space-y-3">
+              <div class="flex justify-between items-center border-b border-emerald-900/30 pb-2">
+                <h4 id="recipe-calc-box-title" class="text-xs font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-1.5 font-display-custom">
+                  <span>🧪</span> Recipe Calculator
+                </h4>
+                <span id="lc-total-batch-volume" class="text-xs font-bold text-white font-mono-custom bg-emerald-950 px-2 py-0.5 rounded border border-emerald-800/60">3500 mL Total</span>
+              </div>
+              
               <div class="grid grid-cols-2 gap-3">
                 <div>
-                  <label class="block text-[10px] text-emerald-400 font-semibold uppercase tracking-wider mb-1 font-sans-custom">Target Volume per Container (mL)</label>
-                  <input type="number" id="lc-target-volume" value="500" class="w-full bg-slate-950 border border-emerald-900/40 focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/50 rounded-lg p-2 text-xs text-slate-100 transition duration-150 outline-none font-mono-custom" oninput="updateLCCalculator()">
+                  <label class="block text-[10px] text-emerald-400 font-semibold uppercase tracking-wider mb-1 font-sans-custom">Volume (mL)</label>
+                  <input type="number" id="lc-target-volume" value="500" class="w-full bg-slate-950 border border-emerald-900/40 focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/50 rounded-lg p-2 text-xs text-slate-100 transition duration-150 outline-none font-mono-custom" oninput="handleTargetVolumeChange(this.value)">
                 </div>
                 <div class="flex flex-col justify-end">
-                  <span class="text-[10px] text-slate-500 font-medium uppercase tracking-wider font-sans-custom">Total Liquid for batch:</span>
-                  <span id="lc-total-batch-volume" class="text-xs font-bold text-white font-mono-custom">3500 mL</span>
+                  <span class="text-[10px] text-slate-400 font-medium uppercase tracking-wider font-sans-custom mb-1">Editable Ingredients:</span>
+                  <button type="button" onclick="addCustomRecipeIngredientRow()" class="text-[11px] bg-emerald-900/40 hover:bg-emerald-800/50 border border-emerald-600/50 text-emerald-300 font-bold py-1.5 px-2 rounded-lg transition flex items-center justify-center gap-1">
+                    <span>➕</span> Add Ingredient / Color
+                  </button>
                 </div>
               </div>
-              <div class="bg-slate-950 p-2.5 rounded-lg text-xs space-y-1.5 text-slate-300 border border-slate-900">
-                <div class="flex justify-between">
-                  <span class="font-sans-custom text-slate-400">💧 Distilled Water:</span>
-                  <span id="lc-calc-water" class="font-bold font-mono-custom text-emerald-400">500 mL</span>
-                </div>
-                <div class="flex justify-between">
-                  <span class="font-sans-custom text-slate-400">🌾 Light Malt Extract (LME):</span>
-                  <span id="lc-calc-lme" class="font-bold font-mono-custom text-emerald-400">1.00 g</span>
-                </div>
-                <div class="flex justify-between">
-                  <span class="font-sans-custom text-slate-400">🍯 Honey / Dextrose:</span>
-                  <span id="lc-calc-sugar" class="font-bold font-mono-custom text-emerald-400">10.00 g</span>
-                </div>
-                <div class="flex justify-between">
-                  <span class="font-sans-custom text-slate-400">🧪 Peptone:</span>
-                  <span id="lc-calc-peptone" class="font-bold font-mono-custom text-emerald-400">0.50 g</span>
-                </div>
+
+              <!-- Dynamic Editable Ingredients Table / Inputs -->
+              <div id="lc-calc-ingredients-list" class="bg-slate-950 p-2.5 rounded-xl text-xs space-y-2 border border-slate-900 divide-y divide-slate-900">
+                <!-- Dynamically rendered editable rows -->
+              </div>
+
+              <div class="pt-1">
+                <label class="flex items-center gap-2 text-xs text-slate-400 cursor-pointer">
+                  <input type="checkbox" id="chkDeductRecipeIngredients" checked class="rounded text-emerald-500 focus:ring-emerald-500 bg-slate-950 border-slate-800">
+                  <span>Deduct recipe dry ingredients from inventory</span>
+                </label>
               </div>
             </div>
 
@@ -950,6 +1123,23 @@
               </div>
             </div>
 
+            <!-- Total Material Deduction Summary & Warning -->
+            <div class="bg-slate-950/60 border border-slate-800/80 rounded-lg p-3 text-xs space-y-2">
+              <div class="flex items-center justify-between font-medium text-slate-300 font-sans-custom">
+                <span>Total Material Needed:</span>
+                <span class="font-mono-custom font-bold text-amber-400">
+                  <span id="lblTotalPrepWeight">0.00 lbs</span> (<span id="lblMediumDeductName">Whole Oats</span>)
+                </span>
+              </div>
+              <div id="stock-warning-notice" class="hidden text-amber-300 font-sans-custom text-[11px] pt-1 border-t border-slate-800/60"></div>
+              <!-- Inline Quick Supply Register Button -->
+              <div id="quick-supply-btn-container" class="hidden pt-1 border-t border-slate-800/60">
+                <button type="button" onclick="openQuickSupplyModal()" class="w-full bg-purple-950/60 hover:bg-purple-900/60 border border-purple-600/50 text-purple-300 font-bold py-1.5 px-3 rounded-lg text-xs transition flex items-center justify-center gap-1.5 shadow-sm">
+                  <span>📦</span> + Add <span id="quick-supply-name-label">Supply</span> to Inventory
+                </button>
+              </div>
+            </div>
+
             <button type="submit" class="w-full bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold py-3 px-4 rounded-xl transition duration-150 transform hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-amber-500/10 hover:shadow-amber-500/20 flex items-center justify-center gap-2 text-sm font-sans-custom outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2 focus:ring-offset-slate-900">
               ⚡ Generate & Print Labels
             </button>
@@ -963,9 +1153,14 @@
         <span class="text-[10px] bg-purple-500/10 text-purple-300 font-semibold px-2 py-0.5 rounded border border-purple-500/20">Active</span>
       </div>
       
-      <div class="flex justify-between items-center">
+      <div class="flex justify-between items-center gap-2">
         <input type="text" id="inventory-search" placeholder="Search supplies..." class="bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-slate-100 w-full max-w-xs" oninput="renderInventoryList()">
-        <button onclick="openAddSupplyModal()" class="bg-purple-600 hover:bg-purple-500 text-slate-950 px-3 py-1.5 rounded text-xs font-bold transition">+ Add Supply</button>
+        <div class="flex items-center gap-2">
+          <button id="btnExpandInventory" type="button" onclick="openInventoryManagerModal()" class="bg-slate-800 hover:bg-slate-700 text-xs text-slate-300 px-2.5 py-1.5 rounded border border-slate-700 flex items-center gap-1.5 font-medium transition shadow-sm">
+            <span>⛶</span> Expand View
+          </button>
+          <button onclick="openAddSupplyModal()" class="bg-purple-600 hover:bg-purple-500 text-slate-950 px-3 py-1.5 rounded text-xs font-bold transition flex items-center gap-1">+ Add Supply</button>
+        </div>
       </div>
       
       <div class="bg-slate-950 border border-slate-800 rounded-lg p-4">
@@ -1035,7 +1230,7 @@
 
               <!-- PC Batch Dropdown -->
               <div id="pc-batch-select-container">
-                <select id="input-pc-select" class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-sm text-slate-100">
+                <select id="input-pc-select" onchange="handlePcBatchSelectionChange()" class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-sm text-slate-100">
                   <!-- Will be populated dynamically -->
                 </select>
               </div>
@@ -1054,13 +1249,8 @@
               </div>
               <div>
                 <label class="block text-xs font-medium text-slate-400 mb-1">Medium</label>
-                <select id="input-medium" class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-sm text-slate-100">
-                  <option selected>Whole Oats</option>
-                  <option>Rye Grain</option>
-                  <option>Millet</option>
-                  <option>Agar</option>
-                  <option>Liquid Culture</option>
-                  <option>CVG Bulk</option>
+                <select id="input-medium" onchange="handleInoculationMediumChange()" class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-sm text-slate-100 disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-slate-800/50 disabled:appearance-none">
+                  <!-- Populated dynamically by populateMediumDropdown() to match the Bulk PC Prep modal -->
                 </select>
               </div>
             </div>
@@ -1069,7 +1259,7 @@
             <div class="grid grid-cols-2 gap-2">
               <div>
                 <label class="block text-xs font-medium text-slate-400 mb-1">Container Type</label>
-                <select id="input-container-type" onchange="handleContainerTypeChange()" class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-sm text-slate-100">
+                <select id="input-container-type" onchange="handleContainerTypeChange()" class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-sm text-slate-100 disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-slate-800/50 disabled:appearance-none">
                   <option value="Agar Dish / Slant">Agar Dish / Slant</option>
                   <option value="Liquid Culture Jar">Liquid Culture Jar</option>
                   <option value="Grain Jar / Bag">Grain Jar / Bag</option>
@@ -1087,7 +1277,7 @@
             <!-- Container Size / Fill Weight -->
             <div>
               <label class="block text-xs font-medium text-slate-400 mb-1">Container Size / Fill Weight</label>
-              <input type="text" id="input-container-weight" placeholder="e.g., 5 lb, 3 lb, 500 mL" class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-sm text-slate-100">
+              <input type="text" id="input-container-weight" placeholder="e.g., 5 lb, 3 lb, 500 mL" class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-sm text-slate-100 disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-slate-800/50">
             </div>
 
             <!-- Inoculant Type & Source Selection -->
@@ -1251,6 +1441,7 @@
           <span id="modal-id" class="text-xs font-mono text-emerald-400 bg-slate-900 px-2 py-0.5 rounded border border-slate-700"></span>
           <h2 id="modal-label" class="text-xl font-bold mt-1 text-slate-100"></h2>
           <p id="modal-lineage" class="text-xs text-slate-400 mt-1"></p>
+          <p id="modal-parent-source" class="text-xs text-slate-400 mt-0.5 hidden"></p>
           <div id="modal-lineage-badge" class="hidden"></div>
         </div>
         <div class="flex gap-2 shrink-0">
@@ -1419,6 +1610,12 @@
         <div>
           <h3 class="text-sm font-semibold text-slate-300 mb-2">Lifecycle History</h3>
           <div id="modal-history" class="space-y-2 border border-slate-700 rounded p-3 bg-slate-900"></div>
+        </div>
+
+        <!-- Lineage / Inoculated Containers -->
+        <div id="modal-children-section" class="hidden">
+          <h3 class="text-sm font-semibold text-slate-300 mb-2">Lineage / Inoculated Containers</h3>
+          <div id="modal-children-list" class="space-y-1 border border-slate-700 rounded p-3 bg-slate-900"></div>
         </div>
       </div>
     </div>
@@ -2084,16 +2281,14 @@
               <span>Show Dates</span>
             </label>
           </div>
-          <div id="print-show-logo-container" class="pt-1 border-t border-slate-800/80 hidden">
-            <label class="flex items-center gap-2 text-xs text-slate-300 cursor-pointer select-none hover:text-white">
-              <input type="checkbox" id="print-show-logo" class="rounded text-emerald-600 focus:ring-emerald-500 bg-slate-800 border-slate-700">
-              <span>Show Company Logo</span>
-            </label>
-          </div>
           <div class="pt-1 border-t border-slate-800/80">
             <label class="flex items-center gap-2 text-xs text-slate-400 cursor-pointer select-none hover:text-slate-300">
               <input type="checkbox" id="print-include-container" class="rounded text-emerald-600 focus:ring-emerald-500 bg-slate-800 border-slate-700">
               <span>Include Container Specs (Type & Weight)</span>
+            </label>
+            <label id="lblShowLogo" class="hidden flex items-center gap-2 cursor-pointer text-sm text-slate-300 select-none hover:text-white mt-2">
+              <input type="checkbox" id="chkShowLogo" checked class="rounded border-slate-600 text-emerald-600 focus:ring-emerald-500 bg-slate-800">
+              <span>Include Organization Logo</span>
             </label>
           </div>
         </div>
@@ -2461,6 +2656,42 @@
   </div>
 
 </div>
+  <!-- Custom Presets Manager Modal (#managePresetsModal) -->
+  <div id="managePresetsModal" class="fixed inset-0 bg-black/80 hidden items-center justify-center p-4 z-[95] animate-fade-in">
+    <div class="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden p-5 space-y-4 max-h-[90vh] flex flex-col">
+      <div class="flex justify-between items-center border-b border-slate-800 pb-3 shrink-0">
+        <h3 class="text-base font-bold text-emerald-400 flex items-center gap-2">
+          <span>⚙️</span> Manage Custom Presets
+        </h3>
+        <button type="button" onclick="closeManagePresetsModal()" class="text-slate-400 hover:text-white font-bold text-lg">✕</button>
+      </div>
+
+      <!-- Tabs: Mediums vs Containers -->
+      <div class="flex gap-2 border-b border-slate-800 shrink-0">
+        <button id="manage-presets-tab-mediums" onclick="switchManagePresetsTab('mediums')" class="px-4 py-2 text-xs font-bold border-b-2 border-emerald-500 text-emerald-400 transition flex items-center gap-1.5">
+          <span>⭐</span> Custom Mediums (<span id="count-manage-mediums">0</span>)
+        </button>
+        <button id="manage-presets-tab-containers" onclick="switchManagePresetsTab('containers')" class="px-4 py-2 text-xs font-bold border-b-2 border-transparent text-slate-400 hover:text-emerald-400 transition flex items-center gap-1.5">
+          <span>🫙</span> Custom Containers (<span id="count-manage-containers">0</span>)
+        </button>
+      </div>
+
+      <!-- Presets List (Scrollable) -->
+      <div id="manage-presets-list" class="flex-1 overflow-y-auto space-y-2.5 pr-1 min-h-[160px]">
+        <!-- Rendered dynamically -->
+      </div>
+
+      <div class="pt-3 border-t border-slate-800 flex justify-between items-center shrink-0">
+        <button type="button" onclick="openCustomPresetModalFromManager()" class="text-xs bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 px-3 py-1.5 rounded-lg font-bold transition flex items-center gap-1">
+          <span>➕</span> Add New Preset
+        </button>
+        <button type="button" onclick="closeManagePresetsModal()" class="bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold px-4 py-1.5 rounded-lg text-xs transition">
+          Done
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- Custom Preset Modal (Container / Medium) -->
   <div id="custom-preset-modal" class="fixed inset-0 bg-black/80 hidden items-center justify-center p-4 z-[90] animate-fade-in">
     <div class="bg-slate-800 border border-slate-700 rounded-xl w-full max-w-md p-5 space-y-4 shadow-2xl">
@@ -2564,6 +2795,7 @@
         <div class="flex gap-2 border-b border-slate-800 mb-4">
           <button id="org-tab-general" onclick="switchOrgTab('general')" class="px-4 py-2 text-xs font-bold border-b-2 border-emerald-500 text-emerald-400 transition">General</button>
           <button id="org-tab-features" onclick="switchOrgTab('features')" class="px-4 py-2 text-xs font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-200 transition">Feature Modules</button>
+          <button id="org-tab-integrations" onclick="switchOrgTab('integrations')" class="px-4 py-2 text-xs font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-200 transition flex items-center gap-1.5"><span>🔌</span> Integrations</button>
         </div>
 
         <div id="org-panel-general" class="space-y-4">
@@ -2606,49 +2838,79 @@
           </div>
         </div>
 
-        <div id="org-panel-payments" class="space-y-4 hidden">
-          <div class="bg-slate-800/50 border border-slate-700 rounded-xl p-5 space-y-4">
-            <div class="flex items-center justify-between">
-              <div>
-                <h3 class="text-sm font-bold text-white flex items-center gap-2">
-                  <span>💳</span> Square Account Integration
-                </h3>
-                <p class="text-xs text-slate-400 mt-1">Connect your Square merchant account to accept card and in-person POS payments for orders & harvests.</p>
+        <div id="org-panel-integrations" class="space-y-5 hidden">
+          <!-- Square Integration Card -->
+          <div class="bg-slate-950/60 border border-slate-800 rounded-xl p-5 space-y-4 hover:border-slate-700 transition">
+            <div class="flex items-start justify-between gap-3">
+              <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-slate-900 border border-slate-700 flex items-center justify-center text-xl shrink-0">
+                  <span>💳</span>
+                </div>
+                <div>
+                  <h3 class="text-sm font-bold text-white flex items-center gap-2">
+                    Square POS & Payments
+                    <span id="badge-square-status" class="text-[10px] bg-slate-800 text-slate-400 border border-slate-700 px-2 py-0.5 rounded-full font-semibold">Ready to Connect</span>
+                  </h3>
+                  <p class="text-xs text-slate-400 mt-0.5">Accept in-person POS payments, credit cards, and instant order transactions.</p>
+                </div>
               </div>
             </div>
 
-            <!-- Square Disconnected State -->
-            <div id="square-status-disconnected" class="bg-slate-900 border border-slate-700/70 rounded-lg p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <!-- Square Status Container (Dynamically rendered by renderSquareStatus) -->
+            <div id="square-status-disconnected" class="bg-slate-900 border border-slate-800 rounded-lg p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
               <div class="space-y-1">
                 <div class="flex items-center gap-2">
                   <span class="w-2.5 h-2.5 rounded-full bg-slate-500"></span>
                   <span class="text-xs font-bold text-slate-300">Not Connected</span>
                 </div>
-                <p class="text-[11px] text-slate-400">Authorize Sierra Myco Lab to process sales with automatic platform fee split.</p>
+                <p class="text-[11px] text-slate-400">Connect your Square account to process payments, sync retail inventory, and track point-of-sale orders.</p>
               </div>
-              <button type="button" onclick="connectSquareAccount()" class="w-full sm:w-auto bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs px-4 py-2.5 rounded-lg transition shadow-lg shadow-emerald-900/30 flex items-center justify-center gap-2 shrink-0">
+              <button id="connect-square-btn" type="button" class="w-full sm:w-auto bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs px-4 py-2.5 rounded-lg transition shadow-lg shadow-emerald-900/30 flex items-center justify-center gap-2 shrink-0">
                 <span>💳</span> Connect Square Account
               </button>
             </div>
 
-            <!-- Square Connected State -->
-            <div id="square-status-connected" class="hidden bg-emerald-950/40 border border-emerald-600/50 rounded-lg p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div class="text-[11px] text-slate-500 space-y-1 border-t border-slate-800/80 pt-3">
+              <p>• 1% application fee is applied to processed payments.</p>
+              <p>• Redirect callback configured for production and local environments.</p>
+            </div>
+          </div>
+
+          <!-- Etsy Integration Card -->
+          <div class="bg-slate-950/60 border border-slate-800 rounded-xl p-5 space-y-4 hover:border-slate-700 transition">
+            <div class="flex items-start justify-between gap-3">
+              <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-orange-950/50 border border-orange-700/50 flex items-center justify-center text-xl shrink-0 text-orange-400 font-black font-serif">
+                  E
+                </div>
+                <div>
+                  <h3 class="text-sm font-bold text-white flex items-center gap-2">
+                    Etsy Shop & Orders
+                    <span id="badge-etsy-status" class="text-[10px] bg-slate-800 text-slate-400 border border-slate-700 px-2 py-0.5 rounded-full font-semibold">Ready to Connect</span>
+                  </h3>
+                  <p class="text-xs text-slate-400 mt-0.5">Import live shop listings, auto-sync online orders, and deduct supplies.</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Etsy Status Container (Dynamically rendered by renderEtsyStatus) -->
+            <div id="etsy-status-disconnected" class="bg-slate-900 border border-slate-800 rounded-lg p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
               <div class="space-y-1">
                 <div class="flex items-center gap-2">
-                  <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                  <span class="text-xs font-bold text-emerald-300">Square Connected</span>
+                  <span class="w-2.5 h-2.5 rounded-full bg-slate-500"></span>
+                  <span class="text-xs font-bold text-slate-300">Not Connected</span>
                 </div>
-                <p class="text-[11px] text-slate-400">Merchant ID: <span id="square-connected-merchant-id" class="font-mono text-slate-200">--</span></p>
-                <p id="square-connected-date" class="text-[10px] text-slate-500">Connected</p>
+                <p class="text-[11px] text-slate-400">Authorize Sierra Myco Lab via PKCE OAuth to sync listings and poll orders.</p>
               </div>
-              <button type="button" onclick="handleDisconnectSquare()" class="w-full sm:w-auto bg-slate-800 hover:bg-red-900/50 border border-slate-700 hover:border-red-700/50 text-slate-300 hover:text-red-200 font-semibold text-xs px-3 py-2 rounded-lg transition shrink-0">
-                Disconnect
+              <button type="button" id="btn-connect-etsy" class="flex items-center gap-2 px-4 py-2.5 bg-orange-600 hover:bg-orange-500 text-white font-medium text-sm rounded-lg transition-colors shadow-sm cursor-pointer border border-orange-500/30 shrink-0">
+                <span class="font-bold text-base">E</span>
+                <span id="text-connect-etsy">Connect Etsy Shop</span>
               </button>
             </div>
 
-            <div class="text-[11px] text-slate-500 space-y-1 border-t border-slate-800 pt-3">
-              <p>• 1% application fee is applied to processed payments.</p>
-              <p>• Redirect callback configured for production and local environments.</p>
+            <div class="text-[11px] text-slate-500 space-y-1 border-t border-slate-800/80 pt-3">
+              <p>• Automated periodic background sync for orders and stock level alignment.</p>
+              <p>• Integrates with Customer & Sales Directory and Inventory deductions.</p>
             </div>
           </div>
         </div>
@@ -2684,6 +2946,344 @@
   </div>
 
   <script type="module" src="js/app.js"></script>
+  <!-- Edit Supply Modal (#editSupplyModal) -->
+  <div id="editSupplyModal" class="fixed inset-0 bg-black/80 hidden items-center justify-center p-4 z-[98] animate-fade-in">
+    <div class="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md shadow-2xl overflow-hidden p-5 space-y-4">
+      <div class="flex justify-between items-center border-b border-slate-800 pb-3">
+        <h3 class="text-base font-bold text-emerald-400 flex items-center gap-2">
+          <span>✏️</span> Edit Supply / Quick Stock Adjust
+        </h3>
+        <button type="button" onclick="closeEditSupplyModal()" class="text-slate-400 hover:text-white font-bold text-lg">✕</button>
+      </div>
+
+      <form id="edit-supply-form" onsubmit="handleEditSupplySubmit(event)" class="space-y-4">
+        <input type="hidden" id="editSupplyId">
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Item Name</label>
+          <input type="text" id="editSupplyName" required class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-sm text-slate-100 font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500/60">
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Category</label>
+            <select id="editSupplyCategory" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-500/60">
+              <option value="Grain">Grain</option>
+              <option value="Substrate">Substrate</option>
+              <option value="Lab / Raw Ingredients">Lab / Raw Ingredients</option>
+              <option value="Packaging">Packaging</option>
+              <option value="Liquid Culture">Liquid Culture</option>
+              <option value="Agar & Petri">Agar & Petri</option>
+              <option value="Sanitization">Sanitization</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Unit of Measure</label>
+            <select id="editSupplyUnit" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-100 font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500/60">
+              <option value="lbs" selected>Pounds (lbs)</option>
+              <option value="oz">Ounces (oz)</option>
+              <option value="g">Grams (g)</option>
+              <option value="kg">Kilograms (kg)</option>
+              <option value="mL">Milliliters (mL)</option>
+              <option value="L">Liters (L)</option>
+              <option value="units">Units / Count</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Quantity On Hand & Quick Adjust Buttons -->
+        <div>
+          <div class="flex justify-between items-center mb-1">
+            <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider">Quantity On Hand</label>
+            <span class="text-[10px] text-slate-500 font-mono">Quick Adjust</span>
+          </div>
+          <input type="number" step="any" min="0" id="editSupplyQty" required class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-sm text-slate-100 font-mono font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500/60 mb-2">
+          
+          <!-- Quick Adjustment Buttons Row -->
+          <div class="flex flex-wrap gap-1.5 justify-between">
+            <div class="flex gap-1">
+              <button type="button" onclick="adjustEditSupplyQty(-5)" class="px-2.5 py-1 bg-slate-800 hover:bg-rose-900/50 hover:border-rose-700/50 border border-slate-700 rounded text-xs font-mono font-bold text-rose-300 transition">-5</button>
+              <button type="button" onclick="adjustEditSupplyQty(-1)" class="px-2.5 py-1 bg-slate-800 hover:bg-rose-900/50 hover:border-rose-700/50 border border-slate-700 rounded text-xs font-mono font-bold text-rose-300 transition">-1</button>
+            </div>
+            <div class="flex gap-1">
+              <button type="button" onclick="adjustEditSupplyQty(1)" class="px-2.5 py-1 bg-slate-800 hover:bg-emerald-900/50 hover:border-emerald-700/50 border border-slate-700 rounded text-xs font-mono font-bold text-emerald-300 transition">+1</button>
+              <button type="button" onclick="adjustEditSupplyQty(5)" class="px-2.5 py-1 bg-slate-800 hover:bg-emerald-900/50 hover:border-emerald-700/50 border border-slate-700 rounded text-xs font-mono font-bold text-emerald-300 transition">+5</button>
+              <button type="button" onclick="adjustEditSupplyQty(10)" class="px-2.5 py-1 bg-slate-800 hover:bg-emerald-900/50 hover:border-emerald-700/50 border border-slate-700 rounded text-xs font-mono font-bold text-emerald-300 transition">+10</button>
+              <button type="button" onclick="adjustEditSupplyQty(50)" class="px-2.5 py-1 bg-slate-800 hover:bg-emerald-900/50 hover:border-emerald-700/50 border border-slate-700 rounded text-xs font-mono font-bold text-emerald-300 transition">+50</button>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Low Stock Warning Threshold</label>
+          <input type="number" step="any" id="editSupplyMinQty" placeholder="Alert threshold" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-sm text-slate-100 font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500/60">
+        </div>
+
+        <div class="flex gap-2.5 pt-2 border-t border-slate-800">
+          <button type="button" onclick="closeEditSupplyModal()" class="flex-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 font-bold py-2.5 rounded-xl transition text-xs">
+            Cancel
+          </button>
+          <button type="submit" class="flex-[2] bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold py-2.5 rounded-xl transition text-xs shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-1.5">
+            <span>💾</span> Save Changes
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Quick Add Supply Modal (from Bulk PC Prep) -->
+  <div id="quick-supply-modal" class="fixed inset-0 bg-black/80 hidden items-center justify-center p-4 z-[98] animate-fade-in">
+    <div class="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md shadow-2xl overflow-hidden p-5 space-y-4">
+      <div class="flex justify-between items-center border-b border-slate-800 pb-3">
+        <h3 class="text-base font-bold text-purple-400 flex items-center gap-2">
+          <span>📦</span> Quick Add Supply to Inventory
+        </h3>
+        <button type="button" onclick="closeQuickSupplyModal()" class="text-slate-400 hover:text-white font-bold text-lg">✕</button>
+      </div>
+
+      <form id="quick-supply-form" class="space-y-4">
+        <div>
+          <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Supply Name</label>
+          <input type="text" id="quick-supply-name" required class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-sm text-slate-100 font-semibold focus:outline-none focus:ring-2 focus:ring-purple-500/60">
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Category</label>
+            <select id="quick-supply-category" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-purple-500/60">
+              <option value="Grain">Grain</option>
+              <option value="Substrate">Substrate</option>
+              <option value="Lab / Raw Ingredients">Lab / Raw Ingredients</option>
+              <option value="Packaging">Packaging</option>
+              <option value="Liquid Culture">Liquid Culture</option>
+              <option value="Agar & Petri">Agar & Petri</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Unit of Measure</label>
+            <select id="quick-supply-unit" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-100 font-bold focus:outline-none focus:ring-2 focus:ring-purple-500/60">
+              <option value="lbs" selected>Pounds (lbs)</option>
+              <option value="oz">Ounces (oz)</option>
+              <option value="g">Grams (g)</option>
+              <option value="kg">Kilograms (kg)</option>
+              <option value="mL">Milliliters (mL)</option>
+              <option value="L">Liters (L)</option>
+              <option value="units">Units / Count</option>
+            </select>
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Initial Stock Quantity</label>
+          <input type="number" step="any" min="0" id="quick-supply-quantity" value="500" required placeholder="e.g. 500" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-sm text-slate-100 font-mono font-bold focus:outline-none focus:ring-2 focus:ring-purple-500/60">
+        </div>
+
+        <div class="flex gap-2.5 pt-2 border-t border-slate-800">
+          <button type="button" onclick="closeQuickSupplyModal()" class="flex-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 font-bold py-2.5 rounded-xl transition text-xs">
+            Cancel
+          </button>
+          <button type="submit" class="flex-[2] bg-purple-600 hover:bg-purple-500 text-slate-950 font-bold py-2.5 rounded-xl transition text-xs shadow-lg shadow-purple-600/20 flex items-center justify-center gap-1.5">
+            <span>📦</span> Save to Inventory
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Fullscreen Inventory Manager Modal (#inventoryManagerModal) -->
+  <div id="inventoryManagerModal" class="fixed inset-0 bg-black/85 backdrop-blur-sm hidden items-center justify-center p-2 sm:p-4 z-[97] animate-fade-in overflow-y-auto">
+    <div class="bg-slate-900 border border-slate-700/80 rounded-2xl w-full max-w-5xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh] my-auto">
+      
+      <!-- Modal Header -->
+      <div class="p-5 border-b border-slate-800 flex justify-between items-center bg-slate-900/90 shrink-0">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-purple-950/60 border border-purple-600/40 flex items-center justify-center text-purple-400 text-xl shadow-inner">
+            📦
+          </div>
+          <div>
+            <h2 class="text-lg font-bold text-white flex items-center gap-2">
+              Supplies & Inventory Manager
+              <span class="text-[10px] bg-purple-500/20 text-purple-300 font-mono px-2 py-0.5 rounded border border-purple-500/30 font-semibold uppercase">Expanded View</span>
+            </h2>
+            <p class="text-xs text-slate-400">Comprehensive stock levels, unit balances, replenishment thresholds, and asset valuation.</p>
+          </div>
+        </div>
+        <div class="flex items-center gap-2">
+          <button type="button" onclick="openAddSupplyModal()" class="bg-purple-600 hover:bg-purple-500 text-slate-950 font-bold px-3 py-1.5 rounded-lg text-xs transition flex items-center gap-1.5 shadow-md shadow-purple-900/20">
+            <span>➕</span> Add Supply
+          </button>
+          <button type="button" onclick="closeInventoryManagerModal()" class="text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 p-2 rounded-lg transition text-base font-bold">✕</button>
+        </div>
+      </div>
+
+      <!-- Top Summary Statistics Cards -->
+      <div class="p-5 border-b border-slate-800/80 bg-slate-950/40 grid grid-cols-1 sm:grid-cols-3 gap-3.5 shrink-0">
+        <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-3.5 flex items-center justify-between">
+          <div>
+            <div class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Total Tracked Items</div>
+            <div id="inv-manager-stat-total" class="text-xl font-bold font-mono text-white mt-0.5">0</div>
+          </div>
+          <span class="text-2xl p-2 rounded-lg bg-slate-800/60 border border-slate-700/50">📊</span>
+        </div>
+
+        <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-3.5 flex items-center justify-between">
+          <div>
+            <div class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Low Stock Alerts</div>
+            <div id="inv-manager-stat-low" class="text-xl font-bold font-mono text-amber-400 mt-0.5">0</div>
+          </div>
+          <span class="text-2xl p-2 rounded-lg bg-amber-950/40 border border-amber-800/50">⚠️</span>
+        </div>
+
+        <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-3.5 flex items-center justify-between">
+          <div>
+            <div class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Est. Inventory Value</div>
+            <div id="inv-manager-stat-val" class="text-xl font-bold font-mono text-emerald-400 mt-0.5">$0.00</div>
+          </div>
+          <span class="text-2xl p-2 rounded-lg bg-emerald-950/40 border border-emerald-800/50">💵</span>
+        </div>
+      </div>
+
+      <!-- Search Bar & Category Filter Tabs -->
+      <div class="p-4 border-b border-slate-800/80 space-y-3 bg-slate-900 shrink-0">
+        <div class="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3">
+          <div class="relative flex-1 max-w-md">
+            <input type="text" id="inv-manager-search" placeholder="🔍 Search supplies by name, category, supplier, notes..." oninput="renderExpandedInventoryTable()" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500/60">
+          </div>
+          <div class="text-xs text-slate-400 self-center">
+            Showing <span id="inv-manager-filtered-count" class="font-bold text-slate-200">0</span> supplies
+          </div>
+        </div>
+
+        <!-- Category Tabs -->
+        <div class="flex flex-wrap gap-1.5 border-t border-slate-800/60 pt-2.5" id="inv-manager-category-tabs">
+          <button type="button" onclick="setExpandedInventoryCategory('All')" class="inv-cat-tab px-3 py-1.5 rounded-lg text-xs font-bold transition bg-purple-600 text-slate-950" data-category="All">All Categories</button>
+          <button type="button" onclick="setExpandedInventoryCategory('Grain')" class="inv-cat-tab px-3 py-1.5 rounded-lg text-xs font-bold transition bg-slate-800 text-slate-300 hover:text-white" data-category="Grain">🌾 Grain</button>
+          <button type="button" onclick="setExpandedInventoryCategory('Substrate')" class="inv-cat-tab px-3 py-1.5 rounded-lg text-xs font-bold transition bg-slate-800 text-slate-300 hover:text-white" data-category="Substrate">🪵 Substrate</button>
+          <button type="button" onclick="setExpandedInventoryCategory('Lab / Raw Ingredients')" class="inv-cat-tab px-3 py-1.5 rounded-lg text-xs font-bold transition bg-slate-800 text-slate-300 hover:text-white" data-category="Lab / Raw Ingredients">🧪 Lab / Raw Ingredients</button>
+          <button type="button" onclick="setExpandedInventoryCategory('Liquid Culture')" class="inv-cat-tab px-3 py-1.5 rounded-lg text-xs font-bold transition bg-slate-800 text-slate-300 hover:text-white" data-category="Liquid Culture">💧 Liquid Culture</button>
+          <button type="button" onclick="setExpandedInventoryCategory('Agar & Petri')" class="inv-cat-tab px-3 py-1.5 rounded-lg text-xs font-bold transition bg-slate-800 text-slate-300 hover:text-white" data-category="Agar & Petri">🧫 Agar & Petri</button>
+          <button type="button" onclick="setExpandedInventoryCategory('Packaging')" class="inv-cat-tab px-3 py-1.5 rounded-lg text-xs font-bold transition bg-slate-800 text-slate-300 hover:text-white" data-category="Packaging">📦 Packaging</button>
+          <button type="button" onclick="setExpandedInventoryCategory('Sanitization')" class="inv-cat-tab px-3 py-1.5 rounded-lg text-xs font-bold transition bg-slate-800 text-slate-300 hover:text-white" data-category="Sanitization">🧼 Sanitization</button>
+        </div>
+      </div>
+
+      <!-- Wide Table Container (Scrollable) -->
+      <div class="p-4 overflow-y-auto flex-1 bg-slate-950/60">
+        <div class="border border-slate-800 rounded-xl overflow-hidden bg-slate-900">
+          <div class="overflow-x-auto">
+            <table class="w-full text-xs text-left text-slate-300">
+              <thead class="text-[11px] text-slate-400 uppercase bg-slate-950 border-b border-slate-800">
+                <tr>
+                  <th class="px-4 py-3">Item Name</th>
+                  <th class="px-4 py-3">Category</th>
+                  <th class="px-4 py-3 text-right">In Stock</th>
+                  <th class="px-4 py-3">Unit</th>
+                  <th class="px-4 py-3 text-right">Low Stock Threshold</th>
+                  <th class="px-4 py-3 text-center">Status Badge</th>
+                  <th class="px-4 py-3 text-right">Unit / Pkg Cost</th>
+                  <th class="px-4 py-3 text-center">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="expanded-inventory-tbody" class="divide-y divide-slate-800/70">
+                <!-- Dynamically loaded via renderExpandedInventoryTable() -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Footer -->
+      <div class="p-4 border-t border-slate-800 bg-slate-900 flex justify-between items-center shrink-0">
+        <span class="text-xs text-slate-500">Syncs in real-time with Bulk PC Prep & Inventory sidebar</span>
+        <button type="button" onclick="closeInventoryManagerModal()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold px-4 py-2 rounded-xl transition text-xs">
+          Close Manager
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Etsy SKU Inventory Mapping Modal (#modal-sku-mapping) -->
+  <div id="modal-sku-mapping" class="fixed inset-0 bg-black/80 backdrop-blur-sm hidden items-center justify-center p-2 sm:p-4 z-[98] animate-fade-in overflow-y-auto">
+    <div class="bg-slate-900 border border-slate-700/80 rounded-2xl w-full max-w-5xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh] my-auto">
+      
+      <!-- Modal Header -->
+      <div class="p-5 border-b border-slate-800 flex justify-between items-center bg-slate-900/90 shrink-0">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-orange-950/60 border border-orange-600/40 flex items-center justify-center text-orange-400 text-xl font-bold font-serif shadow-inner">
+            E
+          </div>
+          <div>
+            <h2 class="text-lg font-bold text-white flex items-center gap-2">
+              Etsy SKU Inventory Mapping
+              <span class="text-[10px] bg-orange-500/20 text-orange-300 font-mono px-2 py-0.5 rounded border border-orange-500/30 font-semibold uppercase">Auto-Deduct</span>
+            </h2>
+            <p class="text-xs text-slate-400">Link your Etsy listings to Sierra Myco inventory items for automatic stock deductions upon sale.</p>
+          </div>
+        </div>
+        <div class="flex items-center gap-2">
+          <button type="button" onclick="importEtsyListings().then(() => openSkuMappingModal())" class="bg-orange-600/20 hover:bg-orange-600/40 text-orange-300 border border-orange-500/40 font-bold text-xs px-3 py-1.5 rounded-lg transition flex items-center gap-1.5">
+            <span>🔄</span> Sync Etsy Listings
+          </button>
+          <button type="button" onclick="closeSkuMappingModal()" class="text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 p-2 rounded-lg transition text-base font-bold">✕</button>
+        </div>
+      </div>
+
+      <!-- Quick Filter & Search Bar -->
+      <div class="p-4 border-b border-slate-800/80 space-y-3 bg-slate-900 shrink-0">
+        <div class="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3">
+          <div class="relative flex-1 max-w-md">
+            <input type="text" id="sku-mapping-search" placeholder="🔍 Search listings by title, SKU, product ID..." oninput="filterSkuMappingsTable()" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-orange-500/60">
+          </div>
+          
+          <div class="flex items-center gap-1.5">
+            <button type="button" onclick="setSkuMappingFilter('all')" class="sku-filter-btn px-3 py-1.5 rounded-lg text-xs font-bold transition bg-orange-600 text-slate-950" data-filter="all">All Listings</button>
+            <button type="button" onclick="setSkuMappingFilter('mapped')" class="sku-filter-btn px-3 py-1.5 rounded-lg text-xs font-bold transition bg-slate-800 text-slate-300 hover:text-white" data-filter="mapped">🔗 Mapped (<span id="count-sku-mapped">0</span>)</button>
+            <button type="button" onclick="setSkuMappingFilter('unmapped')" class="sku-filter-btn px-3 py-1.5 rounded-lg text-xs font-bold transition bg-slate-800 text-slate-300 hover:text-white" data-filter="unmapped">⚠️ Unmapped (<span id="count-sku-unmapped">0</span>)</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Mappings Table Container (Scrollable) -->
+      <div class="p-4 overflow-y-auto flex-1 bg-slate-950/60">
+        <div class="border border-slate-800 rounded-xl overflow-hidden bg-slate-900">
+          <div class="overflow-x-auto">
+            <table class="w-full text-xs text-left text-slate-300">
+              <thead class="text-[11px] text-slate-400 uppercase bg-slate-950 border-b border-slate-800">
+                <tr>
+                  <th class="px-4 py-3">Etsy Item & Image</th>
+                  <th class="px-4 py-3">Variation / SKU</th>
+                  <th class="px-4 py-3 text-right">Price</th>
+                  <th class="px-4 py-3 w-72">Sierra Myco Inventory Item</th>
+                  <th class="px-4 py-3 w-28 text-center">Deduct Qty</th>
+                  <th class="px-4 py-3 text-center">Status / Action</th>
+                </tr>
+              </thead>
+              <tbody id="sku-mappings-tbody" class="divide-y divide-slate-800/70">
+                <tr>
+                  <td colspan="6" class="text-center py-8 text-slate-500 italic">
+                    Loading Etsy listings and inventory mappings...
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Footer -->
+      <div class="p-4 border-t border-slate-800 bg-slate-900 flex justify-between items-center shrink-0">
+        <span class="text-xs text-slate-500">Mappers link Etsy transactions with Supplies & Cold Storage produce</span>
+        <button type="button" onclick="closeSkuMappingModal()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold px-4 py-2 rounded-xl transition text-xs">
+          Done
+        </button>
+      </div>
+
+    </div>
+  </div>
+
   <!-- Authentication Modal -->
   <div id="auth-modal" class="fixed inset-0 bg-black/70 backdrop-blur-sm hidden items-center justify-center z-50">
     <div class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-sm p-6 animate-fade-in">

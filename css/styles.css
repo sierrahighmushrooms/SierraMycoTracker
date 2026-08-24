@@ -224,6 +224,28 @@ html {
   user-select: none;
 }
 
+/* ---- Disabled Form Controls (global) ----
+   Locked/auto-filled fields (e.g. Medium, Container Type, and Fill Weight in
+   the Inoculation form's Smart Auto-Fill flow) must look inert, not broken.
+   Dim the field, swap the cursor, and darken the background so a locked
+   field is visually distinct from an active one at a glance. */
+input:disabled,
+select:disabled,
+textarea:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background-color: rgba(30, 41, 59, 0.5); /* slate-800 @ 50%, matches the app's dark theme */
+}
+
+/* Hide the native dropdown chevron on disabled selects so they don't invite
+   a click that silently does nothing. */
+select:disabled {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background-image: none;
+}
+
 /* ---- Media Print Rules ----
    Explicitly keep the print target visible while suppressing all other UI */
 @media print {

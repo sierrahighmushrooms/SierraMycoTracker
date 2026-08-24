@@ -53,12 +53,15 @@ window.signOut = async () => {
   }
 };
 
-import { db, saveItems, setRefreshCallback, getCustomContainers, addCustomContainer, addCustomContainerPreset, addCustomMediumPreset, getCustomContainerPresets, initCloudSync, setSyncStatusCallback, setSyncErrorCallback, isSupabaseConfigured, getSupabaseClient, getSession, ensureValidSession, onAuthStateChange, isContainerLimitError, uploadItemsToCloud, syncItemsWithCloud, clearLegacyStorage, clearPendingImportStorage, checkAndClearStaleCache, loadCustomPresetsFromCloud, userOrganizations, userLocations, currentOrganizationId, currentLocationId, setCurrentOrganizationId, setCurrentLocationId, loadOrganizationContext, createOrganization, createRack } from './db.js';
+import { db, saveItems, setRefreshCallback, getCustomContainers, addCustomContainer, addCustomContainerPreset, addCustomMediumPreset, getCustomContainerPresets, getCustomMediumPresets, deleteCustomContainerPreset, deleteCustomMediumPreset, initCloudSync, setSyncStatusCallback, setSyncErrorCallback, isSupabaseConfigured, getSupabaseClient, getSession, ensureValidSession, onAuthStateChange, isContainerLimitError, uploadItemsToCloud, syncItemsWithCloud, clearLegacyStorage, clearPendingImportStorage, checkAndClearStaleCache, loadCustomPresetsFromCloud, userOrganizations, userLocations, currentOrganizationId, currentLocationId, setCurrentOrganizationId, setCurrentLocationId, loadOrganizationContext, createOrganization, createRack, disconnectSquareAccount, exchangeSquareOAuthCode, renderSquareStatus, renderEtsyStatus, disconnectEtsyShop } from './db.js';
+import { SQUARE_CONFIG } from './config.js';
+import { connectEtsy, disconnectEtsy, fetchEtsyIntegrationStatus } from './etsy.js';
 import { fetchCustomers, createCustomer, updateCustomer, deleteCustomer, fetchOrders, createOrder, updateOrder, deleteOrder, populateCustomerPicker } from './sales.js';
 
 import {
   generateId,
   formatMMDDYY,
+  formatLocalDate,
   getMediumInitials,
   getStrainInitials,
   getStandardCapacity,
@@ -74,7 +77,23 @@ import {
   updatePairValidationWarning,
   getTodayDateString,
   getNowDateTimeLocalString,
-  initPrepDateInput
+  initPrepDateInput,
+  getContainerDefaultWeight,
+  saveContainerDefaultWeight,
+  getAIODefaultRatio,
+  saveAIODefaultRatio,
+  updateBulkPrepWeightSummary,
+  convertWeight,
+  isLiquidOrAgarMedium,
+  getLiquidAgarRecipeBreakdown,
+  getActiveRecipeCalculatorIngredients,
+  handleRecipeIngredientAmountChange,
+  addCustomRecipeIngredientRow,
+  removeCustomRecipeIngredientRow,
+  handleTargetVolumeChange,
+  handleVolumeMlChange,
+  resetRecipeCalculatorState,
+  findMatchingSupply
 } from './utils.js';
 import {
   openModal,
@@ -85,6 +104,9 @@ import {
   showContainerDetails,
   openBatchModal,
   closeBatchModal,
+  openViewQRCodeModal,
+  closeViewQRCodeModal,
+  copyQRCodeLink,
   openG2GModal,
   closeG2GModal,
   switchG2GTab,
@@ -110,14 +132,6 @@ import {
   openRecipeCalcModal,
   closeRecipeCalcModal,
   calculateCVG,
-  switchRecipeMode,
-  handleRecipePresetChange,
-  handleRecipeContainerChange,
-  handleMoistureSliderChange,
-  recalculateRecipeEngine,
-  handleSaveCurrentRecipeModal,
-  handleDeleteActiveCustomRecipe,
-  pushRecipeToBulkPrep,
   openPrintSettingsModal,
   openPrintModal,
   closePrintSettingsModal,
@@ -144,6 +158,7 @@ import {
   updateSelectedCount,
   printSelectedLabels,
   deleteSelectedItems,
+  renderLabelHTML,
   getBatchItems,
   initStageFormListener,
 
@@ -183,24 +198,13 @@ import {
   openOrgSettings,
   closeOrgSettings,
   switchOrgTab,
+  openOrgIntegrationsTab,
   saveOrgSettings,
   removeOrgLogo,
-  updateOrgLogoPreviewUI,
-  openRecordSaleModal,
-  closeRecordSaleModal,
-  handleSaleCustomerSelect,
-  renderSaleLineItems,
-  updateSaleLineItem,
-  removeSaleLineItem,
-  addSaleCustomLineItem,
-  addScannedItemToSale,
-  handleSaleSearchEnter,
-  handleSaleSearchSuggestions,
-  calculateSaleTotal,
-  saveNewSale
+  updateOrgLogoPreviewUI
 } from './modals.js';
 import { startScanner, stopScanner, startG2GCameraScan, stopG2GCameraScan, startSpawnBulkCameraScan, stopSpawnBulkCameraScan, startSaleCameraScan, stopSaleCameraScan } from './camera.js';
-import { STAGES, CONTAINER_STAGES } from './config.js';
+import { STAGES, CONTAINER_STAGES, getMediumCategory, getContainerCategory } from './config.js';
 
 // --- Module-level UI state ---
 let currentFilter = 'All';
@@ -208,6 +212,161 @@ let scannedItemId = null;
 
 // --- Inventory & Supplies UI Logic ---
 let currentSupplies = [];
+
+// --- Active State for Expanded Inventory Manager ---
+let activeExpandedCategory = 'All';
+
+window.setExpandedInventoryCategory = function(cat) {
+  activeExpandedCategory = cat;
+  const tabBtns = document.querySelectorAll('#inv-manager-category-tabs .inv-cat-tab');
+  tabBtns.forEach(btn => {
+    if (btn.getAttribute('data-category') === cat) {
+      btn.className = 'inv-cat-tab px-3 py-1.5 rounded-lg text-xs font-bold transition bg-purple-600 text-slate-950 shadow';
+    } else {
+      btn.className = 'inv-cat-tab px-3 py-1.5 rounded-lg text-xs font-bold transition bg-slate-800 text-slate-300 hover:text-white';
+    }
+  });
+  renderExpandedInventoryTable();
+};
+
+window.openInventoryManagerModal = function() {
+  const modal = document.getElementById('inventoryManagerModal');
+  if (modal) {
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+    renderExpandedInventoryTable();
+    const searchInput = document.getElementById('inv-manager-search');
+    if (searchInput) setTimeout(() => searchInput.focus(), 100);
+  }
+};
+
+window.closeInventoryManagerModal = function() {
+  const modal = document.getElementById('inventoryManagerModal');
+  if (modal) {
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+  }
+};
+
+window.renderExpandedInventoryTable = function() {
+  const tbody = document.getElementById('expanded-inventory-tbody');
+  const countEl = document.getElementById('inv-manager-filtered-count');
+  const statTotalEl = document.getElementById('inv-manager-stat-total');
+  const statLowEl = document.getElementById('inv-manager-stat-low');
+  const statValEl = document.getElementById('inv-manager-stat-val');
+
+  if (!tbody) return;
+
+  const escapeHtml = (unsafe) => {
+    return (unsafe || '').toString()
+      .replace(/&/g, '&')
+      .replace(/</g, '<')
+      .replace(/>/g, '>')
+      .replace(/"/g, '"')
+      .replace(/'/g, '&#039;');
+  };
+
+  const supplies = currentSupplies || [];
+
+  // 1. Calculate Top Summary Statistics
+  let totalCount = supplies.length;
+  let lowCount = 0;
+  let totalEstimatedValue = 0;
+
+  supplies.forEach(s => {
+    const isLow = s.reorder_threshold != null && s.quantity_on_hand <= s.reorder_threshold;
+    if (isLow) lowCount++;
+    
+    // Value calculation: package_cost or estimated unit cost
+    if (s.package_cost != null && s.package_cost > 0) {
+      const pkgSize = parseFloat(s.package_size) || 1;
+      const unitCost = s.package_cost / pkgSize;
+      totalEstimatedValue += (s.quantity_on_hand || 0) * unitCost;
+    }
+  });
+
+  if (statTotalEl) statTotalEl.textContent = totalCount;
+  if (statLowEl) statLowEl.textContent = lowCount;
+  if (statValEl) statValEl.textContent = `$${totalEstimatedValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+  // 2. Filter by Search Keyword & Category Tab
+  const searchTerm = (document.getElementById('inv-manager-search')?.value || '').toLowerCase();
+
+  const filtered = supplies.filter(s => {
+    const matchesSearch = s.name.toLowerCase().includes(searchTerm) ||
+      (s.category && s.category.toLowerCase().includes(searchTerm)) ||
+      (s.supplier && s.supplier.toLowerCase().includes(searchTerm)) ||
+      (s.notes && s.notes.toLowerCase().includes(searchTerm)) ||
+      (s.product_code && s.product_code.toLowerCase().includes(searchTerm));
+
+    const matchesCategory = activeExpandedCategory === 'All' || 
+      (s.category && s.category.toLowerCase() === activeExpandedCategory.toLowerCase());
+
+    return matchesSearch && matchesCategory;
+  });
+
+  if (countEl) countEl.textContent = filtered.length;
+
+  if (filtered.length === 0) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="8" class="text-center py-8 text-slate-500 italic">
+          No supplies found matching "${escapeHtml(searchTerm || activeExpandedCategory)}".
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  tbody.innerHTML = filtered.map(supply => {
+    const isLow = supply.reorder_threshold != null && supply.quantity_on_hand <= supply.reorder_threshold;
+    const isOut = supply.quantity_on_hand <= 0;
+
+    let statusHtml = '';
+    if (isOut) {
+      statusHtml = `<span class="inline-flex items-center gap-1 text-[10px] bg-red-950/80 border border-red-700/60 text-red-300 px-2.5 py-0.5 rounded-full font-bold"><span>⛔</span> Out of Stock</span>`;
+    } else if (isLow) {
+      statusHtml = `<span class="inline-flex items-center gap-1 text-[10px] bg-amber-950/80 border border-amber-700/60 text-amber-300 px-2.5 py-0.5 rounded-full font-bold"><span>⚠️</span> Low Stock</span>`;
+    } else {
+      statusHtml = `<span class="inline-flex items-center gap-1 text-[10px] bg-emerald-950/80 border border-emerald-700/60 text-emerald-300 px-2.5 py-0.5 rounded-full font-bold"><span>✓</span> In Stock</span>`;
+    }
+
+    const costDisplay = supply.package_cost != null && supply.package_cost > 0 
+      ? `$${parseFloat(supply.package_cost).toFixed(2)}${supply.package_size ? ` / ${escapeHtml(supply.package_size)}` : ''}` 
+      : '<span class="text-slate-600">–</span>';
+
+    const lowThresholdDisplay = supply.reorder_threshold != null 
+      ? `<span class="font-mono text-slate-300">${supply.reorder_threshold} ${escapeHtml(supply.unit_of_measure || '')}</span>`
+      : '<span class="text-slate-600">–</span>';
+
+    return `
+      <tr class="hover:bg-slate-800/40 transition group">
+        <td class="px-4 py-3 font-semibold text-slate-100 flex flex-col">
+          <span>${escapeHtml(supply.name)}</span>
+          ${supply.product_code || supply.supplier ? `<span class="text-[10px] text-slate-500">${escapeHtml(supply.supplier || '')}${supply.supplier && supply.product_code ? ' • ' : ''}${escapeHtml(supply.product_code || '')}</span>` : ''}
+        </td>
+        <td class="px-4 py-3 text-slate-400">${escapeHtml(supply.category || '-')}</td>
+        <td class="px-4 py-3 font-mono font-bold text-right ${isLow ? 'text-amber-400' : 'text-emerald-400'}">
+          ${supply.quantity_on_hand}
+        </td>
+        <td class="px-4 py-3 text-slate-400 font-mono">${escapeHtml(supply.unit_of_measure || '')}</td>
+        <td class="px-4 py-3 text-right">${lowThresholdDisplay}</td>
+        <td class="px-4 py-3 text-center">${statusHtml}</td>
+        <td class="px-4 py-3 text-right font-mono text-slate-400">${costDisplay}</td>
+        <td class="px-4 py-3 text-center">
+          <div class="flex items-center justify-center gap-1">
+            <button onclick="openEditSupplyModal('${supply.id}')" class="text-emerald-400 hover:text-emerald-300 hover:bg-emerald-950/50 border border-emerald-800/40 px-2 py-1 rounded text-xs font-bold transition">
+              Edit
+            </button>
+            <button onclick="deleteInventorySupply('${supply.id}')" class="text-rose-400 hover:text-rose-300 hover:bg-rose-950/50 border border-rose-800/40 px-2 py-1 rounded text-xs font-bold transition">
+              Delete
+            </button>
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join('');
+};
 
 window.renderInventoryList = async function() {
   const listEl = document.getElementById('inventory-list');
@@ -231,37 +390,43 @@ window.renderInventoryList = async function() {
 
     if (filteredSupplies.length === 0) {
       listEl.innerHTML = `<tr><td colspan="5" class="px-4 py-4 text-center text-slate-500">No supplies found.</td></tr>`;
-      return;
+    } else {
+      listEl.innerHTML = filteredSupplies.map(supply => {
+        const isLow = supply.reorder_threshold != null && supply.quantity_on_hand <= supply.reorder_threshold;
+        const statusHtml = isLow 
+          ? `<span class="text-[10px] bg-red-500/20 text-red-400 px-2 py-1 rounded font-bold">Low Stock</span>`
+          : `<span class="text-[10px] bg-emerald-500/20 text-emerald-400 px-2 py-1 rounded font-bold">In Stock</span>`;
+
+        // Escape HTML to prevent XSS
+        const escapeHtml = (unsafe) => {
+          return (unsafe || '').toString()
+            .replace(/&/g, '&')
+            .replace(/</g, '<')
+            .replace(/>/g, '>')
+            .replace(/"/g, '"')
+            .replace(/'/g, '&#039;');
+        };
+
+        return `
+          <tr class="border-b border-slate-800/50 hover:bg-slate-800/30 transition">
+            <td class="px-4 py-3 font-medium text-slate-200">${escapeHtml(supply.name)}</td>
+            <td class="px-4 py-3 text-slate-400">${escapeHtml(supply.category || '-')}</td>
+            <td class="px-4 py-3 font-mono text-slate-300">${supply.quantity_on_hand} ${escapeHtml(supply.unit_of_measure || '')}</td>
+            <td class="px-4 py-3">${statusHtml}</td>
+            <td class="px-4 py-3 flex items-center gap-1.5">
+              <button onclick="openEditSupplyModal('${supply.id}')" class="text-emerald-400 hover:text-emerald-300 text-xs font-bold px-2 py-1 rounded hover:bg-emerald-400/10 transition">Edit</button>
+              <button onclick="deleteInventorySupply('${supply.id}')" class="text-red-400 hover:text-red-300 text-xs font-bold px-2 py-1 rounded hover:bg-red-400/10 transition">Delete</button>
+            </td>
+          </tr>
+        `;
+      }).join('');
     }
 
-    listEl.innerHTML = filteredSupplies.map(supply => {
-      const isLow = supply.reorder_threshold != null && supply.quantity_on_hand <= supply.reorder_threshold;
-      const statusHtml = isLow 
-        ? `<span class="text-[10px] bg-red-500/20 text-red-400 px-2 py-1 rounded font-bold">Low Stock</span>`
-        : `<span class="text-[10px] bg-emerald-500/20 text-emerald-400 px-2 py-1 rounded font-bold">In Stock</span>`;
-
-     // Escape HTML to prevent XSS
-const escapeHtml = (unsafe) => {
-  return (unsafe || '').toString()
-       .replace(/&/g, "&amp;")
-       .replace(/</g, "&lt;")
-       .replace(/>/g, "&gt;")
-       .replace(/"/g, "&quot;")
-       .replace(/'/g, "&#039;");
-};
-
-      return `
-        <tr class="border-b border-slate-800/50 hover:bg-slate-800/30 transition">
-          <td class="px-4 py-3 font-medium text-slate-200">${escapeHtml(supply.name)}</td>
-          <td class="px-4 py-3 text-slate-400">${escapeHtml(supply.category || '-')}</td>
-          <td class="px-4 py-3 font-mono text-slate-300">${supply.quantity_on_hand} ${escapeHtml(supply.unit_of_measure || '')}</td>
-          <td class="px-4 py-3">${statusHtml}</td>
-          <td class="px-4 py-3">
-            <button onclick="deleteInventorySupply('${supply.id}')" class="text-red-400 hover:text-red-300 text-xs font-bold px-2 py-1 rounded hover:bg-red-400/10 transition">Delete</button>
-          </td>
-        </tr>
-      `;
-    }).join('');
+    // Sync expanded inventory modal if open
+    const expandedModal = document.getElementById('inventoryManagerModal');
+    if (expandedModal && !expandedModal.classList.contains('hidden')) {
+      renderExpandedInventoryTable();
+    }
   } catch (err) {
     console.error('Failed to render inventory:', err);
     listEl.innerHTML = `<tr><td colspan="5" class="px-4 py-4 text-center text-red-400">Error loading inventory.</td></tr>`;
@@ -277,6 +442,86 @@ window.deleteInventorySupply = async function(id) {
     renderInventoryList();
   } catch (err) {
     showToast('Failed to delete supply: ' + err.message, 'error');
+  }
+};
+
+// --- Edit Supply Modal & Quick Stock Adjust ---
+window.openEditSupplyModal = function(id) {
+  const supply = currentSupplies.find(s => s.id === id);
+  if (!supply) return;
+
+  const modal = document.getElementById('editSupplyModal');
+  const idInput = document.getElementById('editSupplyId');
+  const nameInput = document.getElementById('editSupplyName');
+  const catSelect = document.getElementById('editSupplyCategory');
+  const qtyInput = document.getElementById('editSupplyQty');
+  const unitSelect = document.getElementById('editSupplyUnit');
+  const minQtyInput = document.getElementById('editSupplyMinQty');
+
+  if (idInput) idInput.value = supply.id;
+  if (nameInput) nameInput.value = supply.name || '';
+  if (catSelect) catSelect.value = supply.category || 'Grain';
+  if (qtyInput) qtyInput.value = supply.quantity_on_hand != null ? supply.quantity_on_hand : 0;
+  if (unitSelect) unitSelect.value = supply.unit_of_measure || 'lbs';
+  if (minQtyInput) minQtyInput.value = supply.reorder_threshold != null ? supply.reorder_threshold : '';
+
+  if (modal) {
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+    if (qtyInput) setTimeout(() => qtyInput.focus(), 100);
+  }
+};
+
+window.closeEditSupplyModal = function() {
+  const modal = document.getElementById('editSupplyModal');
+  if (modal) {
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+  }
+};
+
+window.adjustEditSupplyQty = function(delta) {
+  const qtyInput = document.getElementById('editSupplyQty');
+  if (!qtyInput) return;
+  const cur = parseFloat(qtyInput.value) || 0;
+  const next = Math.max(0, cur + delta);
+  qtyInput.value = parseFloat(next.toFixed(2));
+};
+
+window.handleEditSupplySubmit = async function(e) {
+  if (e && e.preventDefault) e.preventDefault();
+  const id = document.getElementById('editSupplyId')?.value;
+  if (!id) return;
+
+  const name = document.getElementById('editSupplyName')?.value.trim();
+  const category = document.getElementById('editSupplyCategory')?.value || 'Grain';
+  const qty = parseFloat(document.getElementById('editSupplyQty')?.value) || 0;
+  const unit = document.getElementById('editSupplyUnit')?.value || 'lbs';
+  const minQtyVal = document.getElementById('editSupplyMinQty')?.value;
+  const reorderThreshold = minQtyVal !== '' && !isNaN(parseFloat(minQtyVal)) ? parseFloat(minQtyVal) : null;
+
+  if (!name) {
+    showToast('Please enter an item name.', 'error');
+    return;
+  }
+
+  try {
+    const { updateSupply } = await import('./db.js');
+    await updateSupply(id, {
+      name,
+      category,
+      quantity_on_hand: qty,
+      unit_of_measure: unit,
+      reorder_threshold: reorderThreshold
+    });
+
+    showToast(`✓ Updated ${name} successfully!`, 'success');
+    closeEditSupplyModal();
+    renderInventoryList();
+    updateBulkPrepWeightSummary();
+  } catch (err) {
+    console.error('Failed to update supply:', err);
+    showToast('Failed to update supply: ' + err.message, 'error');
   }
 };
 
@@ -433,9 +678,105 @@ function togglePCSourceFields() {
   if (source === 'existing') {
     if (batchContainer) batchContainer.classList.remove('hidden');
     if (dateContainer) dateContainer.classList.add('hidden');
+    handlePcBatchSelectionChange();
   } else {
     if (batchContainer) batchContainer.classList.add('hidden');
     if (dateContainer) dateContainer.classList.remove('hidden');
+    unlockBatchAutoFilledFields();
+  }
+}
+
+// --- Smart Auto-Fill: Existing PC Batch ID -> Medium / Container Type / Fill Weight ---
+// PC batch records (db.pcBatches) only carry sterilization metadata (batchId,
+// date, a combined "medium (container)" display string) — they don't store the
+// raw medium value or container preset separately. The individual Preparation-stage
+// items created for that batch DO store those fields cleanly, so we source from
+// a representative item instead (same lookup style populatePCBatchDropdown() already
+// uses to backfill missing batch entries).
+function handlePcBatchSelectionChange() {
+  const select = document.getElementById('input-pc-select');
+  const mediumSelect = document.getElementById('input-medium');
+  const containerSelect = document.getElementById('input-container-type');
+  const weightInput = document.getElementById('input-container-weight');
+  if (!select || !mediumSelect || !containerSelect || !weightInput) return;
+
+  const batchId = select.value;
+  if (!batchId) {
+    unlockBatchAutoFilledFields();
+    return;
+  }
+
+  const sampleItem = (db.items || []).find(i => (i.pcBatch === batchId || i.batch_code === batchId) && !i.deleted);
+  if (!sampleItem) {
+    unlockBatchAutoFilledFields();
+    return;
+  }
+
+  const mediumVal = sampleItem.medium || sampleItem.medium_type || '';
+  const containerVal = sampleItem.containerType || sampleItem.container_type || '';
+
+  if (mediumVal) {
+    populateMediumDropdown('input-medium', mediumVal);
+  }
+
+  // Map the batch's specific container preset (e.g. "Quart Wide Mouth") to the
+  // coarse workflow category this form uses (e.g. "Grain Jar / Bag"), since the
+  // two modals categorize containers differently (shape vs. workflow stage).
+  const mappedContainerType = mapBatchContainerToInoculationType(containerVal, mediumVal);
+  if (mappedContainerType) {
+    containerSelect.value = mappedContainerType;
+    handleContainerTypeChange();
+  }
+
+  // PC batches don't record an exact fill weight per container, so fall back to
+  // the saved/default weight for this container type (the same source Bulk PC
+  // Prep itself uses to suggest a weight).
+  if (containerVal) {
+    const defaultWeight = getContainerDefaultWeight(containerVal, 'lbs');
+    if (defaultWeight) {
+      weightInput.value = `${defaultWeight.toFixed(2)} lb`;
+    }
+  }
+
+  lockBatchAutoFilledFields();
+}
+
+function lockBatchAutoFilledFields() {
+  ['input-medium', 'input-container-type', 'input-container-weight'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.disabled = true;
+  });
+}
+
+function unlockBatchAutoFilledFields() {
+  ['input-medium', 'input-container-type', 'input-container-weight'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.disabled = false;
+  });
+}
+
+function mapBatchContainerToInoculationType(containerName, mediumValue) {
+  const mediumCat = getMediumCategory(mediumValue);
+  if (mediumCat === 'LIQUID') return 'Liquid Culture Jar';
+  if (mediumCat === 'AGAR') return 'Agar Dish / Slant';
+  if (mediumCat === 'SUBSTRATE' || mediumCat === 'ALL_IN_ONE') return 'Fruiting Block / Monotub';
+  if (mediumCat === 'GRAIN') return 'Grain Jar / Bag';
+
+  const containerCat = getContainerCategory(containerName);
+  if (containerCat === 'MEDIA_BOTTLE' || containerCat === 'FLASK') return 'Liquid Culture Jar';
+  if (containerCat === 'JAR' || containerCat === 'BAG') return 'Grain Jar / Bag';
+
+  return null;
+}
+
+// Catch "+ Add Custom Medium" selection (mirrors handleBulkMediumChange) so the
+// Inoculation form's Medium dropdown never submits that sentinel value.
+function handleInoculationMediumChange() {
+  const select = document.getElementById('input-medium');
+  if (!select) return;
+  if (select.value === '__add_custom_medium__') {
+    openCustomPresetModal('medium');
+    populateMediumDropdown('input-medium', 'Whole Oats');
   }
 }
 
@@ -487,6 +828,22 @@ function populatePCBatchDropdown() {
   }).join('');
 }
 
+// Resolve a display-ready "MM/DD/YYYY" creation date for a parent asset.
+// An explicit user-entered date (prepDate/prep_date, e.g. from "Create Parent
+// Asset") always wins over system-generated timestamps (created_at/createdAt),
+// since those are stamped with the real save-time and can silently diverge
+// from a deliberately backdated asset. Falls back through every field the app
+// has historically stamped items with. Returns null - never "undefined" or
+// "NaN" - when no usable date exists.
+function formatSourceDate(item) {
+  const candidates = [item.prepDate, item.prep_date, item.created_at, item.createdAt, item.sterilizationDate];
+  for (const raw of candidates) {
+    const formatted = formatLocalDate(raw);
+    if (formatted) return formatted;
+  }
+  return null;
+}
+
 function populateInoculantSources(selectedIdToSelect = null) {
   const type = document.getElementById('input-inoculant-type').value;
   const parentSelect = document.getElementById('input-parent');
@@ -516,7 +873,15 @@ function populateInoculantSources(selectedIdToSelect = null) {
     const shortId = (typeof i.id === 'string' && i.id.length >= 8) ? i.id.slice(0, 8) : (i.id || '');
     const typeLabel = i.type || i.medium || (type === 'Liquid Culture' ? 'Liquid Culture' : (type === 'Agar' ? 'Agar' : 'Grain'));
     const strainOrName = i.strain || i.labelName || i.label || 'Unknown';
-    optionsHtml += `<option value="${i.id}" ${selectedIdToSelect === i.id ? 'selected' : ''}>${strainOrName} (${typeLabel}) [${shortId}]${volText}</option>`;
+    const formattedDate = formatSourceDate(i);
+
+    // [Container Name or Strain (Stage)] - [Formatted Date] - [short_id]
+    // e.g. "King Blue (Liquid Culture) - 08/21/2026 - [21ad0c58]"
+    const labelParts = [`${strainOrName} (${typeLabel})`];
+    if (formattedDate) labelParts.push(formattedDate);
+    labelParts.push(`[${shortId}]`);
+
+    optionsHtml += `<option value="${i.id}" ${selectedIdToSelect === i.id ? 'selected' : ''}>${labelParts.join(' - ')}${volText}</option>`;
   });
   parentSelect.innerHTML = optionsHtml;
   
@@ -632,6 +997,7 @@ function initInoculationsForm() {
     const dd = String(today.getDate()).padStart(2, '0');
     dateInput.value = `${yyyy}-${mm}-${dd}`;
   }
+  populateMediumDropdown('input-medium', 'Whole Oats');
   populatePCBatchDropdown();
   togglePCSourceFields();
   toggleInoculantTypeFields();
@@ -1022,7 +1388,7 @@ function initContainerGridListener() {
 // --- Bulk PC Prep: Smart Dropdown Handlers ---
 function handleBulkMediumChange() {
   const medium = document.getElementById('bulk-medium').value;
-  
+
   // If user selected "+ Add Custom Medium", open the custom preset modal
   if (medium === '__add_custom_medium__') {
     openCustomPresetModal('medium');
@@ -1030,15 +1396,43 @@ function handleBulkMediumChange() {
     populateMediumDropdown('bulk-medium', 'Whole Oats');
     return;
   }
-  
+
   // Re-populate container dropdown with smart filtering based on selected medium
   const currentContainer = document.getElementById('bulk-container').value;
   populateContainerDropdownSmart('bulk-container', medium, currentContainer);
-  
+
+  // If AIO is selected, auto-populate the user's saved default grain:substrate ratio
+  if (medium === 'All In One') {
+    applySavedAIORatioDefault();
+  }
+
   // Update LC calculator and media bottle fields
   toggleLCMedium();
   updateBatchCodeAuto();
   updatePairValidationWarning();
+  updateBulkPrepWeightSummary();
+}
+
+// Apply the user's saved default AIO ratio (if any) to the ratio selector
+function applySavedAIORatioDefault() {
+  const ratioSelect = document.getElementById('aio-ratio-select');
+  const customPctInput = document.getElementById('aio-custom-grain-pct');
+  const customContainer = document.getElementById('aio-custom-ratio-container');
+  if (!ratioSelect) return;
+
+  const saved = getAIODefaultRatio();
+  if (!saved || !saved.ratio) return;
+
+  const optionExists = Array.from(ratioSelect.options).some(o => o.value === saved.ratio);
+  if (!optionExists) return;
+
+  ratioSelect.value = saved.ratio;
+  if (saved.ratio === 'custom' && customPctInput) {
+    customPctInput.value = saved.customGrainPct || 50;
+  }
+  if (customContainer) {
+    customContainer.classList.toggle('hidden', saved.ratio !== 'custom');
+  }
 }
 
 function handleBulkContainerChange() {
@@ -1053,9 +1447,186 @@ function handleBulkContainerChange() {
     return;
   }
   
+  // Look up saved default weight for this container and populate #txtUnitWeight in selected unit
+  const txtUnitWeight = document.getElementById('txtUnitWeight');
+  const selWeightUnit = document.getElementById('selWeightUnit')?.value || 'lbs';
+  if (txtUnitWeight && container && container !== '__add_custom_container__') {
+    const defaultWeight = getContainerDefaultWeight(container, selWeightUnit);
+    txtUnitWeight.value = defaultWeight.toFixed(selWeightUnit === 'g' ? 0 : 2);
+  }
+
   toggleCustomContainer();
   updatePairValidationWarning();
+  updateBulkPrepWeightSummary();
 }
+
+// Open Quick Supply creation modal from Bulk PC Prep
+function openQuickSupplyModal(supplyName = '') {
+  const modal = document.getElementById('quick-supply-modal');
+  const nameInput = document.getElementById('quick-supply-name');
+  const btnContainer = document.getElementById('quick-supply-btn-container');
+  const targetName = supplyName || btnContainer?.getAttribute('data-target-supply') || '';
+
+  if (nameInput) {
+    nameInput.value = targetName;
+  }
+
+  // Infer category
+  const catSelect = document.getElementById('quick-supply-category');
+  if (catSelect && targetName) {
+    const lower = targetName.toLowerCase();
+    if (lower.includes('oat') || lower.includes('millet') || lower.includes('rye') || lower.includes('wheat') || lower.includes('corn') || lower.includes('grain')) {
+      catSelect.value = 'Grain';
+    } else if (lower.includes('coir') || lower.includes('mix') || lower.includes('sawdust') || lower.includes('substrate') || lower.includes('cvg')) {
+      catSelect.value = 'Substrate';
+    } else if (lower.includes('lme') || lower.includes('malt') || lower.includes('agar') || lower.includes('peptone') || lower.includes('yeast') || lower.includes('dextrose') || lower.includes('sugar') || lower.includes('honey') || lower.includes('extract')) {
+      catSelect.value = 'Lab / Raw Ingredients';
+    }
+  }
+
+  if (modal) {
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+    const qtyInput = document.getElementById('quick-supply-quantity');
+    if (qtyInput) setTimeout(() => qtyInput.focus(), 100);
+  }
+}
+
+function closeQuickSupplyModal() {
+  const modal = document.getElementById('quick-supply-modal');
+  if (modal) {
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+  }
+}
+
+// --- Custom Presets Manager Modal ---
+let currentManagePresetTab = 'mediums';
+
+window.openManagePresetsModal = function(tab = 'mediums') {
+  const modal = document.getElementById('managePresetsModal');
+  if (!modal) return;
+  currentManagePresetTab = tab;
+  switchManagePresetsTab(tab);
+  modal.classList.remove('hidden');
+  modal.classList.add('flex');
+};
+
+window.closeManagePresetsModal = function() {
+  const modal = document.getElementById('managePresetsModal');
+  if (modal) {
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+  }
+};
+
+window.switchManagePresetsTab = function(tab) {
+  currentManagePresetTab = tab;
+  const mediumsTab = document.getElementById('manage-presets-tab-mediums');
+  const containersTab = document.getElementById('manage-presets-tab-containers');
+  
+  if (mediumsTab && containersTab) {
+    if (tab === 'mediums') {
+      mediumsTab.classList.add('border-emerald-500', 'text-emerald-400');
+      mediumsTab.classList.remove('border-transparent', 'text-slate-400');
+      containersTab.classList.add('border-transparent', 'text-slate-400');
+      containersTab.classList.remove('border-emerald-500', 'text-emerald-400');
+    } else {
+      containersTab.classList.add('border-emerald-500', 'text-emerald-400');
+      containersTab.classList.remove('border-transparent', 'text-slate-400');
+      mediumsTab.classList.add('border-transparent', 'text-slate-400');
+      mediumsTab.classList.remove('border-emerald-500', 'text-emerald-400');
+    }
+  }
+
+  renderManagePresetsList();
+};
+
+window.renderManagePresetsList = function() {
+  const listEl = document.getElementById('manage-presets-list');
+  const countMedEl = document.getElementById('count-manage-mediums');
+  const countContEl = document.getElementById('count-manage-containers');
+
+  const customMediums = getCustomMediumPresets();
+  const customContainers = getCustomContainerPresets();
+
+  if (countMedEl) countMedEl.innerText = customMediums.length;
+  if (countContEl) countContEl.innerText = customContainers.length;
+
+  if (!listEl) return;
+
+  if (currentManagePresetTab === 'mediums') {
+    if (customMediums.length === 0) {
+      listEl.innerHTML = `<div class="text-center text-slate-500 text-xs py-8 italic">No custom mediums saved yet.</div>`;
+      return;
+    }
+    listEl.innerHTML = customMediums.map(m => `
+      <div class="flex items-center justify-between bg-slate-950 border border-slate-800 rounded-xl p-3">
+        <div>
+          <div class="text-xs font-bold text-slate-200">${m.name}</div>
+          <div class="text-[10px] text-slate-400 font-mono">Category: ${m.category || 'GRAIN'}</div>
+        </div>
+        <button type="button" onclick="handleDeleteCustomPreset('medium', '${m.id}', '${m.name}')" class="text-red-400 hover:text-red-300 hover:bg-red-400/10 p-1.5 rounded-lg text-xs font-bold transition" title="Delete Custom Medium">
+          🗑️ Delete
+        </button>
+      </div>
+    `).join('');
+  } else {
+    if (customContainers.length === 0) {
+      listEl.innerHTML = `<div class="text-center text-slate-500 text-xs py-8 italic">No custom containers saved yet.</div>`;
+      return;
+    }
+    listEl.innerHTML = customContainers.map(c => `
+      <div class="flex items-center justify-between bg-slate-950 border border-slate-800 rounded-xl p-3">
+        <div>
+          <div class="text-xs font-bold text-slate-200">${c.name}</div>
+          <div class="text-[10px] text-slate-400 font-mono">${c.capacityValue || ''} ${c.capacityUnit || 'ml'} (${c.type || 'Other'})</div>
+        </div>
+        <button type="button" onclick="handleDeleteCustomPreset('container', '${c.id}', '${c.name}')" class="text-red-400 hover:text-red-300 hover:bg-red-400/10 p-1.5 rounded-lg text-xs font-bold transition" title="Delete Custom Container">
+          🗑️ Delete
+        </button>
+      </div>
+    `).join('');
+  }
+};
+
+window.handleDeleteCustomPreset = function(type, id, name) {
+  if (!confirm(`Delete custom ${type} preset "${name}"?`)) return;
+
+  if (type === 'medium') {
+    deleteCustomMediumPreset(id);
+    showToast(`✓ Removed custom medium "${name}"`, 'info');
+
+    // Check currently selected medium
+    const mediumSelect = document.getElementById('bulk-medium');
+    let nextMedium = mediumSelect?.value;
+    if (nextMedium === name) {
+      nextMedium = 'Whole Oats';
+    }
+    populateMediumDropdown('bulk-medium', nextMedium);
+    handleBulkMediumChange();
+  } else {
+    deleteCustomContainerPreset(id);
+    showToast(`✓ Removed custom container "${name}"`, 'info');
+
+    // Check currently selected container
+    const medium = document.getElementById('bulk-medium')?.value || 'Whole Oats';
+    const containerSelect = document.getElementById('bulk-container');
+    let nextContainer = containerSelect?.value;
+    if (nextContainer === name) {
+      nextContainer = 'Quart Wide Mouth';
+    }
+    populateContainerDropdownSmart('bulk-container', medium, nextContainer);
+    handleBulkContainerChange();
+  }
+
+  renderManagePresetsList();
+};
+
+window.openCustomPresetModalFromManager = function() {
+  closeManagePresetsModal();
+  openCustomPresetModal(currentManagePresetTab === 'mediums' ? 'medium' : 'container');
+};
 
 // --- Custom Preset Modal ---
 function openCustomPresetModal(type) {
@@ -1159,7 +1730,24 @@ document.getElementById('bulk-form').addEventListener('submit', async (e) => {
   const prepDateInputVal = (document.getElementById('bulk-prep-date') || {}).value;
   const pcBatchCode = document.getElementById('bulk-batch').value || generateBatchCode(medium, prepDateInputVal);
   const prepDate = prepDateInputVal || getNowDateTimeLocalString();
-  
+  const unitWeightVal = parseFloat(document.getElementById('txtUnitWeight')?.value) || 0;
+  const selectedUnit = document.getElementById('selWeightUnit')?.value || 'lbs';
+  const isSaveDefaultChecked = Boolean(document.getElementById('chkSaveContainerWeight')?.checked);
+  const isSaveAIORatioChecked = Boolean(document.getElementById('chkSaveAIORatio')?.checked);
+  const totalMaterialWeight = qty * unitWeightVal;
+
+  // If Save as default weight checkbox is checked, persist it (normalized in lbs)
+  if (isSaveDefaultChecked && container && unitWeightVal > 0) {
+    await saveContainerDefaultWeight(container, unitWeightVal, selectedUnit);
+  }
+
+  // If Save as default AIO ratio checkbox is checked, persist the selected ratio
+  if (isSaveAIORatioChecked && medium === 'All In One') {
+    const aioRatioVal = document.getElementById('aio-ratio-select')?.value;
+    const aioCustomPct = document.getElementById('aio-custom-grain-pct')?.value;
+    await saveAIODefaultRatio(aioRatioVal, aioCustomPct);
+  }
+
   // Date validation: Selected Date <= Today (block picking future dates)
   const now = new Date();
   const selectedDateObj = prepDate.includes('T') ? new Date(prepDate) : new Date(prepDate + 'T12:00:00');
@@ -1335,14 +1923,148 @@ document.getElementById('bulk-form').addEventListener('submit', async (e) => {
   }
   saveItems();
 
-  // 3. Immediately trigger renderContainers() / updateDashboard() to refresh active count and render new cards in UI grid
+  // 3. Auto-Deduct Inventory on PC Batch Creation (supports Multi-Ingredient LC/Agar, Unit Conversions & AIO Split Deductions)
+  let deductionMessage = '';
+  try {
+    const { getSupplies, updateSupply } = await import('./db.js');
+    if (currentOrganizationId) {
+      const supplies = await getSupplies().catch(() => []);
+      if (Array.isArray(supplies)) {
+        const isLiquidOrAgar = isLiquidOrAgarMedium(finalMedium);
+        const shouldDeductRecipe = document.getElementById('chkDeductRecipeIngredients')?.checked !== false;
+
+        if (isLiquidOrAgar) {
+          // Multi-Ingredient Inventory Deductions for LC / Agar (reading live inputs/additives)
+          if (shouldDeductRecipe) {
+            const activeIngredients = getActiveRecipeCalculatorIngredients();
+            const dryIngredients = activeIngredients.filter(i => !i.isLiquid && i.amount > 0);
+            const deductions = [];
+
+            for (const ingredient of dryIngredients) {
+              const matchingSupply = findMatchingSupply(supplies, ingredient.name);
+              if (matchingSupply && !matchingSupply.is_non_depleting) {
+                const supplyUnit = matchingSupply.unit_of_measure || 'g';
+                const deductAmtInSupplyUnit = convertWeight(ingredient.amount, 'g', supplyUnit);
+                const currentStock = Number(matchingSupply.quantity_on_hand) || 0;
+                const newStock = Math.max(0, currentStock - deductAmtInSupplyUnit);
+                await updateSupply(matchingSupply.id, {
+                  quantity_on_hand: Number(newStock.toFixed(2))
+                });
+                deductions.push(`${ingredient.amount}g of ${matchingSupply.name}`);
+              }
+            }
+
+            if (deductions.length > 0) {
+              deductionMessage = ` & deducted ${deductions.join(', ')} from inventory`;
+              if (typeof window.renderInventoryList === 'function') {
+                window.renderInventoryList();
+              }
+            }
+          }
+        } else if (totalMaterialWeight > 0) {
+          const isAIO = finalMedium === 'All In One';
+
+          if (isAIO) {
+            const grainName = document.getElementById('aio-grain-select')?.value || 'Whole Oats';
+            const subName = document.getElementById('aio-substrate-select')?.value || 'Coco Coir';
+            const ratioVal = document.getElementById('aio-ratio-select')?.value || '50-50';
+
+            let grainPct;
+            if (ratioVal === 'custom') {
+              let customPct = parseFloat(document.getElementById('aio-custom-grain-pct')?.value);
+              if (isNaN(customPct)) customPct = 50;
+              grainPct = Math.min(99, Math.max(1, customPct)) / 100;
+            } else {
+              const parsedGrain = parseFloat(String(ratioVal).split('-')[0]);
+              grainPct = (isNaN(parsedGrain) ? 50 : parsedGrain) / 100;
+            }
+            const subPct = 1 - grainPct;
+
+            const grainReq = totalMaterialWeight * grainPct;
+            const subReq = totalMaterialWeight * subPct;
+
+            const deductions = [];
+
+            // Deduct Grain component
+            const matchingGrain = supplies.find(s => {
+              const sName = (s.name || '').trim().toLowerCase();
+              const mName = grainName.trim().toLowerCase();
+              return sName === mName || sName.includes(mName) || mName.includes(sName);
+            });
+            if (matchingGrain && !matchingGrain.is_non_depleting) {
+              const supplyUnit = matchingGrain.unit_of_measure || 'lbs';
+              const deductAmtInSupplyUnit = convertWeight(grainReq, selectedUnit, supplyUnit);
+              const currentStock = Number(matchingGrain.quantity_on_hand) || 0;
+              const newStock = Math.max(0, currentStock - deductAmtInSupplyUnit);
+              await updateSupply(matchingGrain.id, {
+                quantity_on_hand: Number(newStock.toFixed(2))
+              });
+              deductions.push(`${grainReq.toFixed(selectedUnit === 'g' ? 0 : 2)} ${selectedUnit} of ${matchingGrain.name}`);
+            }
+
+            // Deduct Substrate component
+            const matchingSub = supplies.find(s => {
+              const sName = (s.name || '').trim().toLowerCase();
+              const mName = subName.trim().toLowerCase();
+              return sName === mName || sName.includes(mName) || mName.includes(sName);
+            });
+            if (matchingSub && !matchingSub.is_non_depleting) {
+              const supplyUnit = matchingSub.unit_of_measure || 'lbs';
+              const deductAmtInSupplyUnit = convertWeight(subReq, selectedUnit, supplyUnit);
+              const currentStock = Number(matchingSub.quantity_on_hand) || 0;
+              const newStock = Math.max(0, currentStock - deductAmtInSupplyUnit);
+              await updateSupply(matchingSub.id, {
+                quantity_on_hand: Number(newStock.toFixed(2))
+              });
+              deductions.push(`${subReq.toFixed(selectedUnit === 'g' ? 0 : 2)} ${selectedUnit} of ${matchingSub.name}`);
+            }
+
+            if (deductions.length > 0) {
+              deductionMessage = ` & deducted ${deductions.join(' and ')} from inventory`;
+              if (typeof window.renderInventoryList === 'function') {
+                window.renderInventoryList();
+              }
+            }
+          } else {
+            // Standard Single Medium Deduction
+            const matchingSupply = supplies.find(s => {
+              const sName = (s.name || '').trim().toLowerCase();
+              const mName = (finalMedium || '').trim().toLowerCase();
+              return sName === mName || sName.includes(mName) || mName.includes(sName);
+            });
+
+            if (matchingSupply && !matchingSupply.is_non_depleting) {
+              const supplyUnit = matchingSupply.unit_of_measure || 'lbs';
+              const deductAmtInSupplyUnit = convertWeight(totalMaterialWeight, selectedUnit, supplyUnit);
+              const currentStock = Number(matchingSupply.quantity_on_hand) || 0;
+              const newStock = Math.max(0, currentStock - deductAmtInSupplyUnit);
+              await updateSupply(matchingSupply.id, {
+                quantity_on_hand: Number(newStock.toFixed(2))
+              });
+
+              deductionMessage = ` & deducted ${totalMaterialWeight.toFixed(selectedUnit === 'g' ? 0 : 2)} ${selectedUnit} of ${matchingSupply.name} from inventory`;
+              if (typeof window.renderInventoryList === 'function') {
+                window.renderInventoryList();
+              }
+            }
+          }
+        }
+      }
+    }
+  } catch (deductErr) {
+    console.error('Failed auto-deducting inventory for Bulk PC Prep:', deductErr);
+  }
+
+  // 4. Immediately trigger renderContainers() / updateDashboard() to refresh active count and render new cards in UI grid
   if (typeof renderContainers === 'function') {
     renderContainers();
   } else {
     render();
   }
   updateDashboard();
-  showToast(`✓ Created ${qty} container(s) for PC Batch ${pcBatchCode}!`, 'success');
+  updateBulkPrepWeightSummary();
+
+  showToast(`✓ Successfully logged PC batch ${pcBatchCode}${deductionMessage}!`, 'success');
 
   // 4. Open Label Settings Modal pre-loaded with newly created items to intercept print flow
   if (generatedItems.length > 0) {
@@ -1440,7 +2162,10 @@ if (qlpForm) {
         contamVector: null,
         history: [{
           stage: 'Colonizing',
-          timestamp: new Date().toLocaleString(),
+          // Reflect the user-chosen backdate (if any), not the real moment
+          // the form was submitted - a Quick-Log Parent Asset is explicitly
+          // for entering a pre-existing asset's true origin date after the fact.
+          timestamp: dateCreated ? new Date(dateCreated + 'T12:00:00').toLocaleString() : new Date().toLocaleString(),
           notes: `Quick-Logged Parent Asset (${assetType}) created on ${todayStr}`,
           env: ''
         }]
@@ -1585,6 +2310,7 @@ if (itemForm) {
       if (parentId === 'legacy') {
         parentId = null;
       }
+      const sourceLabel = parentId ? parentId.substring(0, 8) : (legacySourceDesc || null);
       const shouldPrint = document.getElementById('input-print-toggle').checked;
       const pcSource = document.querySelector('input[name="pc-source"]:checked').value;
 
@@ -1677,7 +2403,7 @@ if (itemForm) {
           item.history.unshift({
             stage: stageVal,
             timestamp: new Date().toLocaleString(),
-            notes: `Inoculated with ${strain} via ${inoculantType}${parentId ? ' from ' + parentId : (legacySourceDesc ? ' from ' + legacySourceDesc : '')}.`,
+            notes: `Inoculated with ${strain} via ${inoculantType}${sourceLabel ? ` (Source: ${sourceLabel})` : ''}.`,
             env: ''
           });
           item.lifecycleHistory = item.lifecycleHistory || [];
@@ -1743,7 +2469,7 @@ if (itemForm) {
             history: [{
               stage: stageVal,
               timestamp: new Date().toLocaleString(),
-              notes: `Inoculated with ${strain} via ${inoculantType}${parentId ? ' from ' + parentId : (legacySourceDesc ? ' from ' + legacySourceDesc : '')}.`,
+              notes: `Inoculated with ${strain} via ${inoculantType}${sourceLabel ? ` (Source: ${sourceLabel})` : ''}.`,
               env: ''
             }],
             lifecycleHistory: [{
@@ -2445,8 +3171,9 @@ async function handleSquareOAuthCallback() {
       window.history.replaceState({}, document.title, cleanUrl);
 
       // Refresh Organization Settings modal if open or user is viewing payments
+      const targetOrg = orgId || currentOrganizationId;
       if (typeof window.renderSquareStatus === 'function') {
-        window.renderSquareStatus();
+        window.renderSquareStatus(targetOrg);
       }
     } catch (err) {
       console.error('Square OAuth callback processing failed:', err);
@@ -2510,6 +3237,8 @@ Object.assign(window, {
   populateContainerDropdown,
   populateStageDropdown,
   handleContainerTypeChange,
+  handlePcBatchSelectionChange,
+  handleInoculationMediumChange,
   quickAddContainer,
   initInoculationsForm,
   exportJSON,
@@ -2525,24 +3254,43 @@ Object.assign(window, {
   closeAddRackModal,
   selectRackPreset,
   handleAddRackSubmit,
-  // Add Supply Modal
+  // Add Supply Modal & Edit Supply Modal
   openAddSupplyModal,
   closeAddSupplyModal,
+  openEditSupplyModal,
+  closeEditSupplyModal,
+  adjustEditSupplyQty,
+  handleEditSupplySubmit,
 
 
   // Bulk PC Prep smart dropdowns & custom presets
   handleBulkMediumChange,
   handleBulkContainerChange,
+  openManagePresetsModal,
+  closeManagePresetsModal,
+  switchManagePresetsTab,
+  renderManagePresetsList,
+  handleDeleteCustomPreset,
+  openCustomPresetModalFromManager,
   openCustomPresetModal,
   closeCustomPresetModal,
   handleCustomPresetSubmit,
   dismissBulkPcOnboardingBanner,
+  openQuickSupplyModal,
+  closeQuickSupplyModal,
   // utils.js
   toggleLCMedium,
   updateBatchCodeAuto,
   toggleCustomContainer,
   updateLCTargetVolumeDefault,
   updateLCCalculator,
+  getActiveRecipeCalculatorIngredients,
+  handleRecipeIngredientAmountChange,
+  addCustomRecipeIngredientRow,
+  removeCustomRecipeIngredientRow,
+  handleTargetVolumeChange,
+  handleVolumeMlChange,
+  resetRecipeCalculatorState,
   // modals.js
   openModal,
   closeModal,
@@ -2582,14 +3330,6 @@ Object.assign(window, {
   openRecipeCalcModal,
   closeRecipeCalcModal,
   calculateCVG,
-  switchRecipeMode,
-  handleRecipePresetChange,
-  handleRecipeContainerChange,
-  handleMoistureSliderChange,
-  recalculateRecipeEngine,
-  handleSaveCurrentRecipeModal,
-  handleDeleteActiveCustomRecipe,
-  pushRecipeToBulkPrep,
   openPrintSettingsModal,
   openPrintModal,
   closePrintSettingsModal,
@@ -2599,6 +3339,7 @@ Object.assign(window, {
   onLabelModelChange,
   applyCustomLabelDims,
   applyOrExecutePrintSettings,
+  renderLabelHTML,
   printBulkLabels,
   printSingleLabel,
   applyInoculation,
@@ -2656,26 +3397,87 @@ Object.assign(window, {
   openOrgSettings,
   closeOrgSettings,
   switchOrgTab,
+  openOrgIntegrationsTab,
   loadOrgSettings,
   populateOrgSettings,
   saveOrgSettings,
   removeOrgLogo,
   updateOrgLogoPreviewUI,
-  addScannedItemToSale,
+  renderSquareStatus,
+  addCustomer: () => import('./sales.js').then(m => m.createCustomer),
+  addCustomerModal: () => { const m = document.getElementById('add-customer-modal'); if (m) { m.classList.remove('hidden'); m.classList.add('flex'); } },
+  openAddCustomerModal: () => { const m = document.getElementById('add-customer-modal'); if (m) { m.classList.remove('hidden'); m.classList.add('flex'); } },
+  closeAddCustomerModal: () => { const m = document.getElementById('add-customer-modal'); if (m) { m.classList.add('hidden'); m.classList.remove('flex'); } },
+  openCreateOrderModal: () => { const m = document.getElementById('record-sale-modal'); if (m) { m.classList.remove('hidden'); m.classList.add('flex'); } },
+  connectSquareAccount: async () => {
+    const activeOrgId = currentOrganizationId || localStorage.getItem('mycotrack_current_org_id') || '';
+    if (!activeOrgId) {
+      showToast('Please select an organization first.', 'error');
+      return;
+    }
+    const client = getSupabaseClient();
+    if (!client) {
+      showToast('Supabase is not configured.', 'error');
+      return;
+    }
+    showToast('Redirecting to Square Authorization...', 'info', 3000);
+    try {
+      // Authenticated request: the edge function verifies our session and
+      // confirms membership in activeOrgId before minting a signed OAuth
+      // state, rather than trusting an org id passed in a URL.
+      const { data, error } = await client.functions.invoke('square-oauth', {
+        body: { action: 'start', organization_id: activeOrgId }
+      });
+      if (error) throw new Error(error.message || 'Failed to start Square authorization');
+      if (!data?.url) throw new Error('Square did not return an authorization URL');
+      window.location.href = data.url;
+    } catch (e) {
+      showToast('Square connection error: ' + e.message, 'error');
+    }
+  },
+  disconnectSquareAccount: async (passedOrgId) => {
+    if (!confirm('Are you sure you want to disconnect Square?')) return;
+    try {
+      await disconnectSquareAccount();
+      showToast('Square disconnected.', 'info');
+      const targetOrgId = passedOrgId || currentOrganizationId;
+      if (typeof window.renderSquareStatus === 'function') window.renderSquareStatus(targetOrgId);
+    } catch (e) {
+      showToast('Disconnect error: ' + e.message, 'error');
+    }
+  },
+  handleDisconnectSquare: async (passedOrgId) => {
+    if (!confirm('Are you sure you want to disconnect Square?')) return;
+    try {
+      await disconnectSquareAccount();
+      showToast('Square disconnected.', 'info');
+      const targetOrgId = passedOrgId || currentOrganizationId;
+      if (typeof window.renderSquareStatus === 'function') window.renderSquareStatus(targetOrgId);
+    } catch (e) {
+      showToast('Disconnect error: ' + e.message, 'error');
+    }
+  },
+  renderEtsyStatus,
+  disconnectEtsyShop: async (passedOrgId) => {
+    if (!confirm('Are you sure you want to disconnect Etsy?')) return;
+    try {
+      await disconnectEtsyShop(passedOrgId);
+      showToast('Etsy shop disconnected.', 'info');
+      const targetOrgId = passedOrgId || currentOrganizationId;
+      if (typeof window.renderEtsyStatus === 'function') window.renderEtsyStatus(targetOrgId);
+    } catch (e) {
+      showToast('Disconnect error: ' + e.message, 'error');
+    }
+  },
+  connectEtsy,
+  disconnectEtsy,
+  fetchEtsyIntegrationStatus,
   // camera.js
   startScanner,
   stopScanner,
   startG2GCameraScan,
   stopG2GCameraScan,
-  applyFeatureToggles,
-  openLogHarvestModal,
-  closeLogHarvestModal,
-  handleHarvestContainerSelectChange,
-  handleHarvestContainerInputChange,
-  calculateHarvestGramsPreview,
-  handleLogHarvestSubmit,
-  startHarvestCameraScan,
-  stopHarvestCameraScan
+  applyFeatureToggles
 });
 
 // Set global function reference for modal interaction
@@ -2809,7 +3611,70 @@ onAuthStateChange((event, session) => {
   }
 });
 
+// --- Handle OAuth Callback URL Parameters (Etsy / Square) ---
+function handleOAuthRedirectParams() {
+  if (typeof window === 'undefined' || !window.location.search) return;
+  const params = new URLSearchParams(window.location.search);
+
+  // Etsy OAuth callback results
+  if (params.get('etsy') === 'connected' || params.get('etsy_connected') === 'true') {
+    const shopName = params.get('shop_name') || '';
+    showToast(shopName ? `Etsy shop "${decodeURIComponent(shopName)}" connected successfully!` : 'Etsy shop connected successfully!', 'success');
+    
+    // Clean up query string without page reload
+    const cleanUrl = window.location.pathname + window.location.hash;
+    window.history.replaceState({}, document.title, cleanUrl);
+
+    // Refresh organizations context and update Etsy status UI
+    if (typeof loadOrganizationContext === 'function') {
+      loadOrganizationContext().then(() => {
+        const activeOrgId = currentOrganizationId || (userOrganizations.length > 0 ? userOrganizations[0].id : null);
+        if (typeof window.renderEtsyStatus === 'function') {
+          window.renderEtsyStatus(activeOrgId);
+        }
+      });
+    } else if (typeof window.renderEtsyStatus === 'function') {
+      const activeOrgId = currentOrganizationId || (userOrganizations.length > 0 ? userOrganizations[0].id : null);
+      window.renderEtsyStatus(activeOrgId);
+    }
+  } else if (params.has('etsy_error')) {
+    const errMsg = decodeURIComponent(params.get('etsy_error') || 'Etsy connection failed.');
+    showToast(`Etsy Connection Error: ${errMsg}`, 'error');
+    
+    const cleanUrl = window.location.pathname + window.location.hash;
+    window.history.replaceState({}, document.title, cleanUrl);
+  }
+
+  // Square OAuth callback results
+  if (params.get('square') === 'connected' || params.get('square_connected') === 'true') {
+    showToast('Square account successfully connected!', 'success');
+    
+    const cleanUrl = window.location.pathname + window.location.hash;
+    window.history.replaceState({}, document.title, cleanUrl);
+
+    // Refresh organizations context and update Square status UI
+    if (typeof loadOrganizationContext === 'function') {
+      loadOrganizationContext().then(() => {
+        const activeOrgId = currentOrganizationId || (userOrganizations.length > 0 ? userOrganizations[0].id : null);
+        if (typeof window.renderSquareStatus === 'function') {
+          window.renderSquareStatus(activeOrgId);
+        }
+      });
+    } else if (typeof window.renderSquareStatus === 'function') {
+      const activeOrgId = currentOrganizationId || (userOrganizations.length > 0 ? userOrganizations[0].id : null);
+      window.renderSquareStatus(activeOrgId);
+    }
+  } else if (params.has('square_error')) {
+    const errMsg = decodeURIComponent(params.get('square_error') || 'Square connection failed.');
+    showToast(`Square Connection Error: ${errMsg}`, 'error');
+    
+    const cleanUrl = window.location.pathname + window.location.hash;
+    window.history.replaceState({}, document.title, cleanUrl);
+  }
+}
+
 initAppRouting();
+handleOAuthRedirectParams();
 
 // --- Multi-Tenant Context and Onboarding Handlers ---
 async function handleMultiTenantInit() {
@@ -3096,6 +3961,55 @@ window.addEventListener('container-limit-error', (event) => {
 // --- Initialize custom preset form listener ---
 document.getElementById('custom-preset-form').addEventListener('submit', handleCustomPresetSubmit);
 
+// --- Initialize quick supply form listener (from Bulk PC Prep) ---
+const quickSupplyForm = document.getElementById('quick-supply-form');
+if (quickSupplyForm) {
+  quickSupplyForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const submitBtn = quickSupplyForm.querySelector('button[type="submit"]');
+    const originalText = submitBtn.innerHTML;
+    submitBtn.innerHTML = 'Saving...';
+    submitBtn.disabled = true;
+
+    try {
+      const name = document.getElementById('quick-supply-name')?.value.trim();
+      const category = document.getElementById('quick-supply-category')?.value || 'Grain';
+      const unit = document.getElementById('quick-supply-unit')?.value || 'lbs';
+      const quantity = parseFloat(document.getElementById('quick-supply-quantity')?.value) || 0;
+
+      if (!name) {
+        showToast('Please enter a supply name.', 'error');
+        return;
+      }
+
+      const { createSupply } = await import('./db.js');
+      await createSupply({
+        name,
+        category,
+        quantityOnHand: quantity,
+        unitOfMeasure: unit,
+        isDryIngredient: true,
+        isNonDepleting: false
+      });
+
+      showToast(`✓ Registered ${quantity} ${unit} of ${name} in Inventory!`, 'success');
+      closeQuickSupplyModal();
+      quickSupplyForm.reset();
+
+      if (typeof window.renderInventoryList === 'function') {
+        window.renderInventoryList();
+      }
+      updateBulkPrepWeightSummary();
+    } catch (err) {
+      console.error('Failed to create quick supply:', err);
+      showToast('Error adding supply: ' + err.message, 'error');
+    } finally {
+      submitBtn.innerHTML = originalText;
+      submitBtn.disabled = false;
+    }
+  });
+}
+
 // --- Initialize add supply form listener ---
 const addSupplyForm = document.getElementById('add-supply-form');
 if (addSupplyForm) {
@@ -3178,8 +4092,52 @@ if (prepDateInput) {
 // Populate smart dropdowns with categorized mediums/containers
 populateMediumDropdown('bulk-medium', 'Whole Oats');
 populateContainerDropdownSmart('bulk-container', 'Whole Oats', 'Quart Wide Mouth');
+
+// Initialize unit fill weight and listeners for Bulk PC Prep
+const initialContainer = document.getElementById('bulk-container')?.value || 'Quart Wide Mouth';
+const txtUnitWeightEl = document.getElementById('txtUnitWeight');
+const selWeightUnitEl = document.getElementById('selWeightUnit');
+if (txtUnitWeightEl) {
+  txtUnitWeightEl.value = getContainerDefaultWeight(initialContainer, selWeightUnitEl?.value || 'lbs').toFixed(2);
+  txtUnitWeightEl.addEventListener('input', updateBulkPrepWeightSummary);
+}
+if (selWeightUnitEl) {
+  selWeightUnitEl.addEventListener('change', () => {
+    const curContainer = document.getElementById('bulk-container')?.value || 'Quart Wide Mouth';
+    if (txtUnitWeightEl) {
+      txtUnitWeightEl.value = getContainerDefaultWeight(curContainer, selWeightUnitEl.value).toFixed(selWeightUnitEl.value === 'g' ? 0 : 2);
+    }
+    updateBulkPrepWeightSummary();
+  });
+}
+const bulkQtyEl = document.getElementById('bulk-qty');
+if (bulkQtyEl) {
+  bulkQtyEl.addEventListener('input', updateBulkPrepWeightSummary);
+}
+
+const aioGrainSelect = document.getElementById('aio-grain-select');
+if (aioGrainSelect) aioGrainSelect.addEventListener('change', updateBulkPrepWeightSummary);
+
+const aioSubSelect = document.getElementById('aio-substrate-select');
+if (aioSubSelect) aioSubSelect.addEventListener('change', updateBulkPrepWeightSummary);
+
+const aioRatioSelect = document.getElementById('aio-ratio-select');
+if (aioRatioSelect) {
+  aioRatioSelect.addEventListener('change', () => {
+    const customContainer = document.getElementById('aio-custom-ratio-container');
+    if (customContainer) {
+      customContainer.classList.toggle('hidden', aioRatioSelect.value !== 'custom');
+    }
+    updateBulkPrepWeightSummary();
+  });
+}
+
+const aioCustomGrainPctInput = document.getElementById('aio-custom-grain-pct');
+if (aioCustomGrainPctInput) aioCustomGrainPctInput.addEventListener('input', updateBulkPrepWeightSummary);
+
 updateBatchCodeAuto();
 updatePairValidationWarning();
+updateBulkPrepWeightSummary();
 initContainerGridListener();
 render();
 updateContainerUsageUI();

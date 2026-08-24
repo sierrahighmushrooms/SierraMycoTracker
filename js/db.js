@@ -81,7 +81,13 @@ export function isSupabaseConfigured() {
 export const supabaseClient = (() => {
   if (!isSupabaseConfigured()) return null;
   try {
-    return window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    return window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      auth: {
+        autoRefreshToken: true,
+        persistSession: true,
+        detectSessionInUrl: true
+      }
+    });
   } catch (err) {
     console.warn('Failed to initialize Supabase client:', err);
     return null;
@@ -92,7 +98,7 @@ export function getSupabaseClient() {
   return supabaseClient;
 }
 
-// Wrapper to handle Clock Drift ("JWT issued at future") and expired tokens
+// Wrapper to handle Clock Drift ("JWT issued at future"), expired tokens, and 401s
 export async function fetchWithAuthRetry(operationFn) {
   try {
     let result = await operationFn();
@@ -100,6 +106,7 @@ export async function fetchWithAuthRetry(operationFn) {
     // Supabase often returns { data, error } instead of throwing
     if (result && result.error) {
       const errorMsg = result.error.message || '';
+      const status = result.error.status || result.error.code;
       
       if (errorMsg.includes('JWT issued at future') || errorMsg.includes('jwt issued at future')) {
         console.warn('Clock drift detected (JWT issued at future). Waiting 1.5s to retry...');
@@ -107,18 +114,21 @@ export async function fetchWithAuthRetry(operationFn) {
         return await operationFn();
       }
       
-      if (errorMsg.includes('JWT expired') || errorMsg.includes('jwt expired')) {
-        console.warn('JWT expired. Refreshing session and retrying...');
+      if (errorMsg.includes('JWT expired') || errorMsg.includes('jwt expired') || status === 401 || status === '401' || errorMsg.includes('Unauthorized') || errorMsg.includes('invalid claim')) {
+        console.warn('JWT expired / 401 detected. Refreshing session and retrying...');
         if (supabaseClient) {
-          await supabaseClient.auth.refreshSession();
+          const { data: refreshData, error: refreshError } = await supabaseClient.auth.refreshSession();
+          if (!refreshError && refreshData?.session) {
+            return await operationFn();
+          }
         }
-        return await operationFn();
       }
     }
     
     return result;
   } catch (error) {
     const errorMsg = error?.message || '';
+    const status = error?.status || error?.code;
     
     if (errorMsg.includes('JWT issued at future') || errorMsg.includes('jwt issued at future')) {
       console.warn('Clock drift detected (JWT issued at future). Waiting 1.5s to retry...');
@@ -126,12 +136,14 @@ export async function fetchWithAuthRetry(operationFn) {
       return await operationFn();
     }
     
-    if (errorMsg.includes('JWT expired') || errorMsg.includes('jwt expired')) {
-      console.warn('JWT expired. Refreshing session and retrying...');
+    if (errorMsg.includes('JWT expired') || errorMsg.includes('jwt expired') || status === 401 || status === '401' || errorMsg.includes('Unauthorized') || errorMsg.includes('invalid claim')) {
+      console.warn('JWT expired / 401 detected in catch. Refreshing session and retrying...');
       if (supabaseClient) {
-        await supabaseClient.auth.refreshSession();
+        const { data: refreshData, error: refreshError } = await supabaseClient.auth.refreshSession();
+        if (!refreshError && refreshData?.session) {
+          return await operationFn();
+        }
       }
-      return await operationFn();
     }
     
     throw error;
@@ -373,7 +385,8 @@ function serializeItemForCloud(item, userId) {
     yields: Array.isArray(item.yields) ? item.yields : [],
     created_at: createdAt,
     updated_at: updatedAt,
-    organization_id: item.organization_id || currentOrganizationId || null
+    organization_id: item.organization_id || currentOrganizationId || null,
+    parent_id: item.parent_id || item.parentItemId || null
   };
 
   if (item.containerType || item.container_type) {
@@ -386,7 +399,6 @@ function serializeItemForCloud(item, userId) {
   delete sanitizedItem.code;
   delete sanitizedItem.location_id;
   delete sanitizedItem.container_capacity;
-  delete sanitizedItem.parent_id;
 
   return sanitizedItem;
 }
@@ -428,7 +440,9 @@ function deserializeCloudRow(row) {
     container_capacity: row.container_capacity != null ? row.container_capacity : null,
     containerType: row.container_type || null,
     container_type: row.container_type || null,
-    code: row.code || null
+    code: row.code || null,
+    parentItemId: row.parent_id || null,
+    parent_id: row.parent_id || null
   };
 }
 
@@ -547,7 +561,8 @@ const ALLOWED_COLUMNS = [
   'created_at',
   'updated_at',
   'container_type',
-  'organization_id'
+  'organization_id',
+  'parent_id'
 ];
 
 // --- Defensive Key Mapping ---
@@ -624,7 +639,8 @@ function transformLegacyItemForSupabase(item, userId) {
     created_at: mappedItem.created_at || new Date().toISOString(),
     updated_at: mappedItem.updated_at || new Date().toISOString(),
     container_type: mappedItem.container_type || null,
-    organization_id: mappedItem.organization_id || currentOrganizationId || null
+    organization_id: mappedItem.organization_id || currentOrganizationId || null,
+    parent_id: mappedItem.parent_id || null
   };
 
   // Step 3: Final whitelist filter - ensure ONLY ALLOWED_COLUMNS are present.
@@ -692,7 +708,6 @@ export async function uploadItemsToCloud(items) {
         delete sanitized.code;
         delete sanitized.location_id;
         delete sanitized.container_capacity;
-        delete sanitized.parent_id;
       }
       return sanitized;
     })
@@ -864,6 +879,11 @@ export async function syncItemsWithCloud() {
     // Session awareness: wait for auth to be fully initialized before fetching.
     const { data: { user }, error: userError } = await supabaseClient.auth.getUser();
     if (userError || !user) {
+      if (userError && (userError.status === 403 || userError.status === 401 || userError.message?.includes('JWT') || userError.message?.includes('invalid') || userError.message?.includes('expired') || userError.message?.includes('Forbidden'))) {
+        console.warn('Session invalid or 403 on sync, cleaning up invalid session:', userError);
+        await supabaseClient.auth.signOut();
+        purgeAllStorage();
+      }
       // Guest user: continue operating from localStorage only.
       saveItems();
       lastSyncInfo = { synced: false, at: null, user: null };
@@ -1263,16 +1283,37 @@ export async function getSupplies() {
   return data || [];
 }
 
+// Allowed categories in the database check constraint
+export const ALLOWED_SUPPLY_CATEGORIES = [
+  'Grain',
+  'Substrate',
+  'Agar & Petri',
+  'Liquid Culture',
+  'Packaging',
+  'Sanitization',
+  'Lab / Raw Ingredients',
+  'Other'
+];
+
+// Sanitize category to ensure database constraint compatibility
+export function sanitizeSupplyCategory(category) {
+  if (!category) return 'Other';
+  const trimmed = String(category).trim();
+  return ALLOWED_SUPPLY_CATEGORIES.includes(trimmed) ? trimmed : 'Other';
+}
+
 // Create new supply / inventory item (Step 6: Supplies & Inventory)
 export async function createSupply(supplyData) {
   if (!supabaseClient) throw new Error('Supabase not configured.');
   if (!currentOrganizationId) throw new Error('No active organization.');
   if (!supplyData || !supplyData.name) throw new Error('A supply name is required.');
 
+  const category = sanitizeSupplyCategory(supplyData.category);
+
   const payload = {
     organization_id: currentOrganizationId,
     name: supplyData.name,
-    category: supplyData.category || 'Other',
+    category: category,
     is_dry_ingredient: Boolean(supplyData.isDryIngredient),
     is_non_depleting: Boolean(supplyData.isNonDepleting),
     quantity_on_hand: supplyData.quantityOnHand != null ? Number(supplyData.quantityOnHand) : 0,
@@ -1286,14 +1327,43 @@ export async function createSupply(supplyData) {
     notes: supplyData.notes || null
   };
 
-  const { data, error } = await supabaseClient
-    .from('supplies')
-    .insert(payload)
-    .select()
-    .single();
+  try {
+    const { data, error } = await supabaseClient
+      .from('supplies')
+      .insert(payload)
+      .select()
+      .single();
 
-  if (error) throw error;
-  return data;
+    if (error) {
+      // Fallback: If code 23514 check constraint violation occurs (e.g. legacy database constraint without 'Lab / Raw Ingredients')
+      if (error.code === '23514' && payload.category !== 'Other') {
+        console.warn('Check constraint 23514 on category, retrying with category: Other');
+        payload.category = 'Other';
+        const fallbackRes = await supabaseClient
+          .from('supplies')
+          .insert(payload)
+          .select()
+          .single();
+        if (fallbackRes.error) throw fallbackRes.error;
+        return fallbackRes.data;
+      }
+      throw error;
+    }
+    return data;
+  } catch (err) {
+    if (err.code === '23514' && payload.category !== 'Other') {
+      console.warn('Check constraint 23514 caught, falling back to Other');
+      payload.category = 'Other';
+      const fallbackRes = await supabaseClient
+        .from('supplies')
+        .insert(payload)
+        .select()
+        .single();
+      if (fallbackRes.error) throw fallbackRes.error;
+      return fallbackRes.data;
+    }
+    throw err;
+  }
 }
 
 // Update an existing supply
@@ -1301,19 +1371,55 @@ export async function updateSupply(id, updates) {
   if (!supabaseClient) throw new Error('Supabase not configured.');
   if (!currentOrganizationId) throw new Error('No active organization.');
 
-  const { data, error } = await supabaseClient
-    .from('supplies')
-    .update(updates)
-    .eq('id', id)
-    .eq('organization_id', currentOrganizationId)
-    .select()
-    .single();
-
-  if (error) {
-    console.error('Error updating supply:', error);
-    throw error;
+  const updatePayload = { ...updates };
+  if (updatePayload.category !== undefined) {
+    updatePayload.category = sanitizeSupplyCategory(updatePayload.category);
   }
-  return data;
+
+  try {
+    const { data, error } = await supabaseClient
+      .from('supplies')
+      .update(updatePayload)
+      .eq('id', id)
+      .eq('organization_id', currentOrganizationId)
+      .select()
+      .single();
+
+    if (error) {
+      if (error.code === '23514' && updatePayload.category && updatePayload.category !== 'Other') {
+        console.warn('Check constraint 23514 on category update, retrying with category: Other');
+        updatePayload.category = 'Other';
+        const fallbackRes = await supabaseClient
+          .from('supplies')
+          .update(updatePayload)
+          .eq('id', id)
+          .eq('organization_id', currentOrganizationId)
+          .select()
+          .single();
+        if (fallbackRes.error) throw fallbackRes.error;
+        return fallbackRes.data;
+      }
+      console.error('Error updating supply:', error);
+      throw error;
+    }
+    return data;
+  } catch (err) {
+    if (err.code === '23514' && updatePayload.category && updatePayload.category !== 'Other') {
+      console.warn('Check constraint 23514 caught on update, falling back to Other');
+      updatePayload.category = 'Other';
+      const fallbackRes = await supabaseClient
+        .from('supplies')
+        .update(updatePayload)
+        .eq('id', id)
+        .eq('organization_id', currentOrganizationId)
+        .select()
+        .single();
+      if (fallbackRes.error) throw fallbackRes.error;
+      return fallbackRes.data;
+    }
+    console.error('Error updating supply:', err);
+    throw err;
+  }
 }
 
 // Delete a supply
@@ -1690,8 +1796,15 @@ export async function getContainerUsage() {
   if (!supabaseClient) return null;
   
   try {
-    const { data: { user } } = await supabaseClient.auth.getUser();
-    if (!user) return null;
+    const { data: { user }, error: userError } = await supabaseClient.auth.getUser();
+    if (userError || !user) {
+      if (userError && (userError.status === 403 || userError.status === 401 || userError.message?.includes('JWT') || userError.message?.includes('invalid') || userError.message?.includes('expired') || userError.message?.includes('Forbidden'))) {
+        console.warn('Session invalid or 403, signing out...', userError);
+        await supabaseClient.auth.signOut();
+        purgeAllStorage();
+      }
+      return null;
+    }
     
     const { data, error } = await fetchWithAuthRetry(() => supabaseClient.rpc('get_container_usage', {
       user_uuid: user.id
@@ -1708,7 +1821,11 @@ export async function getContainerUsage() {
     }
     return null;
   } catch (err) {
-    console.warn('Error fetching container usage:', err);
+    console.error('Error fetching container usage:', err);
+    if (err?.status === 403 || err?.status === 401) {
+      await supabaseClient.auth.signOut();
+      purgeAllStorage();
+    }
     return null;
   }
 }
@@ -1718,8 +1835,14 @@ export async function getSubscriptionTier() {
   if (!supabaseClient) return 'free';
   
   try {
-    const { data: { user } } = await supabaseClient.auth.getUser();
-    if (!user) return 'free';
+    const { data: { user }, error: userError } = await supabaseClient.auth.getUser();
+    if (userError || !user) {
+      if (userError && (userError.status === 403 || userError.status === 401)) {
+        await supabaseClient.auth.signOut();
+        purgeAllStorage();
+      }
+      return 'free';
+    }
     
     const { data, error } = await supabaseClient
       .from('profiles')
@@ -1749,8 +1872,14 @@ export async function getProfilePlanInfo() {
   try {
     // auth.getUser() always hits the GoTrue server (no stale local cache),
     // so app_metadata changes made in the database are picked up immediately.
-    const { data: { user } } = await supabaseClient.auth.getUser();
-    if (!user) return null;
+    const { data: { user }, error: userError } = await supabaseClient.auth.getUser();
+    if (userError || !user) {
+      if (userError && (userError.status === 403 || userError.status === 401)) {
+        await supabaseClient.auth.signOut();
+        purgeAllStorage();
+      }
+      return null;
+    }
 
     let plan = null;
     let containerLimit = null;
@@ -1765,7 +1894,7 @@ export async function getProfilePlanInfo() {
       .maybeSingle());
     if (!error && data) {
       profile = data;
-    } else if (error) {
+    } else if (error && error.status !== 401 && error.code !== '401') {
       // The explicit columns may not exist on older schemas — retry with a
       // tolerant select('*') so the lookup never hard-fails.
       console.warn('profiles plan lookup failed, retrying with select(*):', error.message);
@@ -1838,32 +1967,147 @@ export function isContainerLimitError(error) {
 
 // --- Square OAuth & Payment API Functions ---
 
+// Helper to render Square connection status in settings modal
+export async function renderSquareStatus(passedOrgId) {
+  const activeOrgId = passedOrgId || currentOrganizationId || (userOrganizations.length > 0 ? userOrganizations[0].id : null);
+  console.log("Running renderSquareStatus for org:", activeOrgId);
+
+  const container = document.querySelector('#square-status-disconnected');
+  if (!container) {
+    console.error("renderSquareStatus: Container '#square-status-disconnected' not found in DOM.");
+    return;
+  }
+
+  if (!activeOrgId) {
+    console.error("renderSquareStatus: activeOrgId is missing.");
+    return;
+  }
+
+  let activeOrg = userOrganizations.find(o => o.id === activeOrgId);
+  let freshOrgData = null;
+
+  // Directly fetch fresh organization record from database to avoid stale cache
+  if (supabaseClient) {
+    try {
+      const { data, error } = await supabaseClient
+        .from('organizations')
+        .select('id, name, square_connected, square_merchant_id, square_access_token, square_connected_at, settings')
+        .eq('id', activeOrgId)
+        .maybeSingle();
+
+      if (error) {
+        console.error("renderSquareStatus: Supabase query error fetching organization Square state:", error);
+      } else if (data) {
+        freshOrgData = data;
+        if (activeOrg) {
+          activeOrg.square_connected = !!(data.square_connected || data.square_access_token || data.square_merchant_id);
+          activeOrg.square_merchant_id = data.square_merchant_id || data.settings?.square_merchant_id || null;
+          activeOrg.square_access_token = data.square_access_token || null;
+          activeOrg.square_connected_at = data.square_connected_at || data.settings?.square_connected_at || null;
+          if (data.settings) {
+            activeOrg.settings = data.settings;
+          }
+        }
+      }
+    } catch (fetchErr) {
+      console.error('renderSquareStatus: Could not query organization status directly:', fetchErr);
+    }
+  }
+
+  const isConnected = !!(
+    (freshOrgData && (freshOrgData.square_connected || freshOrgData.square_access_token || freshOrgData.square_merchant_id)) ||
+    (activeOrg && (activeOrg.square_connected || activeOrg.square_access_token || activeOrg.square_merchant_id || (activeOrg.settings && activeOrg.settings.square_merchant_id)))
+  );
+
+  const topBadge = document.getElementById('badge-square-status') || document.querySelector('#square-status-badge');
+  if (topBadge) {
+    if (isConnected) {
+      topBadge.textContent = 'Connected';
+      topBadge.className = 'text-[10px] bg-emerald-950/80 text-emerald-300 border border-emerald-600/60 px-2 py-0.5 rounded-full font-bold';
+    } else {
+      topBadge.textContent = 'Ready to Connect';
+      topBadge.className = 'text-[10px] bg-slate-800 text-slate-400 border border-slate-700 px-2 py-0.5 rounded-full font-semibold';
+    }
+  }
+
+  const merchantId = freshOrgData?.square_merchant_id || activeOrg?.square_merchant_id || (activeOrg?.settings && activeOrg.settings.square_merchant_id) || '';
+
+  if (isConnected) {
+    container.innerHTML = `
+      <div class="space-y-1">
+        <div class="flex items-center gap-2">
+          <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+          <span class="text-xs font-bold text-emerald-400">Connected</span>
+        </div>
+        <p class="text-[11px] text-slate-400">Merchant ID: <span class="font-mono text-slate-200">${merchantId || 'Active'}</span></p>
+      </div>
+      <button id="disconnect-square-btn" type="button" class="w-full sm:w-auto bg-red-600 hover:bg-red-500 text-white font-bold text-xs px-4 py-2.5 rounded-lg transition shadow-lg shadow-red-900/30 flex items-center justify-center gap-2 shrink-0">
+        <span>🚫</span> Disconnect Square
+      </button>
+    `;
+
+    const disconnectBtn = container.querySelector('#disconnect-square-btn');
+    if (disconnectBtn) {
+      disconnectBtn.addEventListener('click', async (e) => {
+        e.preventDefault();
+        if (typeof window.disconnectSquareAccount === 'function') {
+          await window.disconnectSquareAccount(activeOrgId);
+        } else if (typeof window.handleDisconnectSquare === 'function') {
+          await window.handleDisconnectSquare(activeOrgId);
+        } else {
+          try {
+            await disconnectSquareAccount();
+            if (typeof window.showToast === 'function') window.showToast('Square disconnected.', 'info');
+            await renderSquareStatus(activeOrgId);
+          } catch (err) {
+            console.error('Error disconnecting Square:', err);
+            if (typeof window.showToast === 'function') window.showToast('Disconnect error: ' + err.message, 'error');
+          }
+        }
+      });
+    }
+  } else {
+    container.innerHTML = `
+      <div class="space-y-1">
+        <div class="flex items-center gap-2">
+          <span class="w-2.5 h-2.5 rounded-full bg-slate-500"></span>
+          <span class="text-xs font-bold text-slate-300">Not Connected</span>
+        </div>
+        <p class="text-[11px] text-slate-400">Connect your Square account to process payments, sync retail inventory, and track point-of-sale orders.</p>
+      </div>
+      <button id="connect-square-btn" type="button" class="w-full sm:w-auto bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs px-4 py-2.5 rounded-lg transition shadow-lg shadow-emerald-900/30 flex items-center justify-center gap-2 shrink-0">
+        <span>💳</span> Connect Square Account
+      </button>
+    `;
+
+    const connectBtn = container.querySelector('#connect-square-btn');
+    if (connectBtn) {
+      connectBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        if (typeof window.connectSquareAccount === 'function') {
+          window.connectSquareAccount(activeOrgId);
+        }
+      });
+    }
+  }
+}
+
 // Exchange Square OAuth code for access token and persist to organization
 export async function exchangeSquareOAuthCode(code, redirectUri) {
   if (!supabaseClient) throw new Error('Supabase is not configured.');
   if (!currentOrganizationId) throw new Error('No active organization selected.');
 
-  const { data: { session } } = await supabaseClient.auth.getSession();
-  const token = session?.access_token || SUPABASE_ANON_KEY;
-
-  const response = await fetch(`${SUPABASE_URL}/functions/v1/square-oauth`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`
-    },
-    body: JSON.stringify({
+  const { data: result, error: fnError } = await supabaseClient.functions.invoke('square-oauth', {
+    body: {
       action: 'exchange_token',
       code: code,
       redirect_uri: redirectUri,
       organization_id: currentOrganizationId
-    })
+    }
   });
 
-  const result = await response.json().catch(() => ({}));
-
-  if (!response.ok) {
-    throw new Error(result.error || `Square OAuth exchange failed (${response.status})`);
+  if (fnError) {
+    throw new Error(fnError.message || 'Square OAuth exchange failed');
   }
 
   // Reload organization context to update local merchant state
@@ -1876,30 +2120,176 @@ export async function disconnectSquareAccount() {
   if (!supabaseClient) throw new Error('Supabase is not configured.');
   if (!currentOrganizationId) throw new Error('No active organization selected.');
 
-  const { data: { session } } = await supabaseClient.auth.getSession();
-  const token = session?.access_token || SUPABASE_ANON_KEY;
-
-  const response = await fetch(`${SUPABASE_URL}/functions/v1/square-oauth`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`
-    },
-    body: JSON.stringify({
+  const { data: result, error: fnError } = await supabaseClient.functions.invoke('square-oauth', {
+    body: {
       action: 'disconnect',
       organization_id: currentOrganizationId
-    })
+    }
   });
 
-  const result = await response.json().catch(() => ({}));
-
-  if (!response.ok) {
-    throw new Error(result.error || `Failed to disconnect Square account (${response.status})`);
+  if (fnError) {
+    throw new Error(fnError.message || 'Failed to disconnect Square account');
   }
 
   // Reload context
   await loadOrganizationContext();
   return result;
+}
+
+// Helper to render Etsy connection status in settings modal
+// NOTE: activeOrgId is retained in the function signature for call-site consistency with renderSquareStatus,
+// but is NOT used in the query. Etsy integration is scoped per-user in etsy_integrations table (keyed by user_id),
+// unlike Square which stores credentials per-organization on the organizations table.
+export async function renderEtsyStatus(activeOrgId) {
+  const container = document.querySelector('#etsy-status-disconnected');
+  if (!container) {
+    console.error("renderEtsyStatus: Container '#etsy-status-disconnected' not found in DOM.");
+    return;
+  }
+
+  if (!supabaseClient) {
+    console.error("renderEtsyStatus: Supabase client is not configured.");
+    return;
+  }
+
+  let etsyRow = null;
+
+  try {
+    const { data: { user }, error: userError } = await supabaseClient.auth.getUser();
+    if (userError || !user) {
+      console.warn("renderEtsyStatus: No authenticated user found.");
+    } else {
+      const { data, error } = await supabaseClient
+        .from('etsy_integrations')
+        .select('id, user_id, etsy_shop_id, etsy_shop_name, expires_at, created_at')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      if (error) {
+        console.error("renderEtsyStatus: Supabase query error fetching etsy_integrations:", error);
+      } else {
+        etsyRow = data;
+      }
+    }
+  } catch (fetchErr) {
+    console.error('renderEtsyStatus: Error querying etsy_integrations status:', fetchErr);
+  }
+
+  const isConnected = !!(etsyRow && etsyRow.etsy_shop_id);
+
+  const topBadge = document.getElementById('badge-etsy-status');
+  if (topBadge) {
+    if (isConnected) {
+      topBadge.textContent = 'Connected';
+      topBadge.className = 'text-[10px] bg-emerald-950/80 text-emerald-300 border border-emerald-600/60 px-2 py-0.5 rounded-full font-bold';
+    } else {
+      topBadge.textContent = 'Ready to Connect';
+      topBadge.className = 'text-[10px] bg-slate-800 text-slate-400 border border-slate-700 px-2 py-0.5 rounded-full font-semibold';
+    }
+  }
+
+  const shopName = etsyRow?.etsy_shop_name || '';
+  const shopId = etsyRow?.etsy_shop_id || '';
+  const displayShop = shopName ? `${shopName} (${shopId})` : (shopId || 'Active');
+
+  if (isConnected) {
+    container.innerHTML = `
+      <div class="space-y-1">
+        <div class="flex items-center gap-2">
+          <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+          <span class="text-xs font-bold text-emerald-400">Etsy Connected</span>
+        </div>
+        <p class="text-[11px] text-slate-400">Shop: <span class="font-mono text-slate-200">${displayShop}</span></p>
+      </div>
+      <div class="flex items-center gap-2 flex-wrap">
+        <button type="button" id="btn-etsy-map-skus" class="bg-orange-600 hover:bg-orange-500 text-white font-bold text-xs px-3 py-1.5 rounded-lg transition flex items-center gap-1 shadow-sm">
+          <span>🔗</span> Map SKUs
+        </button>
+        <button type="button" id="btn-etsy-import-listings" class="bg-orange-600/20 hover:bg-orange-600/40 text-orange-300 border border-orange-500/40 font-bold text-xs px-3 py-1.5 rounded-lg transition">
+          📦 Import Listings
+        </button>
+        <button type="button" id="btn-disconnect-etsy-shop" class="w-full sm:w-auto bg-red-600 hover:bg-red-500 text-white font-bold text-xs px-4 py-2 rounded-lg transition shadow-lg shadow-red-900/30 flex items-center justify-center gap-1.5 shrink-0">
+          <span>🚫</span> Disconnect Etsy
+        </button>
+      </div>
+    `;
+
+    const mapSkusBtn = container.querySelector('#btn-etsy-map-skus');
+    if (mapSkusBtn) {
+      mapSkusBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        if (typeof window.openSkuMappingModal === 'function') {
+          window.openSkuMappingModal();
+        }
+      });
+    }
+
+    const importListingsBtn = container.querySelector('#btn-etsy-import-listings');
+    if (importListingsBtn) {
+      importListingsBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        if (typeof window.importEtsyListings === 'function') {
+          window.importEtsyListings();
+        }
+      });
+    }
+
+    const disconnectBtn = container.querySelector('#btn-disconnect-etsy-shop');
+    if (disconnectBtn) {
+      disconnectBtn.addEventListener('click', async (e) => {
+        e.preventDefault();
+        if (typeof window.disconnectEtsyShop === 'function') {
+          await window.disconnectEtsyShop(activeOrgId);
+        } else {
+          try {
+            await disconnectEtsyShop(activeOrgId);
+            if (typeof window.showToast === 'function') window.showToast('Etsy shop disconnected.', 'info');
+            await renderEtsyStatus(activeOrgId);
+          } catch (err) {
+            console.error('Error disconnecting Etsy shop:', err);
+            if (typeof window.showToast === 'function') window.showToast('Disconnect error: ' + err.message, 'error');
+          }
+        }
+      });
+    }
+  } else {
+    container.innerHTML = `
+      <div class="space-y-1">
+        <div class="flex items-center gap-2">
+          <span class="w-2.5 h-2.5 rounded-full bg-slate-500"></span>
+          <span class="text-xs font-bold text-slate-300">Not Connected</span>
+        </div>
+        <p class="text-[11px] text-slate-400">Authorize Sierra Myco Lab via PKCE OAuth to sync listings and poll orders.</p>
+      </div>
+      <button type="button" id="btn-connect-etsy" class="flex items-center gap-2 px-4 py-2.5 bg-orange-600 hover:bg-orange-500 text-white font-medium text-sm rounded-lg transition-colors shadow-sm cursor-pointer border border-orange-500/30 shrink-0">
+        <span class="font-bold text-base">E</span>
+        <span id="text-connect-etsy">Connect Etsy Shop</span>
+      </button>
+    `;
+  }
+}
+
+// Disconnect Etsy shop for current authenticated user
+// NOTE: passedOrgId is retained for call-site consistency, but deletion is scoped to user_id in etsy_integrations.
+export async function disconnectEtsyShop(passedOrgId) {
+  if (!supabaseClient) throw new Error('Supabase is not configured.');
+
+  const { data: { user }, error: userError } = await supabaseClient.auth.getUser();
+  if (userError || !user) {
+    throw new Error('User is not authenticated.');
+  }
+
+  const { error: deleteError } = await supabaseClient
+    .from('etsy_integrations')
+    .delete()
+    .eq('user_id', user.id);
+
+  if (deleteError) {
+    throw deleteError;
+  }
+
+  // Reload organization context
+  await loadOrganizationContext();
 }
 
 // Process a payment via Square with automatic 1% platform revenue fee split

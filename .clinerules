@@ -1,0 +1,22 @@
+# Code Integrity Guardrails
+- ALWAYS perform a final inspection of modified files before finishing a task to ensure NO Git merge conflict markers (<<<<<<<, =======, >>>>>>>) or leftover diff artifacts remain.
+- NEVER append duplicate HTML tags or script blocks when updating existing web pages or modules.
+- ALWAYS ensure all HTML tags, JSON structures, and JS code blocks are cleanly opened, closed, and formatted.
+- ALWAYS preserve existing CSS class names and component layouts unless explicitly instructed to redesign them.
+
+# Frontend State Management
+- NEVER use Tailwind utility classes (e.g. `hidden`, `border-emerald-500` vs `border-transparent`, color swaps) as the source of truth for application state that gets read back later. Classes are a rendering *output*, not a state *store* — reading `classList.contains(...)` or `querySelector('.some-active-class')` to recover business state (selected tab, selected preset, open/closed modal, current stage) is forbidden.
+- ALWAYS back UI state with an explicit JS variable or a `data-*` attribute (e.g. `data-selected="true"`, `data-state="open"`) as the single source of truth. Tailwind classes may be *derived* from that state for styling, but must never be the only place the state lives.
+- This project has a real, previously-shipped bug from this exact pattern: rack-preset selection in `js/app.js` was read via `document.querySelector('.preset-rack-btn.border-emerald-500')`, so a future restyle would silently send `null` to the backend. Do not reintroduce this class of bug.
+
+# DOM Safety
+- ALWAYS null-check the result of `document.getElementById(...)` / `document.querySelector(...)` before calling methods or reading properties on it (`.value`, `.classList`, `.innerHTML`, `.innerText`, `.addEventListener`), UNLESS the element is guaranteed to exist in static, always-rendered HTML with no conditional gating.
+- This applies with extra care to code that runs inside modals (elements may not exist yet, or may have just been destroyed) and to `addEventListener` calls made at module load time — a null element there throws and silently aborts all subsequent top-level initialization code in that file.
+- Prefer a small `getEl(id)` / guard-and-return-early pattern over chaining directly off `document.getElementById(...)`.
+
+# Edge Function Security (Supabase)
+- NEVER trust `organization_id`, `user_id`, or any tenant/ownership identifier supplied in a request body or query string as the basis for an authorization decision. These are client-controlled and can be forged.
+- ALWAYS derive the caller's identity server-side from the verified JWT (`Authorization` header / `supabase.auth.getUser()`), then look up that user's `organization_members` row(s) to determine which `organization_id`(s) they are actually allowed to act on. Only after that check should a client-supplied `organization_id` be accepted, and only if it matches a membership the JWT-derived user actually holds.
+- This applies to every edge function that reads, writes, or triggers an action scoped to an organization — including OAuth start/callback flows (Square, Etsy) and payment-creation endpoints. The OAuth `state` parameter must be treated as CSRF protection only, never as an authorization credential for binding tokens to an org — bind the org from the authenticated caller instead.
+- Service-role-key usage (to bypass RLS for background/cron writes) is fine and expected for edge functions, but it makes the JWT/membership check above the *only* remaining safeguard — the service role key itself grants no tenant isolation.
+- Every edge function must return a non-200 status on failure (don't swallow per-item errors in a loop and report `success: true` if any item failed) and must not leak raw database/stack-trace error text to the client.

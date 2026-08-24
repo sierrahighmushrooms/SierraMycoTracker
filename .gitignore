@@ -39,6 +39,9 @@ out/
 export*.json
 *backup*.json
 
+# --- Supabase CLI local cache (contains pooler connection strings) ---
+supabase/.temp/
+
 # --- Editors ---
 .vscode/
 !.vscode/settings.json

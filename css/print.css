@@ -293,6 +293,27 @@
     overflow: hidden !important;
   }
 
+  .print-card[data-preset="2.625x1"] .print-id {
+    font-family: monospace !important;
+    font-weight: 700 !important;
+    color: #0f766e !important;
+    font-size: 8.5px !important;
+    line-height: 1.15 !important;
+  }
+
+  .print-card[data-preset="2.625x1"] .print-date {
+    font-size: 8px !important;
+    color: #334155 !important;
+    line-height: 1.15 !important;
+  }
+
+  .print-card[data-preset="2.625x1"] .print-extra {
+    font-size: 8px !important;
+    font-weight: 600 !important;
+    color: #475569 !important;
+    line-height: 1.15 !important;
+  }
+
   /* Large Card Header / Body Layout (for height >= 2.0" templates) */
   .print-card.print-card-large {
     flex-direction: column !important;
@@ -339,9 +360,32 @@
 
   .print-card-large .print-qr-container {
     height: auto !important;
-    max-height: 1.5in !important;
-    width: clamp(0.9in, 28cqi, 1.4in) !important;
+    max-height: 1.8in !important;
+    width: clamp(1.2in, 32cqi, 1.6in) !important;
     align-self: flex-start !important;
+  }
+
+  .print-card[data-preset="generic-4x5"] .print-qr-container,
+  .print-card[data-preset="4x5"] .print-qr-container {
+    flex: 0 0 1.1in !important;
+    width: 1.1in !important;
+    height: 1.1in !important;
+    max-width: 1.1in !important;
+    max-height: 1.1in !important;
+    margin: 0 auto !important;
+    align-self: center !important;
+  }
+
+  .print-card[data-preset="generic-4x5"] .print-qr-container canvas,
+  .print-card[data-preset="generic-4x5"] .print-qr-container img,
+  .print-card[data-preset="4x5"] .print-qr-container canvas,
+  .print-card[data-preset="4x5"] .print-qr-container img {
+    width: 1.1in !important;
+    height: 1.1in !important;
+    max-width: 1.1in !important;
+    max-height: 1.1in !important;
+    margin: 0 auto !important;
+    object-fit: contain !important;
   }
 
   .print-card-footer,
