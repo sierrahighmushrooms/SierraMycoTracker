@@ -78,7 +78,7 @@ export function isSupabaseConfigured() {
   );
 }
 
-export const supabaseClient = (() => {
+function createSupabaseClient() {
   if (!isSupabaseConfigured()) return null;
   try {
     return window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
@@ -92,10 +92,28 @@ export const supabaseClient = (() => {
     console.warn('Failed to initialize Supabase client:', err);
     return null;
   }
-})();
+}
+
+// Attempted once eagerly at import time (the common case: the CDN script
+// already finished loading by the time this module evaluates). This used to
+// be the ONLY attempt, via a `const` - if `window.supabase` wasn't ready yet
+// at that exact instant (a slow or momentarily-failed CDN request), every
+// Supabase-backed function stayed permanently null for the rest of the
+// session even after the SDK finished loading a moment later.
+let supabaseClient = createSupabaseClient();
+
+// Re-attempts client creation on demand if it isn't ready yet, so a
+// late-arriving SDK (or a transient load failure that the index.html CDN
+// fallback recovers from) is picked up by the next call instead of wedging
+// the session. Cheap to call repeatedly: once supabaseClient is set, this
+// is just a null check.
+function ensureSupabaseClient() {
+  if (!supabaseClient) supabaseClient = createSupabaseClient();
+  return supabaseClient;
+}
 
 export function getSupabaseClient() {
-  return supabaseClient;
+  return ensureSupabaseClient();
 }
 
 // Wrapper to handle Clock Drift ("JWT issued at future"), expired tokens, and 401s
@@ -1056,7 +1074,7 @@ export async function loadOrganizationContext() {
 
 // Create organization and assign default owner member and default Location
 export async function createOrganization(name, slug, logoUrl, settings = null) {
-  if (!supabaseClient) throw new Error('Supabase not configured.');
+  if (!ensureSupabaseClient()) throw new Error('Cloud connection unavailable. Please check your connection and try again.');
   const { data: { user } } = await supabaseClient.auth.getUser();
   if (!user) throw new Error('Not logged in.');
 
@@ -1109,7 +1127,7 @@ export async function createOrganization(name, slug, logoUrl, settings = null) {
 
 // Update organization settings
 export async function updateOrganizationSettings(orgId, settings) {
-  if (!supabaseClient) throw new Error('Supabase not configured.');
+  if (!ensureSupabaseClient()) throw new Error('Cloud connection unavailable. Please check your connection and try again.');
   
   const { error } = await supabaseClient
     .from('organizations')
@@ -1127,7 +1145,7 @@ export async function updateOrganizationSettings(orgId, settings) {
 
 // Update organization details (name, address, currency, settings)
 export async function updateOrganization(orgId, updates) {
-  if (!supabaseClient) throw new Error('Supabase not configured.');
+  if (!ensureSupabaseClient()) throw new Error('Cloud connection unavailable. Please check your connection and try again.');
   
   const { error } = await supabaseClient
     .from('organizations')
@@ -1145,7 +1163,7 @@ export async function updateOrganization(orgId, updates) {
 
 // Create new location
 export async function createLocation(name, category = 'Other') {
-  if (!supabaseClient) throw new Error('Supabase not configured.');
+  if (!ensureSupabaseClient()) throw new Error('Cloud connection unavailable. Please check your connection and try again.');
   if (!currentOrganizationId) throw new Error('No active organization.');
 
   const { data, error } = await supabaseClient
@@ -1168,7 +1186,7 @@ export async function createLocation(name, category = 'Other') {
 
 // Create new rack / shelving unit
 export async function createRack(locationId, name, preset, shelfCount = 4, capacityPerShelf = '') {
-  if (!supabaseClient) throw new Error('Supabase not configured.');
+  if (!ensureSupabaseClient()) throw new Error('Cloud connection unavailable. Please check your connection and try again.');
   if (!currentOrganizationId) throw new Error('No active organization.');
   if (!locationId) throw new Error('A location is required.');
 
@@ -1297,7 +1315,7 @@ export async function updateFreshProduceEntry(id, updates) {
 
 // Get all supplies for the current organization
 export async function getSupplies() {
-  if (!supabaseClient) throw new Error('Supabase not configured.');
+  if (!ensureSupabaseClient()) throw new Error('Cloud connection unavailable. Please check your connection and try again.');
   if (!currentOrganizationId) throw new Error('No active organization.');
 
   const { data, error } = await supabaseClient
@@ -1334,7 +1352,7 @@ export function sanitizeSupplyCategory(category) {
 
 // Create new supply / inventory item (Step 6: Supplies & Inventory)
 export async function createSupply(supplyData) {
-  if (!supabaseClient) throw new Error('Supabase not configured.');
+  if (!ensureSupabaseClient()) throw new Error('Cloud connection unavailable. Please check your connection and try again.');
   if (!currentOrganizationId) throw new Error('No active organization.');
   if (!supplyData || !supplyData.name) throw new Error('A supply name is required.');
 
@@ -1398,7 +1416,7 @@ export async function createSupply(supplyData) {
 
 // Update an existing supply
 export async function updateSupply(id, updates) {
-  if (!supabaseClient) throw new Error('Supabase not configured.');
+  if (!ensureSupabaseClient()) throw new Error('Cloud connection unavailable. Please check your connection and try again.');
   if (!currentOrganizationId) throw new Error('No active organization.');
 
   const updatePayload = { ...updates };
@@ -1454,7 +1472,7 @@ export async function updateSupply(id, updates) {
 
 // Delete a supply
 export async function deleteSupply(id) {
-  if (!supabaseClient) throw new Error('Supabase not configured.');
+  if (!ensureSupabaseClient()) throw new Error('Cloud connection unavailable. Please check your connection and try again.');
   if (!currentOrganizationId) throw new Error('No active organization.');
 
   const { error } = await supabaseClient

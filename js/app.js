@@ -464,6 +464,7 @@ window.renderInventoryList = async function() {
   } catch (err) {
     console.error('Failed to render inventory:', err);
     listEl.innerHTML = `<tr><td colspan="5" class="px-4 py-4 text-center text-red-400">Error loading inventory.</td></tr>`;
+    showToast(err.message || 'Cloud sync unavailable. Inventory could not load.', 'error');
   }
 };
 

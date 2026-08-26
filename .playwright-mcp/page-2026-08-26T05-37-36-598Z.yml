@@ -1,0 +1,114 @@
+- generic [ref=f1e2]:
+  - navigation [ref=f1e3]:
+    - link "🍄 Sierra Myco Lab" [ref=f1e4] [cursor=pointer]:
+      - /url: /
+      - generic [ref=f1e5]: 🍄
+      - generic [ref=f1e6]: Sierra Myco Lab
+    - generic [ref=f1e7]:
+      - link "Features" [ref=f1e8] [cursor=pointer]:
+        - /url: "#features"
+      - link "Pricing" [ref=f1e9] [cursor=pointer]:
+        - /url: "#pricing"
+      - link "Roadmap" [ref=f1e10] [cursor=pointer]:
+        - /url: "#"
+    - generic [ref=f1e11]:
+      - button "Sign In" [ref=f1e12]
+      - button "Get Started Free" [ref=f1e13]
+  - generic [ref=f1e14]:
+    - generic [ref=f1e15]: 🧫 Now with AI-powered contamination diagnostics
+    - heading "Master Your Mushroom Cultivation" [level=1] [ref=f1e16]
+    - paragraph [ref=f1e17]: Sierra Myco Lab is the complete mycology workflow platform — batch lineage tracking, sterilization logs, yield analytics, and AI diagnostics. Cloud-synced across all of your devices.
+    - generic [ref=f1e18]:
+      - button "Get Started Free →" [ref=f1e19]
+      - link "Explore Features" [ref=f1e20] [cursor=pointer]:
+        - /url: "#features"
+    - generic [ref=f1e21]:
+      - generic [ref=f1e22]: Live Dashboard Preview
+      - generic [ref=f1e28]:
+        - generic [ref=f1e29]:
+          - generic [ref=f1e30]: Total Containers
+          - generic [ref=f1e31]: "128"
+        - generic [ref=f1e32]:
+          - generic [ref=f1e33]: Contam Rate
+          - generic [ref=f1e34]: 4%
+        - generic [ref=f1e35]:
+          - generic [ref=f1e36]: Total Yield
+          - generic [ref=f1e37]: 1,240g
+      - generic [ref=f1e38]:
+        - generic [ref=f1e39]:
+          - generic [ref=f1e40]:
+            - generic [ref=f1e41]: WO-ALC-0208-01
+            - generic [ref=f1e42]: Whole Oats - ALC (#1/7)
+          - generic [ref=f1e43]: Colonizing
+        - generic [ref=f1e44]:
+          - generic [ref=f1e45]:
+            - generic [ref=f1e46]: CVG-GT-0125-03
+            - generic [ref=f1e47]: CVG Bulk - GT (#3/6)
+          - generic [ref=f1e48]: Fruiting
+  - generic [ref=f1e49]:
+    - heading "Everything you need to cultivate with confidence" [level=2] [ref=f1e50]
+    - paragraph [ref=f1e51]: Purpose-built tools for hobbyists and commercial growers alike.
+    - generic [ref=f1e52]:
+      - generic [ref=f1e53]:
+        - generic [ref=f1e54]: 📊
+        - heading "Batch Tracking" [level=3] [ref=f1e55]
+        - paragraph [ref=f1e56]: Full lineage from spore to harvest — G2G transfers, PC sterilization logs, stage history, and QR-labeled containers.
+      - generic [ref=f1e57]:
+        - generic [ref=f1e58]: 🤖
+        - heading "AI Mycology Diagnostics" [level=3] [ref=f1e59]
+        - paragraph [ref=f1e60]: The built-in MycoAI assistant identifies contamination vectors, recommends fixes, and answers cultivation questions in real time.
+      - generic [ref=f1e61]:
+        - generic [ref=f1e62]: 💡
+        - heading "Community-Driven Features" [level=3] [ref=f1e63]
+        - paragraph [ref=f1e64]: Vote on the public roadmap and submit feature requests. The platform evolves with cultivators — not against them.
+  - generic [ref=f1e65]:
+    - heading "Simple, transparent pricing" [level=2] [ref=f1e66]
+    - paragraph [ref=f1e67]: Start free. Upgrade when your operation grows.
+    - generic [ref=f1e68]:
+      - generic [ref=f1e69]:
+        - heading "Free" [level=3] [ref=f1e70]
+        - generic [ref=f1e71]:
+          - generic [ref=f1e72]: $0
+          - generic [ref=f1e73]: / forever
+        - list [ref=f1e74]:
+          - listitem [ref=f1e75]:
+            - generic [ref=f1e76]: ✓
+            - text: Unlimited container tracking
+          - listitem [ref=f1e77]:
+            - generic [ref=f1e78]: ✓
+            - text: QR label printing
+          - listitem [ref=f1e79]:
+            - generic [ref=f1e80]: ✓
+            - text: Local-first data storage
+          - listitem [ref=f1e81]:
+            - generic [ref=f1e82]: ✓
+            - text: Community roadmap access
+        - button "Get Started Free" [ref=f1e83]
+      - generic [ref=f1e84]:
+        - generic [ref=f1e85]: Most Popular
+        - heading "Pro" [level=3] [ref=f1e86]
+        - generic [ref=f1e87]:
+          - generic [ref=f1e88]: $6
+          - generic [ref=f1e89]: / month
+        - list [ref=f1e90]:
+          - listitem [ref=f1e91]:
+            - generic [ref=f1e92]: ✓
+            - text: Everything in Free
+          - listitem [ref=f1e93]:
+            - generic [ref=f1e94]: ✓
+            - text: ☁️ Real-time cloud sync
+          - listitem [ref=f1e95]:
+            - generic [ref=f1e96]: ✓
+            - text: Multi-device access
+          - listitem [ref=f1e97]:
+            - generic [ref=f1e98]: ✓
+            - text: AI diagnostics included
+          - listitem [ref=f1e99]:
+            - generic [ref=f1e100]: ✓
+            - text: Priority support
+        - button "Start Pro Trial" [ref=f1e101]
+  - contentinfo [ref=f1e102]:
+    - paragraph [ref=f1e103]: © 2026 Sierra Myco Lab — Built for cultivators, by cultivators. 🍄
+    - paragraph [ref=f1e104]:
+      - link "Privacy Policy" [ref=f1e105] [cursor=pointer]:
+        - /url: privacy.html
