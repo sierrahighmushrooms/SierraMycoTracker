@@ -41,7 +41,8 @@ import {
   calculateCVGRecipe,
   getDrySubstrateWeightGrams,
   calculateBE,
-  formatLocalDate
+  formatLocalDate,
+  extractDateFromLabel
 } from './utils.js';
 import {
   APP_CONFIG,
@@ -280,6 +281,11 @@ export function openModal(itemOrId) {
   if (breakShakeBtn) breakShakeBtn.classList.toggle('hidden', locked || breakShakeBtn.classList.contains('hidden'));
   if (stageForm) stageForm.classList.toggle('hidden', locked);
 
+  // "Mark as Spent" quick action: visible on any container whose stage isn't
+  // already one of the inactive/terminal stages (Spent, Archived, Contaminated).
+  const spentBtn = document.getElementById('btn-mark-spent');
+  if (spentBtn) spentBtn.classList.toggle('hidden', INACTIVE_STAGES.includes(item.stage));
+
   toggleContamFields();
 
   // The creation entry is the LAST element (history is built with a single
@@ -287,8 +293,9 @@ export function openModal(itemOrId) {
   // item carries an explicit user-entered date (e.g. from "Create Parent
   // Asset"), prefer that over the entry's raw timestamp - which is always
   // stamped with the real moment the form was submitted, and can silently
-  // diverge from a deliberately backdated asset.
-  const explicitCreationDate = formatLocalDate(item.prepDate || item.prep_date);
+  // diverge from a deliberately backdated asset. For older items with no
+  // prep_date, fall back to a date extracted from the name/batch/code string.
+  const explicitCreationDate = formatLocalDate(item.prepDate || item.prep_date) || extractDateFromLabel(item);
   document.getElementById('modal-history').innerHTML = item.history.map((h, idx) => {
     const isCreationEntry = idx === item.history.length - 1;
     const displayTimestamp = (isCreationEntry && explicitCreationDate) ? explicitCreationDate : h.timestamp;
@@ -618,6 +625,43 @@ export function logYield() {
   document.getElementById('input-yield').value = '';
   saveItems();
   openModal(activeItemId);
+}
+
+// Quick action: mark the active item's container as fully depleted. Only
+// touches stage/history fields - never clears item.id or any parent/child
+// linkage, so existing lineage (parent_id / parentItemId on this item, and
+// any child items pointing at it) stays intact.
+export function markItemSpent() {
+  const item = db.items.find(i => i.id === activeItemId);
+  if (!item) return;
+  if (INACTIVE_STAGES.includes(item.stage)) return;
+  if (!confirm(`Mark ${item.label || item.id} as Spent? It will be hidden from inoculant source lists.`)) return;
+
+  const fromStage = item.stage;
+  item.stage = 'Spent';
+  item.archived = true;
+  item.history = item.history || [];
+  item.history.unshift({
+    stage: 'Spent',
+    timestamp: new Date().toLocaleString(),
+    notes: 'Container fully depleted / Marked as Spent.',
+    env: ''
+  });
+  item.lifecycleHistory = item.lifecycleHistory || [];
+  item.lifecycleHistory.unshift({
+    fromStage: fromStage,
+    toStage: 'Spent',
+    timestamp: new Date().toLocaleString(),
+    type: 'manual-spent',
+    notes: 'Container fully depleted / Marked as Spent.'
+  });
+
+  saveItems();
+  closeModal();
+
+  if (typeof window.render === 'function') window.render();
+  if (typeof window.updateDashboard === 'function') window.updateDashboard();
+  showToast(`✓ ${item.id} marked as Spent.`, 'success', 3000);
 }
 
 // --- Delete Functions ---

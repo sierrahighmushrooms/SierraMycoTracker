@@ -1365,6 +1365,11 @@
           <button onclick="deleteUninoculated()" class="text-xs text-red-400 hover:text-red-300 underline whitespace-nowrap">Clear All Uninoculated</button>
         </div>
 
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <div id="type-filter-bar" class="flex flex-wrap items-center gap-2"></div>
+          <div id="view-mode-toggle" class="flex items-center gap-1.5"></div>
+        </div>
+
         <!-- Dashboard Bulk Selection Controls -->
         <div class="flex items-center justify-between bg-slate-800/80 p-3 rounded-lg border border-slate-700">
           <label class="flex items-center gap-2 text-xs font-semibold text-slate-300 cursor-pointer select-none">
@@ -1384,7 +1389,7 @@
           </div>
         </div>
 
-        <div id="items-grid" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
+        <div id="items-grid" class="space-y-4"></div>
       </div>
     </div>
   </div>
@@ -1455,6 +1460,11 @@
       <div class="overflow-y-auto p-4 space-y-4 grow">
         <!-- Inactive Container Lockout Badge -->
         <div id="modal-inactive-badge" class="hidden"></div>
+
+        <!-- Quick Action: Mark as Spent / Depleted -->
+        <button id="btn-mark-spent" type="button" onclick="markItemSpent()" class="hidden w-full bg-rose-900/60 hover:bg-rose-800 border border-rose-700 text-rose-200 text-xs font-bold py-2 rounded transition flex items-center justify-center gap-1.5">
+          <span>🗑️</span> Mark as Spent / Depleted
+        </button>
 
         <!-- Quick Inoculate Banner for Blank Items -->
         <div id="inoculate-banner" class="hidden bg-amber-500/10 border border-amber-500/40 p-4 rounded-lg space-y-3">
@@ -3226,6 +3236,9 @@
         <div class="flex items-center gap-2">
           <button type="button" onclick="importEtsyListings().then(() => openSkuMappingModal())" class="bg-orange-600/20 hover:bg-orange-600/40 text-orange-300 border border-orange-500/40 font-bold text-xs px-3 py-1.5 rounded-lg transition flex items-center gap-1.5">
             <span>🔄</span> Sync Etsy Listings
+          </button>
+          <button type="button" onclick="autoCreateAllMissingItems()" class="bg-emerald-600/20 hover:bg-emerald-600/40 text-emerald-300 border border-emerald-500/40 font-bold text-xs px-3 py-1.5 rounded-lg transition flex items-center gap-1.5">
+            <span>⚡</span> Auto-Create All Missing Items
           </button>
           <button type="button" onclick="closeSkuMappingModal()" class="text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 p-2 rounded-lg transition text-base font-bold">✕</button>
         </div>

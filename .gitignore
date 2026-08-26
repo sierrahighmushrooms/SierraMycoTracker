@@ -42,6 +42,9 @@ export*.json
 # --- Supabase CLI local cache (contains pooler connection strings) ---
 supabase/.temp/
 
+# --- Claude Code local settings (personal, not shared with team) ---
+.claude/settings.local.json
+
 # --- Editors ---
 .vscode/
 !.vscode/settings.json

@@ -150,6 +150,103 @@ export function formatLocalDate(raw) {
   return `${mm}/${dd}/${d.getFullYear()}`;
 }
 
+// Resolve the Date a container should be grouped by for the date-bucketed
+// grid: created_at/createdAt (the system-stamped creation time) wins when
+// present, since that's what actually determines when the record entered
+// the system; only when neither exists do we fall back to the user-entered
+// Prep/Run Date. Bare "YYYY-MM-DD" values are built with the LOCAL Date
+// constructor (new Date(year, month-1, day)) instead of being handed to
+// new Date(string), which the JS spec parses as UTC midnight - in any
+// timezone behind UTC that rolls the date back a full day. Full ISO
+// timestamps (with a time and/or offset) are left to new Date(...), which
+// parses those correctly regardless of timezone. Returns null when nothing
+// usable is found.
+export function getContainerBucketDate(item) {
+  const candidates = [item.created_at, item.createdAt, item.prepDate, item.prep_date];
+  for (const raw of candidates) {
+    if (!raw) continue;
+
+    if (typeof raw === 'string') {
+      const bareDateMatch = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      if (bareDateMatch) {
+        const [, year, month, day] = bareDateMatch;
+        const d = new Date(Number(year), Number(month) - 1, Number(day));
+        if (!isNaN(d.getTime())) return d;
+        continue;
+      }
+    }
+
+    const d = new Date(raw);
+    if (!isNaN(d.getTime())) return d;
+  }
+  return null;
+}
+
+// Classify a Date into one of the container-grid date buckets, using LOCAL
+// calendar boundaries (never UTC/ISO) so the grouping matches what the user
+// sees on their own clock. Weeks run Monday-Sunday. Items with no
+// resolvable date (see getContainerBucketDate) are grouped under 'older' so
+// they never silently disappear from the grid.
+// "Created MM/DD/YYYY" label for a container card, using the same date
+// resolution as getContainerBucketDate so the visible date always matches
+// the section the card is grouped under. Returns null when no usable date
+// field exists.
+export function getContainerCreatedDateLabel(item) {
+  const date = getContainerBucketDate(item);
+  if (!date) return null;
+  const mm = String(date.getMonth() + 1).padStart(2, '0');
+  const dd = String(date.getDate()).padStart(2, '0');
+  return `${mm}/${dd}/${date.getFullYear()}`;
+}
+
+export function getDateBucketKey(date) {
+  if (!date || isNaN(date.getTime())) return 'older';
+
+  const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+  const yesterdayStart = new Date(todayStart);
+  yesterdayStart.setDate(yesterdayStart.getDate() - 1);
+
+  const dow = todayStart.getDay(); // 0=Sun..6=Sat
+  const daysSinceMonday = (dow + 6) % 7;
+  const thisWeekStart = new Date(todayStart);
+  thisWeekStart.setDate(thisWeekStart.getDate() - daysSinceMonday);
+
+  const lastWeekStart = new Date(thisWeekStart);
+  lastWeekStart.setDate(lastWeekStart.getDate() - 7);
+
+  if (date >= todayStart) return 'today';
+  if (date >= yesterdayStart) return 'yesterday';
+  if (date >= thisWeekStart) return 'thisWeek';
+  if (date >= lastWeekStart) return 'lastWeek';
+  return 'older';
+}
+
+// Best-effort fallback for older items with no prep_date: pull a "M-D" or
+// "MM/DD" style date embedded in the item's name/batch/code string (e.g. a
+// manually-typed label like "King Blue 8-10"). These embedded dates never
+// carry a year, so the item's created_at year is assumed (falling back to
+// the current year). Returns null when no plausible date-like substring is
+// found - callers should fall back to created_at/createdAt after this.
+export function extractDateFromLabel(item) {
+  const candidates = [item.name, item.label, item.pcBatch, item.batch_code, item.code];
+  const dateLikePattern = /\b(\d{1,2})[\/-](\d{1,2})\b/;
+  for (const raw of candidates) {
+    if (!raw || typeof raw !== 'string') continue;
+    const match = raw.match(dateLikePattern);
+    if (!match) continue;
+    const month = parseInt(match[1], 10);
+    const day = parseInt(match[2], 10);
+    if (month < 1 || month > 12 || day < 1 || day > 31) continue;
+    const yearSource = item.created_at || item.createdAt;
+    const yearDate = yearSource ? new Date(yearSource) : null;
+    const year = yearDate && !isNaN(yearDate.getTime()) ? yearDate.getFullYear() : new Date().getFullYear();
+    return `${String(month).padStart(2, '0')}/${String(day).padStart(2, '0')}/${year}`;
+  }
+  return null;
+}
+
 // Medium initials used in auto-generated item IDs.
 export function getMediumInitials(medium) {
   if (!medium) return 'MT';

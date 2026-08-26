@@ -12,6 +12,34 @@ export const corsHeaders = {
 // Helper: Sleep delay for rate-limiting (5 QPS max)
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+// Helper: Convert an Etsy Money object ({ amount, divisor, currency_code }) to a decimal number
+function parseMoney(money: any): number | null {
+  if (!money || typeof money.amount !== "number" || typeof money.divisor !== "number" || money.divisor === 0) {
+    return null;
+  }
+  return money.amount / money.divisor;
+}
+
+// Helper: Extract the primary listing image thumbnail URL from an Etsy listing's
+// "images" array (populated via includes=Images) or the legacy MainImage field
+function extractImageUrl(listing: any): string | null {
+  const primaryImage = Array.isArray(listing.images) && listing.images.length > 0
+    ? listing.images[0]
+    : listing.MainImage;
+  if (!primaryImage) return null;
+  return primaryImage.url_75x75 || primaryImage.url_170x135 || primaryImage.url_fullxfull || null;
+}
+
+// Helper: Build a human-readable variation label from a product's property_values
+// (e.g. [{ property_name: "Color", values: ["Blue"] }, { property_name: "Size", values: ["Large"] }] -> "Blue / Large")
+function buildVariationLabel(propertyValues: any[]): string {
+  if (!Array.isArray(propertyValues) || propertyValues.length === 0) return "";
+  return propertyValues
+    .map((pv: any) => (Array.isArray(pv.values) ? pv.values.join("/") : ""))
+    .filter((v: string) => v)
+    .join(" / ");
+}
+
 // Helper: Refresh access token if expired
 async function getValidEtsyAccessToken(supabaseAdmin: any, integration: any, etsyClientId: string): Promise<string> {
   const expiresAt = new Date(integration.expires_at).getTime();
@@ -149,7 +177,7 @@ Deno.serve(async (req: Request) => {
     const allListings: any[] = [];
 
     while (hasMore) {
-      const url = `https://openapi.etsy.com/v3/application/shops/${shopId}/listings/active?limit=${limit}&offset=${offset}&includes=Inventory`;
+      const url = `https://openapi.etsy.com/v3/application/shops/${shopId}/listings/active?limit=${limit}&offset=${offset}&includes=Inventory,Images`;
       
       const res = await fetch(url, {
         headers: {
@@ -186,6 +214,7 @@ Deno.serve(async (req: Request) => {
     for (const listing of allListings) {
       const listingId = String(listing.listing_id);
       const title = listing.title || "";
+      const imageUrl = extractImageUrl(listing);
       const products = listing.inventory?.products || [];
 
       if (products.length > 0) {
@@ -194,6 +223,10 @@ Deno.serve(async (req: Request) => {
           const sku = prod.sku || null;
           const offerings = prod.offerings || [];
           const quantity = offerings.reduce((acc: number, curr: any) => acc + (curr.quantity || 0), 0);
+          const offeringPrice = offerings.find((o: any) => o.price)?.price;
+          const price = parseMoney(offeringPrice) ?? parseMoney(listing.price);
+          const variationLabel = buildVariationLabel(prod.property_values);
+          const itemTitle = variationLabel ? `${title} — ${variationLabel}` : title;
 
           mappingsToUpsert.push({
             user_id: user.id,
@@ -201,7 +234,9 @@ Deno.serve(async (req: Request) => {
             listing_id: listingId,
             product_id: productId,
             sku: sku,
-            title: title,
+            title: itemTitle,
+            price: price,
+            image_url: imageUrl,
             etsy_quantity: quantity,
             last_synced_at: new Date().toISOString(),
             updated_at: new Date().toISOString()
@@ -216,6 +251,8 @@ Deno.serve(async (req: Request) => {
           product_id: null,
           sku: listing.sku || null,
           title: title,
+          price: parseMoney(listing.price),
+          image_url: imageUrl,
           etsy_quantity: listing.quantity || 0,
           last_synced_at: new Date().toISOString(),
           updated_at: new Date().toISOString()

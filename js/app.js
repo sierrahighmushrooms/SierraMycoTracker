@@ -53,7 +53,7 @@ window.signOut = async () => {
   }
 };
 
-import { db, saveItems, setRefreshCallback, getCustomContainers, addCustomContainer, addCustomContainerPreset, addCustomMediumPreset, getCustomContainerPresets, getCustomMediumPresets, deleteCustomContainerPreset, deleteCustomMediumPreset, initCloudSync, setSyncStatusCallback, setSyncErrorCallback, isSupabaseConfigured, getSupabaseClient, getSession, ensureValidSession, onAuthStateChange, isContainerLimitError, uploadItemsToCloud, syncItemsWithCloud, clearLegacyStorage, clearPendingImportStorage, checkAndClearStaleCache, loadCustomPresetsFromCloud, userOrganizations, userLocations, currentOrganizationId, currentLocationId, setCurrentOrganizationId, setCurrentLocationId, loadOrganizationContext, createOrganization, createRack, disconnectSquareAccount, exchangeSquareOAuthCode, renderSquareStatus, renderEtsyStatus, disconnectEtsyShop } from './db.js';
+import { db, saveItems, setRefreshCallback, getCustomContainers, addCustomContainer, addCustomContainerPreset, addCustomMediumPreset, getCustomContainerPresets, getCustomMediumPresets, deleteCustomContainerPreset, deleteCustomMediumPreset, handleSignOutCleanup, setSyncStatusCallback, setSyncErrorCallback, isSupabaseConfigured, getSupabaseClient, getSession, ensureValidSession, onAuthStateChange, isContainerLimitError, uploadItemsToCloud, syncItemsWithCloud, clearLegacyStorage, clearPendingImportStorage, checkAndClearStaleCache, loadCustomPresetsFromCloud, userOrganizations, userLocations, currentOrganizationId, currentLocationId, setCurrentOrganizationId, setCurrentLocationId, loadOrganizationContext, createOrganization, createRack, disconnectSquareAccount, exchangeSquareOAuthCode, renderSquareStatus, renderEtsyStatus, disconnectEtsyShop, isActiveStage } from './db.js';
 import { SQUARE_CONFIG } from './config.js';
 import { connectEtsy, disconnectEtsy, fetchEtsyIntegrationStatus } from './etsy.js';
 import { fetchCustomers, createCustomer, updateCustomer, deleteCustomer, fetchOrders, createOrder, updateOrder, deleteOrder, populateCustomerPicker } from './sales.js';
@@ -62,6 +62,10 @@ import {
   generateId,
   formatMMDDYY,
   formatLocalDate,
+  extractDateFromLabel,
+  getContainerBucketDate,
+  getDateBucketKey,
+  getContainerCreatedDateLabel,
   getMediumInitials,
   getStrainInitials,
   getStandardCapacity,
@@ -150,6 +154,7 @@ import {
   removeFlushYieldRecord,
   toggleContamFields,
   handleModalContainerTypeChange,
+  markItemSpent,
   deleteActiveItem,
   deleteItemDirect,
   deleteUninoculated,
@@ -208,7 +213,36 @@ import { STAGES, CONTAINER_STAGES, getMediumCategory, getContainerCategory } fro
 
 // --- Module-level UI state ---
 let currentFilter = 'All';
+let currentTypeFilter = 'all';
 let scannedItemId = null;
+
+// Container grid layout preference (grid = 2-col cards, list = single
+// column), persisted so it survives reloads.
+const VIEW_MODE_KEY = 'mycotrack_view_mode';
+let currentViewMode = (() => {
+  try {
+    const stored = localStorage.getItem(VIEW_MODE_KEY);
+    return stored === 'list' ? 'list' : 'grid';
+  } catch (err) {
+    return 'grid';
+  }
+})();
+
+function setViewMode(mode) {
+  currentViewMode = mode === 'list' ? 'list' : 'grid';
+  try {
+    localStorage.setItem(VIEW_MODE_KEY, currentViewMode);
+  } catch (err) {
+    // localStorage unavailable (e.g. private browsing) - the choice just
+    // won't persist across reloads.
+  }
+  render();
+}
+window.setViewMode = setViewMode;
+
+// Chips vs. a <select> for the container-type filter row: chips read fine
+// up to about a dozen options before wrapping gets unwieldy.
+const TYPE_FILTER_CHIP_LIMIT = 12;
 
 // --- Inventory & Supplies UI Logic ---
 let currentSupplies = [];
@@ -749,6 +783,14 @@ function lockBatchAutoFilledFields() {
 }
 
 function unlockBatchAutoFilledFields() {
+  // Re-render the Medium preset list (standard + custom) rather than just
+  // re-enabling whatever is currently in the DOM - the select may still be
+  // empty (never populated yet) or left showing only the single value a
+  // prior batch auto-fill selected.
+  const mediumSelect = document.getElementById('input-medium');
+  if (mediumSelect) {
+    populateMediumDropdown('input-medium', mediumSelect.value || 'Whole Oats');
+  }
   ['input-medium', 'input-container-type', 'input-container-weight'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.disabled = false;
@@ -832,12 +874,22 @@ function populatePCBatchDropdown() {
 // An explicit user-entered date (prepDate/prep_date, e.g. from "Create Parent
 // Asset") always wins over system-generated timestamps (created_at/createdAt),
 // since those are stamped with the real save-time and can silently diverge
-// from a deliberately backdated asset. Falls back through every field the app
-// has historically stamped items with. Returns null - never "undefined" or
-// "NaN" - when no usable date exists.
+// from a deliberately backdated asset. For older items with no prep_date, try
+// extracting a date embedded in the name/batch/code string before falling
+// back to system timestamps. Returns null - never "undefined" or "NaN" -
+// when no usable date exists.
 function formatSourceDate(item) {
-  const candidates = [item.prepDate, item.prep_date, item.created_at, item.createdAt, item.sterilizationDate];
-  for (const raw of candidates) {
+  const explicitCandidates = [item.prepDate, item.prep_date];
+  for (const raw of explicitCandidates) {
+    const formatted = formatLocalDate(raw);
+    if (formatted) return formatted;
+  }
+
+  const extracted = extractDateFromLabel(item);
+  if (extracted) return extracted;
+
+  const systemCandidates = [item.created_at, item.createdAt, item.sterilizationDate];
+  for (const raw of systemCandidates) {
     const formatted = formatLocalDate(raw);
     if (formatted) return formatted;
   }
@@ -852,17 +904,19 @@ function populateInoculantSources(selectedIdToSelect = null) {
   let filtered = [];
   let defaultOptionText = 'None / Direct';
 
+  // Only active/usable parent assets should appear as inoculant sources -
+  // items marked Spent, Archived, or Contaminated are excluded.
   if (type === 'Liquid Culture') {
-    filtered = db.items.filter(i => (i.medium === 'Liquid Culture' || i.medium === 'Media Bottle' || i.containerType === 'Liquid Culture Jar') && !isLockedStage(i.stage));
+    filtered = db.items.filter(i => (i.medium === 'Liquid Culture' || i.medium === 'Media Bottle' || i.containerType === 'Liquid Culture Jar') && isActiveStage(i.stage));
     defaultOptionText = 'Select LC Source...';
   } else if (type === 'Agar') {
-    filtered = db.items.filter(i => (i.medium === 'Agar' || i.medium === 'Petri Dish' || i.containerType === 'Agar Dish / Slant') && !isLockedStage(i.stage));
+    filtered = db.items.filter(i => (i.medium === 'Agar' || i.medium === 'Petri Dish' || i.containerType === 'Agar Dish / Slant') && isActiveStage(i.stage));
     defaultOptionText = 'Select Agar Plate...';
   } else if (type === 'Grain-to-Grain') {
-    filtered = db.items.filter(i => (i.medium === 'Whole Oats' || i.medium === 'Rye Grain' || i.medium === 'Millet' || i.stage === 'Colonizing' || i.stage === 'G2G Ready') && !isLockedStage(i.stage) && i.stage !== 'Uninoculated' && i.stage !== 'Preparation');
+    filtered = db.items.filter(i => (i.medium === 'Whole Oats' || i.medium === 'Rye Grain' || i.medium === 'Millet' || i.stage === 'Colonizing' || i.stage === 'G2G Ready') && isActiveStage(i.stage) && i.stage !== 'Uninoculated' && i.stage !== 'Preparation');
     defaultOptionText = 'Select G2G Parent...';
   } else if (type === 'Spore Syringe') {
-    filtered = db.items.filter(i => (i.medium === 'Spore Syringe' || i.inoculantType === 'Spore Syringe') && !isLockedStage(i.stage));
+    filtered = db.items.filter(i => (i.medium === 'Spore Syringe' || i.inoculantType === 'Spore Syringe') && isActiveStage(i.stage));
     defaultOptionText = 'None (Direct Spore Syringe)';
   }
 
@@ -1208,6 +1262,80 @@ function populateSecondaryFilters() {
   }
 }
 
+// Container-type filter row, parallel to (and independent of) the status
+// filter row above it. Always derived from ALL containers - not the
+// currently status-filtered set - so the available options and their
+// positions stay stable as the status filter changes; a status+type
+// combination with no matches just shows the grid's empty state rather than
+// options disappearing out from under the user. Renders as chips when there
+// are few distinct types, or a <select> once there are too many to read as
+// a chip row.
+function renderTypeFilterBar() {
+  const bar = document.getElementById('type-filter-bar');
+  if (!bar) return;
+
+  const types = Array.from(new Set(
+    (db.items || []).map(i => i.containerType || i.container_type).filter(Boolean)
+  )).sort();
+
+  if (!types.length) {
+    bar.innerHTML = '';
+    return;
+  }
+
+  // A previously-selected type that no longer exists on any container (e.g.
+  // its last container was deleted) would otherwise leave every chip
+  // unhighlighted while still silently filtering the grid to nothing.
+  if (currentTypeFilter !== 'all' && !types.includes(currentTypeFilter)) {
+    currentTypeFilter = 'all';
+  }
+
+  if (types.length < TYPE_FILTER_CHIP_LIMIT) {
+    const options = ['all', ...types];
+    bar.innerHTML = `<span class="text-xs text-slate-400 mr-2">Type:</span>` + options.map(type => `
+      <button data-type-filter="${type}" onclick="applyTypeFilterClick(this)" class="text-xs px-3 py-1 rounded-full border whitespace-nowrap ${currentTypeFilter === type ? 'bg-sky-600 border-sky-500 text-white' : 'bg-slate-800 border-slate-700 text-slate-300'}">
+        ${type === 'all' ? 'All Types' : type}
+      </button>
+    `).join('');
+  } else {
+    bar.innerHTML = `
+      <span class="text-xs text-slate-400 mr-2">Type:</span>
+      <select onchange="currentTypeFilter=this.value; render()" class="bg-slate-900 border border-slate-700 rounded-lg p-1.5 text-xs text-slate-300 focus:outline-none focus:ring-1 focus:ring-sky-500">
+        <option value="all" ${currentTypeFilter === 'all' ? 'selected' : ''}>All Types</option>
+        ${types.map(type => `<option value="${type}" ${currentTypeFilter === type ? 'selected' : ''}>${type}</option>`).join('')}
+      </select>
+    `;
+  }
+}
+
+// List/Grid layout toggle for the container sections. Re-rendered on every
+// render() call (like the type filter bar) so its active state always
+// matches currentViewMode, including after a reload restores it from
+// localStorage.
+function renderViewToggle() {
+  const bar = document.getElementById('view-mode-toggle');
+  if (!bar) return;
+
+  const modes = [
+    { key: 'grid', label: 'Grid view', icon: '▦' },
+    { key: 'list', label: 'List view', icon: '☰' }
+  ];
+
+  bar.innerHTML = modes.map(m => `
+    <button type="button" onclick="setViewMode('${m.key}')" title="${m.label}" aria-pressed="${currentViewMode === m.key}" class="text-xs px-2.5 py-1.5 rounded-lg border transition ${currentViewMode === m.key ? 'bg-sky-600 border-sky-500 text-white' : 'bg-slate-800 border-slate-700 text-slate-400 hover:text-slate-200'}">
+      ${m.icon}
+    </button>
+  `).join('');
+}
+
+// Reads the type value off a data attribute (rather than interpolating it
+// into an inline onclick string) so a custom container preset name
+// containing an apostrophe or quote can't break the click handler.
+function applyTypeFilterClick(btn) {
+  currentTypeFilter = btn.getAttribute('data-type-filter') || 'all';
+  render();
+}
+
 function render() {
   const stages = ['All', ...STAGES];
 
@@ -1226,6 +1354,9 @@ function render() {
   }
   document.getElementById('filter-bar').innerHTML = filterHtml;
 
+  renderTypeFilterBar();
+  renderViewToggle();
+
   populateSecondaryFilters();
   populateInoculantSources();
   populatePCBatchDropdown();
@@ -1240,6 +1371,11 @@ function render() {
   // 2. Scanned item override
   if (scannedItemId) {
     filtered = filtered.filter(i => i.id === scannedItemId || i.code === scannedItemId || i.custom_id === scannedItemId);
+  }
+
+  // 2b. Container-type filter (additive to the status filter above)
+  if (currentTypeFilter !== 'all') {
+    filtered = filtered.filter(i => (i.containerType || i.container_type) === currentTypeFilter);
   }
 
   // 3. Search query filter (search strain, batch ID, medium, or short ID)
@@ -1286,21 +1422,118 @@ function render() {
   }
 
   const grid = document.getElementById('items-grid');
+  grid.className = 'space-y-4';
 
   if (!filtered.length) {
-    grid.innerHTML = `<div class="col-span-full text-center text-slate-500 py-12">No records found.</div>`;
+    // The type filter is scoped to ALL containers (not the status-filtered
+    // set), so a status+type combination can legitimately have zero
+    // matches even though both filters are individually valid - call that
+    // out explicitly so it doesn't read as a bug.
+    const hasActiveFilter = currentFilter !== 'All' || !!scannedItemId || currentTypeFilter !== 'all' || !!query ||
+      (medSelect && medSelect.value && medSelect.value !== 'all') ||
+      (batchSelect && batchSelect.value && batchSelect.value !== 'all') ||
+      (locSelect && locSelect.value && locSelect.value !== 'all');
+    const emptyMessage = hasActiveFilter ? 'No containers match this filter combination.' : 'No records found.';
+    grid.innerHTML = `<div class="text-center text-slate-500 py-12">${emptyMessage}</div>`;
     updateSelectedCount();
     return;
   }
 
-  grid.innerHTML = filtered.map(item => {
-    const rawId = item.code || item.custom_id || item.id || '';
-    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rawId);
-    const displayId = (typeof item.id === 'string' && item.id.length >= 8)
-      ? item.id.slice(0, 8)
-      : (isUuid ? rawId.substring(0, 8) : (item.code || rawId));
-    const itemCode = item.code || item.custom_id || displayId;
+  // Group the already-filtered list into local-timezone date buckets, then
+  // render each non-empty bucket as its own collapsible section (with the
+  // existing 2-col card grid nested inside), so status filter / search /
+  // secondary filters all apply before grouping and their stats stay in sync.
+  const buckets = {};
+  DATE_BUCKETS.forEach(b => { buckets[b.key] = []; });
+  filtered.forEach(item => {
+    const bucketKey = getDateBucketKey(getContainerBucketDate(item));
+    (buckets[bucketKey] || buckets.older).push(item);
+  });
+
+  const collapseState = getDateSectionCollapseState();
+
+  grid.innerHTML = DATE_BUCKETS.filter(b => buckets[b.key].length).map(b => {
+    const items = buckets[b.key];
+    const count = items.length;
+    const contamCount = items.filter(i => i.stage === 'Contaminated').length;
+    const yieldSum = items.reduce((sum, i) => sum + (Number(i.yieldGrams || i.totalYield) || 0), 0);
+    const collapsed = !!collapseState[b.key];
+
+    const summaryParts = [
+      `${count} container${count !== 1 ? 's' : ''}`,
+      `${contamCount} contaminated`
+    ];
+    if (yieldSum > 0) summaryParts.push(`${yieldSum}g yield`);
+    const summaryText = `${b.label} — ${summaryParts.join(' · ')}`;
+
     return `
+    <div class="date-section">
+      <button type="button" onclick="toggleDateSection('${b.key}')" class="w-full flex items-center justify-between gap-2 bg-slate-800 border border-slate-700 hover:border-emerald-500/50 rounded-lg px-3 py-2 text-left transition">
+        <span class="text-sm font-semibold text-slate-200">${summaryText}</span>
+        <span id="date-section-chevron-${b.key}" class="text-slate-400 text-xs transition-transform inline-block" style="transform: rotate(${collapsed ? '-90deg' : '0deg'})">▾</span>
+      </button>
+      <div id="date-section-cards-${b.key}" class="grid ${currentViewMode === 'list' ? 'grid-cols-1' : 'grid-cols-1 md:grid-cols-2'} gap-4 mt-3 ${collapsed ? 'hidden' : ''}">
+        ${items.map(renderContainerCard).join('')}
+      </div>
+    </div>
+  `;
+  }).join('');
+
+  updateSelectedCount();
+  updateDashboard();
+}
+
+// The container-grid date buckets, in display order, computed in the
+// user's local timezone (see getContainerBucketDate/getDateBucketKey).
+const DATE_BUCKETS = [
+  { key: 'today', label: 'Today' },
+  { key: 'yesterday', label: 'Yesterday' },
+  { key: 'thisWeek', label: 'This Week' },
+  { key: 'lastWeek', label: 'Last Week' },
+  { key: 'older', label: 'Older' }
+];
+const DATE_SECTION_COLLAPSE_KEY = 'mycotrack_date_section_collapsed';
+// Today/Yesterday open by default; the rest start collapsed.
+const DEFAULT_DATE_SECTION_COLLAPSED = { today: false, yesterday: false, thisWeek: true, lastWeek: true, older: true };
+
+function getDateSectionCollapseState() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(DATE_SECTION_COLLAPSE_KEY) || '{}');
+    return { ...DEFAULT_DATE_SECTION_COLLAPSED, ...stored };
+  } catch (err) {
+    return { ...DEFAULT_DATE_SECTION_COLLAPSED };
+  }
+}
+
+function setDateSectionCollapsed(bucketKey, collapsed) {
+  const state = getDateSectionCollapseState();
+  state[bucketKey] = collapsed;
+  localStorage.setItem(DATE_SECTION_COLLAPSE_KEY, JSON.stringify(state));
+}
+
+// Accordion toggle for a date-bucket section. Cards stay in the DOM when
+// collapsed (only visually hidden) so "Select All Shown" and the selection
+// count keep working across collapsed sections without any changes there.
+function toggleDateSection(bucketKey) {
+  const cardsEl = document.getElementById(`date-section-cards-${bucketKey}`);
+  const chevronEl = document.getElementById(`date-section-chevron-${bucketKey}`);
+  if (!cardsEl) return;
+  const collapsed = !cardsEl.classList.contains('hidden');
+  cardsEl.classList.toggle('hidden', collapsed);
+  if (chevronEl) chevronEl.style.transform = collapsed ? 'rotate(-90deg)' : 'rotate(0deg)';
+  setDateSectionCollapsed(bucketKey, collapsed);
+}
+
+// Single container card. Markup is unchanged from the original flat-grid
+// render - only extracted so it can be reused per date-bucket section.
+function renderContainerCard(item) {
+  const rawId = item.code || item.custom_id || item.id || '';
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rawId);
+  const displayId = (typeof item.id === 'string' && item.id.length >= 8)
+    ? item.id.slice(0, 8)
+    : (isUuid ? rawId.substring(0, 8) : (item.code || rawId));
+  const itemCode = item.code || item.custom_id || displayId;
+  return `
     <div id="card-${item.id}" data-item-id="${item.id}" data-item-code="${itemCode}" class="container-card bg-slate-800 border ${item.stage === 'Uninoculated' ? 'border-amber-500/50' : item.stage === 'Contaminated' ? 'border-red-500/50' : 'border-slate-700'} p-4 rounded-xl space-y-3 cursor-pointer hover:border-emerald-500 transition relative group" onclick="window.openItemDetailModal ? window.openItemDetailModal('${item.id}') : openModal('${item.id}')">
       <div class="flex justify-between items-start">
         <div class="flex items-start gap-2">
@@ -1311,6 +1544,7 @@ function render() {
           </div>
         </div>
         <div class="flex items-center gap-2">
+          ${(item.containerType || item.container_type) ? `<span class="text-[9px] text-slate-400 bg-slate-900/60 border border-slate-700 px-1.5 py-0.5 rounded whitespace-nowrap">${item.containerType || item.container_type}</span>` : ''}
           <span class="text-[10px] uppercase font-bold px-2 py-1 rounded ${
             item.stage === 'Contaminated' ? 'bg-red-900/50 text-red-400' :
             item.stage === 'Uninoculated' ? 'bg-amber-500/20 text-amber-300' : 'bg-slate-700 text-emerald-300'
@@ -1321,6 +1555,7 @@ function render() {
       <div class="text-xs grid grid-cols-2 gap-1 text-slate-400">
         <div><strong class="text-slate-300">Strain:</strong> ${item.strain}</div>
         <div><strong class="text-slate-300">Batch:</strong> ${item.pcBatch}</div>
+        ${getContainerCreatedDateLabel(item) ? `<div class="col-span-2"><strong class="text-slate-300">Created:</strong> ${getContainerCreatedDateLabel(item)}</div>` : ''}
         ${item.medium === 'Media Bottle' ? `
           <div><strong class="text-slate-300">Volume:</strong> ${item.volumeMl ? item.volumeMl + ' mL' : 'N/A'}</div>
           <div><strong class="text-slate-300">Color:</strong> ${item.color || 'N/A'}</div>
@@ -1341,10 +1576,6 @@ function render() {
       </div>
     </div>
   `;
-  }).join('');
-
-  updateSelectedCount();
-  updateDashboard();
 }
 
 // Event delegation on items-grid / inventory container for container cards
@@ -2250,6 +2481,7 @@ if (qaForm) {
         parentItemId: null,
         stage: 'Colonizing',
         createdAt: new Date().toLocaleDateString(),
+        created_at: new Date().toISOString(),
         breakAndShake: null,
         totalYield: 0,
         yields: [],
@@ -3230,6 +3462,8 @@ Object.assign(window, {
   // app.js
   render,
   updateDashboard,
+  toggleDateSection,
+  applyTypeFilterClick,
   togglePCSourceFields,
   populatePCBatchDropdown,
   populateInoculantSources,
@@ -3349,6 +3583,7 @@ Object.assign(window, {
   removeFlushYieldRecord,
   toggleContamFields,
   handleModalContainerTypeChange,
+  markItemSpent,
   deleteActiveItem,
   deleteItemDirect,
   deleteUninoculated,
@@ -3535,12 +3770,11 @@ setSyncErrorCallback((error, context) => {
 //    different browsers.
 // 2) Remove legacy cached item keys so stale arrays from previous builds
 //    never hydrate or seed local state.
-// These run BEFORE initCloudSync() so the Supabase fetch is the sole source
-// of truth for state.
+// Cloud sync itself is driven entirely by initAppRouting() below (an
+// immediate fetch if a session already exists, then the onAuthStateChange
+// listener for everything after) so it only ever runs once per event.
 checkAndClearStaleCache();
 clearLegacyStorage();
-
-initCloudSync();
 
 // --- SaaS app shell routing (public landing vs. authenticated dashboard) ---
 function showAppDashboard() {
@@ -3571,18 +3805,14 @@ async function initAppRouting() {
   } else {
     showLandingPage();
   }
-  
-  // Add listener to handle post-login routing
-  onAuthStateChange((event, session) => {
-    if (event === 'SIGNED_IN' || (session && (event === 'INITIAL_SESSION' || event === 'TOKEN_REFRESHED'))) {
-      // Session is active: hide landing containers, show the dashboard,
-      // then load the tenant context.
-      showAppDashboard();
-      handleMultiTenantInit();
-      updateAuthModalUI();
-    }
-  });
-  
+
+  // Post-login routing is handled by the single onAuthStateChange listener
+  // registered below (search "Keep routing in sync with auth events"), which
+  // covers the same SIGNED_IN / INITIAL_SESSION / TOKEN_REFRESHED events.
+  // A second listener used to be registered here too, which caused
+  // handleMultiTenantInit() (and everything it fetches: org membership,
+  // locations, items, customers) to run twice per auth event.
+
   // Ensure auth modal UI is updated on initial load if session exists
   if (session) {
     updateAuthModalUI();
@@ -3600,11 +3830,13 @@ onAuthStateChange((event, session) => {
     showAppDashboard();
     updateContainerUsageUI();
     handleMultiTenantInit();
+    updateAuthModalUI();
   } else if (event === 'USER_UPDATED') {
     updateContainerUsageUI();
+    syncItemsWithCloud();
   } else if (event === 'SIGNED_OUT' || event === 'USER_DELETED' || (!session && event !== 'INITIAL_SESSION')) {
     console.warn('Auth state changed to unauthenticated (event: ' + event + '). Clearing state and resetting UI.');
-    localStorage.removeItem('mycotrack_containers');
+    handleSignOutCleanup();
     showLandingPage();
     const locContainer = document.getElementById('header-location-container');
     if (locContainer) locContainer.classList.add('hidden');
@@ -3677,7 +3909,23 @@ initAppRouting();
 handleOAuthRedirectParams();
 
 // --- Multi-Tenant Context and Onboarding Handlers ---
-async function handleMultiTenantInit() {
+// Page load triggers this from two independent signals that can fire almost
+// simultaneously — the direct session check in initAppRouting() and the
+// 'INITIAL_SESSION' event the same onAuthStateChange listener receives for
+// that same already-resolved session. Coalescing concurrent calls into one
+// in-flight run keeps org/location/item fetches from firing twice per load
+// without having to depend on exact Supabase event-ordering guarantees.
+let multiTenantInitPromise = null;
+function handleMultiTenantInit() {
+  if (!multiTenantInitPromise) {
+    multiTenantInitPromise = runMultiTenantInit().finally(() => {
+      multiTenantInitPromise = null;
+    });
+  }
+  return multiTenantInitPromise;
+}
+
+async function runMultiTenantInit() {
   if (!isSupabaseConfigured()) return;
   const session = await getSession();
   if (!session) {

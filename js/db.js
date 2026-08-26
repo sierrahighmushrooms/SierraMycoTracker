@@ -228,6 +228,15 @@ export function purgeAllStorage() {
   setCurrentOrganizationId(null);
 }
 
+// Sign-out cleanup: purge cached data and reset the sync status badge so a
+// different account (or a guest) never sees the previous user's cached data
+// or a stale "synced" indicator.
+export function handleSignOutCleanup() {
+  purgeAllStorage();
+  lastSyncInfo = { synced: false, at: null, user: null };
+  notifySyncStatus();
+}
+
 // Cache-busting / version check. On app launch, if the stored version tag
 // does not match the current app version, localStorage is cleared to prevent
 // out-of-sync builds across different browsers. The current version tag is
@@ -359,7 +368,16 @@ function scheduleCloudPush() {
 // NOTE: The 'label' column does NOT exist - must use 'name' instead.
 function serializeItemForCloud(item, userId) {
   const updatedAt = item.updated_at || new Date().toISOString();
-  const createdAt = item.createdAt || item.created_at || new Date().toISOString();
+  // created_at (snake_case) is always a machine-formatted ISO timestamp;
+  // createdAt (camelCase) is sometimes a human-readable display string (e.g.
+  // "8/23/2026" via toLocaleDateString()) set by older item-creation code
+  // paths. created_at must win when present, or an ambiguous locale string
+  // can get sent to the timestamptz column, which Postgres then parses as
+  // midnight in the session's timezone (UTC on Supabase) instead of local
+  // midnight - silently shifting the container into the wrong day once
+  // synced back down (see the date-bucketing "Today"/"Yesterday" grouping
+  // in js/app.js render(), which trusts created_at as the source of truth).
+  const createdAt = item.created_at || item.createdAt || new Date().toISOString();
 
   // Sanitize the primary key FIRST: never send `id: null`, `id: ""` or a
   // non-UUID placeholder string (e.g. "MY-Z9UGC") to Supabase. Invalid ids
@@ -624,6 +642,18 @@ function transformLegacyItemForSupabase(item, userId) {
       }
     }
     // Keys not in KEY_ALIASES are stripped (breakAndShake, parentItemId, etc.)
+  }
+
+  // The "first alias wins" rule above is order-dependent on the source
+  // item's own key order, which happens to put camelCase createdAt before
+  // snake_case created_at in every object literal that creates containers -
+  // silently preferring the (sometimes human-formatted, e.g.
+  // toLocaleDateString()) display field over the machine ISO timestamp.
+  // Force snake_case to win explicitly, matching the priority used
+  // everywhere else this field is read (see getContainerBucketDate in
+  // utils.js), so a restored backup can't corrupt created_at the same way.
+  if (item.created_at !== undefined) {
+    mappedItem.created_at = item.created_at;
   }
 
   // Step 2: Build the clean payload with defaults for missing fields.
@@ -1540,28 +1570,6 @@ export function onAuthStateChange(cb) {
   if (!supabaseClient) return () => {};
   const { data } = supabaseClient.auth.onAuthStateChange(cb);
   return () => data.subscription.unsubscribe();
-}
-
-// Initialize cloud sync: fetch once on load + re-fetch on auth state changes.
-// syncItemsWithCloud() is fetch-only, so this never auto-pushes local state.
-// (TOKEN_REFRESHED is intentionally ignored — it fired hourly re-fetches and,
-// with the old code, caused duplicate pushes on every refresh.)
-export function initCloudSync() {
-  syncItemsWithCloud();
-  if (supabaseClient) {
-    supabaseClient.auth.onAuthStateChange((event, session) => {
-      if (event === 'SIGNED_IN' || event === 'USER_UPDATED') {
-        syncItemsWithCloud();
-      } else if (event === 'SIGNED_OUT' || event === 'USER_DELETED' || (!session && event !== 'INITIAL_SESSION')) {
-        // Purge ALL local and session storage so a different account or guest
-        // session never sees the previous user's cached data.
-        console.warn('Session expired or signed out (event: ' + event + '). Purging local state.');
-        purgeAllStorage();
-        lastSyncInfo = { synced: false, at: null, user: null };
-        notifySyncStatus();
-      }
-    });
-  }
 }
 
 // --- Custom container helpers (localStorage) ---
