@@ -5,7 +5,7 @@
 // Bump this version whenever app shell files change: the activate handler
 // deletes every cache with an older name, so stale JS (e.g. js/db.js with
 // outdated plan-badge logic) is never served from cache-first lookups.
-const CACHE_NAME = 'sierra-myco-lab-v7';
+const CACHE_NAME = 'sierra-myco-lab-v8';
 const APP_SHELL = [
   './',
   './index.html',

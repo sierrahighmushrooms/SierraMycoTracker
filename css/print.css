@@ -222,13 +222,22 @@
     overflow: hidden !important;
   }
 
-  /* Strictly Constrain QR Container & Canvas */
+  /* Strictly Constrain QR Container & Canvas.
+     qrcodejs draws the matrix edge-to-edge with no built-in quiet zone, so the
+     padding + white background below ARE the quiet zone - without them the
+     dark modules sit flush against the card edge/border and scanners can't
+     lock on. Only the wrapper div gets the padding: the canvas/img nested
+     inside it (rule further below) is sized to 100% of the now-smaller
+     padded content box, so the quiet zone isn't applied twice. The bare
+     `> canvas` / `> img.print-qr-img` selectors are a defensive fallback for
+     a QR element rendered as a direct child of .print-card with no wrapper -
+     the current renderer always nests it inside .print-qr-container. */
   .print-card[data-preset="2.625x1"] .print-qr-container,
   .print-card-medium .print-qr-container,
   .layout-30-up .print-qr-container,
   .print-card .print-qr-container,
-  .print-card canvas,
-  .print-card img.print-qr-img {
+  .print-card > canvas,
+  .print-card > img.print-qr-img {
     flex: 0 0 0.85in !important; /* Prevent shrinking or growing */
     width: 0.85in !important;
     height: 0.85in !important;
@@ -238,6 +247,8 @@
     align-items: center !important;
     justify-content: center !important;
     box-sizing: border-box !important;
+    padding: 0.045in !important;
+    background-color: #ffffff !important;
   }
 
   .print-card[data-preset="2.625x1"] .print-qr-container canvas,
@@ -248,11 +259,14 @@
   .layout-30-up .print-qr-container img,
   .print-card .print-qr-container canvas,
   .print-card .print-qr-container img {
-    width: 0.85in !important;
-    height: 0.85in !important;
-    max-width: 0.85in !important;
-    max-height: 0.85in !important;
+    width: 100% !important;
+    height: 100% !important;
+    max-width: 100% !important;
+    max-height: 100% !important;
+    aspect-ratio: 1 / 1 !important;
     object-fit: contain !important;
+    image-rendering: -moz-crisp-edges !important;
+    image-rendering: pixelated !important;
   }
 
   /* Text Container Constraints (Right-hand space in flex row) */
@@ -374,18 +388,24 @@
     max-height: 1.1in !important;
     margin: 0 auto !important;
     align-self: center !important;
+    box-sizing: border-box !important;
+    padding: 0.06in !important;
+    background-color: #ffffff !important;
   }
 
   .print-card[data-preset="generic-4x5"] .print-qr-container canvas,
   .print-card[data-preset="generic-4x5"] .print-qr-container img,
   .print-card[data-preset="4x5"] .print-qr-container canvas,
   .print-card[data-preset="4x5"] .print-qr-container img {
-    width: 1.1in !important;
-    height: 1.1in !important;
-    max-width: 1.1in !important;
-    max-height: 1.1in !important;
+    width: 100% !important;
+    height: 100% !important;
+    max-width: 100% !important;
+    max-height: 100% !important;
+    aspect-ratio: 1 / 1 !important;
     margin: 0 auto !important;
     object-fit: contain !important;
+    image-rendering: -moz-crisp-edges !important;
+    image-rendering: pixelated !important;
   }
 
   .print-card-footer,
@@ -430,7 +450,10 @@
   .layout-20-up .print-placeholder { width: 4.0in; height: 1.0in; }
   .layout-80-up .print-placeholder { width: 1.75in; height: 0.5in; }
   
-  /* Dedicated QR code zone: constrained strictly so it never overlaps text */
+  /* Dedicated QR code zone: constrained strictly so it never overlaps text.
+     Padding + white background form the quiet zone - qrcodejs has no margin
+     option of its own, so the matrix is drawn edge-to-edge and relies on this
+     CSS padding to keep dark modules clear of the card border / text block. */
   .print-qr-container {
     display: flex !important;
     align-items: center !important;
@@ -443,8 +466,10 @@
     aspect-ratio: 1 / 1 !important;
     box-sizing: border-box !important;
     overflow: hidden !important;
+    padding: 4px !important;
+    background-color: #ffffff !important;
   }
-  
+
   .print-qr-container img,
   .print-qr-container canvas {
     max-width: 100% !important;
@@ -453,6 +478,18 @@
     height: 100% !important;
     aspect-ratio: 1 / 1 !important;
     object-fit: contain !important;
+    image-rendering: -moz-crisp-edges !important;
+    image-rendering: pixelated !important;
+  }
+
+  /* qrcodejs renders to a working <canvas> it then hides (inline
+     display:none) once it copies the result into a visible <img>. Forcing
+     both elements visible - as a prior version of this rule did - shows the
+     hidden canvas alongside the img inside this flex row, doubling the
+     content width and pushing the actual QR image half outside the
+     overflow:hidden box. Only force the img visible; leave the canvas's own
+     display alone so the library's hide-after-render behavior is respected. */
+  .print-qr-container img {
     display: block !important;
     visibility: visible !important;
   }
