@@ -59,3 +59,6 @@ amplifytools.xcconfig
 
 # Supabase CLI local state
 supabase/.temp/
+
+# Claude settings
+.claude/
