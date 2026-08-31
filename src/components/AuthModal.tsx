@@ -1,19 +1,9 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { createClient } from "@supabase/supabase-js";
+import React, { useState, useEffect, useRef, useId } from "react";
+import { supabase } from "@/lib/supabase";
 
-// Supabase credentials from original MycoTrack config
-const SUPABASE_URL = "https://wsalxxsjnxptoeduwfqw.supabase.co";
-const SUPABASE_ANON_KEY = "sb_publishable_BotNKDv8qzsonc1Rf3rEkQ_-s8K1esY";
-
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-  auth: {
-    autoRefreshToken: true,
-    persistSession: true,
-    detectSessionInUrl: true,
-  },
-});
+const APP_URL = "https://sierramycolab.com";
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -27,25 +17,79 @@ export default function AuthModal({ isOpen, onClose, defaultTab = "signin" }: Au
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState<{ type: "error" | "success"; text: string } | null>(null);
   const [loading, setLoading] = useState(false);
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<{ email?: string } | null>(null);
+
+  const titleId = useId();
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const emailInputRef = useRef<HTMLInputElement>(null);
+  const redirectTimer = useRef<number | null>(null);
+  const lastFocused = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     setActiveTab(defaultTab);
   }, [defaultTab]);
 
   useEffect(() => {
-    // Check for existing session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
     });
 
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
     });
 
-    return () => subscription.unsubscribe();
+    return () => data.subscription.unsubscribe();
   }, []);
+
+  // Clear any pending post-signin redirect if the component unmounts.
+  useEffect(() => {
+    return () => {
+      if (redirectTimer.current) window.clearTimeout(redirectTimer.current);
+    };
+  }, []);
+
+  // Dialog behaviour: lock body scroll, trap focus, close on Escape, restore focus.
+  useEffect(() => {
+    if (!isOpen) return;
+
+    lastFocused.current = document.activeElement as HTMLElement | null;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    // Focus the first field (or the dialog) once mounted.
+    const focusTimer = window.setTimeout(() => {
+      (emailInputRef.current ?? dialogRef.current)?.focus();
+    }, 0);
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        onClose();
+        return;
+      }
+      if (e.key !== "Tab" || !dialogRef.current) return;
+      const focusable = dialogRef.current.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      );
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      document.body.style.overflow = prevOverflow;
+      window.clearTimeout(focusTimer);
+      lastFocused.current?.focus?.();
+    };
+  }, [isOpen, onClose]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -54,26 +98,20 @@ export default function AuthModal({ isOpen, onClose, defaultTab = "signin" }: Au
 
     try {
       if (activeTab === "signin") {
-        const { data, error } = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        });
-
+        const { data, error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
 
-        setMessage({ type: "success", text: "Signed in successfully!" });
+        setMessage({ type: "success", text: "Signed in successfully! Redirecting…" });
         setUser(data.user);
-        
-        // Redirect to main app after successful login
-        setTimeout(() => {
-          window.location.href = "https://sierramycolab.com";
+        redirectTimer.current = window.setTimeout(() => {
+          window.location.href = APP_URL;
         }, 1000);
       } else {
-        const { data, error } = await supabase.auth.signUp({
-          email,
-          password,
-        });
-
+        if (password.length < 8) {
+          setMessage({ type: "error", text: "Password must be at least 8 characters." });
+          return;
+        }
+        const { data, error } = await supabase.auth.signUp({ email, password });
         if (error) throw error;
 
         if (data.user?.identities?.length === 0) {
@@ -82,8 +120,9 @@ export default function AuthModal({ isOpen, onClose, defaultTab = "signin" }: Au
           setMessage({ type: "success", text: "Check your email for a confirmation link!" });
         }
       }
-    } catch (error: any) {
-      setMessage({ type: "error", text: error.message || "An error occurred" });
+    } catch (error) {
+      const text = error instanceof Error ? error.message : "An error occurred";
+      setMessage({ type: "error", text });
     } finally {
       setLoading(false);
     }
@@ -102,18 +141,16 @@ export default function AuthModal({ isOpen, onClose, defaultTab = "signin" }: Au
       setMessage({ type: "error", text: "Please enter your email address first." });
       return;
     }
-
     setLoading(true);
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/reset-password`,
+        redirectTo: `${window.location.origin}/reset-password/`,
       });
-
       if (error) throw error;
-
       setMessage({ type: "success", text: "Password reset email sent! Check your inbox." });
-    } catch (error: any) {
-      setMessage({ type: "error", text: error.message || "Failed to send reset email" });
+    } catch (error) {
+      const text = error instanceof Error ? error.message : "Failed to send reset email";
+      setMessage({ type: "error", text });
     } finally {
       setLoading(false);
     }
@@ -122,12 +159,27 @@ export default function AuthModal({ isOpen, onClose, defaultTab = "signin" }: Au
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50">
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-sm p-6 animate-fade-in mx-4">
+    <div
+      className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+      onClick={onClose}
+    >
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
+        onClick={(e) => e.stopPropagation()}
+        className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-sm p-6 animate-fade-in outline-none"
+      >
         <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-bold text-white">Authentication</h2>
+          <h2 id={titleId} className="text-xl font-bold text-white">
+            {user ? "Your Account" : activeTab === "signin" ? "Sign In" : "Create Account"}
+          </h2>
           <button
+            type="button"
             onClick={onClose}
+            aria-label="Close dialog"
             className="text-slate-400 hover:text-white text-xl leading-none transition"
           >
             ✕
@@ -136,14 +188,13 @@ export default function AuthModal({ isOpen, onClose, defaultTab = "signin" }: Au
 
         <div className="mt-4">
           {user ? (
-            // Logged In View
             <div className="space-y-4">
               <div className="bg-slate-950 border border-slate-800 rounded-lg p-4 text-center">
-                <div className="text-3xl mb-2">👤</div>
+                <div className="text-3xl mb-2" aria-hidden="true">👤</div>
                 <div className="text-sm text-slate-400 mb-1">Logged in as</div>
                 <div className="text-lg font-bold text-white break-all">{user.email}</div>
                 <div className="mt-3 inline-flex items-center gap-1.5 text-xs font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-700/60 px-2.5 py-1 rounded-full">
-                  ☁️ Cloud Sync Active
+                  <span aria-hidden="true">☁️</span> Cloud Sync Active
                 </div>
               </div>
               <button
@@ -155,7 +206,7 @@ export default function AuthModal({ isOpen, onClose, defaultTab = "signin" }: Au
                 {loading ? "Signing out..." : "Sign Out"}
               </button>
               <a
-                href="https://sierramycolab.com"
+                href={APP_URL}
                 className="block w-full bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold py-2.5 rounded-lg transition text-sm text-center"
               >
                 Go to Dashboard →
@@ -163,10 +214,11 @@ export default function AuthModal({ isOpen, onClose, defaultTab = "signin" }: Au
             </div>
           ) : (
             <>
-              {/* Tabs */}
-              <div className="flex mb-4">
+              <div className="flex mb-4" role="tablist" aria-label="Authentication mode">
                 <button
                   type="button"
+                  role="tab"
+                  aria-selected={activeTab === "signin"}
                   onClick={() => setActiveTab("signin")}
                   className={`flex-1 py-2 font-semibold text-center border-b-2 transition ${
                     activeTab === "signin"
@@ -178,6 +230,8 @@ export default function AuthModal({ isOpen, onClose, defaultTab = "signin" }: Au
                 </button>
                 <button
                   type="button"
+                  role="tab"
+                  aria-selected={activeTab === "signup"}
                   onClick={() => setActiveTab("signup")}
                   className={`flex-1 py-2 font-semibold text-center border-b-2 transition ${
                     activeTab === "signup"
@@ -189,7 +243,6 @@ export default function AuthModal({ isOpen, onClose, defaultTab = "signin" }: Au
                 </button>
               </div>
 
-              {/* Form */}
               <form onSubmit={handleSubmit}>
                 <div className="space-y-4">
                   <div>
@@ -200,6 +253,7 @@ export default function AuthModal({ isOpen, onClose, defaultTab = "signin" }: Au
                       Email
                     </label>
                     <input
+                      ref={emailInputRef}
                       type="email"
                       id="auth-email"
                       required
@@ -220,6 +274,7 @@ export default function AuthModal({ isOpen, onClose, defaultTab = "signin" }: Au
                       type="password"
                       id="auth-password"
                       required
+                      minLength={activeTab === "signup" ? 8 : undefined}
                       autoComplete={activeTab === "signin" ? "current-password" : "new-password"}
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
@@ -229,6 +284,7 @@ export default function AuthModal({ isOpen, onClose, defaultTab = "signin" }: Au
 
                   {message && (
                     <div
+                      role="alert"
                       className={`text-xs font-semibold p-2 rounded ${
                         message.type === "error"
                           ? "text-red-400 bg-red-950/50"
@@ -272,7 +328,6 @@ export default function AuthModal({ isOpen, onClose, defaultTab = "signin" }: Au
   );
 }
 
-// Export a hook to manage auth modal state
 export function useAuthModal() {
   const [isOpen, setIsOpen] = useState(false);
   const [defaultTab, setDefaultTab] = useState<"signin" | "signup">("signin");
@@ -282,14 +337,7 @@ export function useAuthModal() {
     setIsOpen(true);
   };
 
-  const closeAuthModal = () => {
-    setIsOpen(false);
-  };
+  const closeAuthModal = () => setIsOpen(false);
 
-  return {
-    isOpen,
-    defaultTab,
-    openAuthModal,
-    closeAuthModal,
-  };
+  return { isOpen, defaultTab, openAuthModal, closeAuthModal };
 }
