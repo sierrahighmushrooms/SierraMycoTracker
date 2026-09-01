@@ -255,16 +255,37 @@ export function handleSignOutCleanup() {
   notifySyncStatus();
 }
 
+// Remove every entry from a Storage area EXCEPT the Supabase auth session
+// (keys beginning `sb-`, which also covers the PKCE code-verifier). The
+// cache-version bump below uses this instead of a blanket `.clear()` so
+// refreshing stale local data never signs the user out — Supabase tokens are
+// self-expiring / self-refreshing and must survive a client cache reset. This
+// matters most when the user was just signed in on the marketing landing page,
+// which writes the `sb-…-auth-token` key and then redirects them here: a full
+// `localStorage.clear()` on this first `/app/` load would delete that token
+// before `initAppRouting()` ever reads it, forcing a second login.
+function clearNonAuthStorage(storage) {
+  const doomed = [];
+  for (let i = 0; i < storage.length; i++) {
+    const key = storage.key(i);
+    if (key && !key.startsWith('sb-')) doomed.push(key);
+  }
+  doomed.forEach((key) => {
+    try { storage.removeItem(key); } catch (e) { /* ignore */ }
+  });
+}
+
 // Cache-busting / version check. On app launch, if the stored version tag
-// does not match the current app version, localStorage is cleared to prevent
-// out-of-sync builds across different browsers. The current version tag is
-// then written so subsequent launches skip the clear.
+// does not match the current app version, cached app data is cleared to
+// prevent out-of-sync builds across different browsers. The Supabase auth
+// session is deliberately preserved (see clearNonAuthStorage). The current
+// version tag is then written so subsequent launches skip the clear.
 export function checkAndClearStaleCache() {
   try {
     const storedVersion = localStorage.getItem(APP_CONFIG.STORAGE_KEYS.VERSION_TAG);
     if (storedVersion !== APP_CONFIG.APP_VERSION) {
-      localStorage.clear();
-      sessionStorage.clear();
+      clearNonAuthStorage(localStorage);
+      clearNonAuthStorage(sessionStorage);
       db.items = [];
       db.pcBatches = [];
       pendingCloudIds.clear();
