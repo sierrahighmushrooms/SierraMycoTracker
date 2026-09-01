@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 
-const APP_URL = "https://sierramycolab.com";
+const APP_URL = "https://sierramycolab.com/app/";
 
 // How long to wait for Supabase to establish a recovery session from the URL
 // before assuming the link was invalid or already used.

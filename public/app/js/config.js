@@ -168,8 +168,13 @@ export function isUnconventionalPair(mediumValue, containerValue) {
 // Resolves the canonical app base URL used to build permanent QR code payloads.
 // Priority 1: Configured orgBaseUrl in localStorage from Org Settings.
 // Priority 2: Explicit env var (VITE_APP_URL or NEXT_PUBLIC_APP_URL) set at deploy time.
-// Priority 3: Current browser origin, unless we're on a temporary dev tunnel.
-// Priority 4: Production fallback domain.
+// Priority 3: Current browser origin + '/app' — the PWA is mounted at /app/ under
+//             the marketing site, so the bare origin would produce QR/deep links
+//             that land on the public landing page instead of the app.
+// Priority 4: Production fallback domain (also '/app').
+// Priorities 1 and 2 are treated as complete, explicitly-configured base URLs and
+// are used verbatim (trailing slash trimmed) — the operator sets them to whatever
+// their custom scan domain serves the app from.
 export const getAppBaseUrl = () => {
   // Priority 1: Configured custom scan domain in organization settings
   if (typeof window !== 'undefined') {
@@ -186,12 +191,12 @@ export const getAppBaseUrl = () => {
   if (envUrl) {
     return envUrl.replace(/\/$/, '');
   }
-  // Priority 3: Fallback gracefully to window.location.origin
+  // Priority 3: Derive from the current origin, appending the /app/ mount point.
   if (typeof window !== 'undefined' && window.location && window.location.origin) {
-    return window.location.origin;
+    return `${window.location.origin}/app`;
   }
-  // Fallback: Default production domain
-  return 'https://sierramycolab.com';
+  // Fallback: Default production domain (PWA is served from /app/)
+  return 'https://sierramycolab.com/app';
 };
 
 // Returns true when the app is running from a temporary dev environment

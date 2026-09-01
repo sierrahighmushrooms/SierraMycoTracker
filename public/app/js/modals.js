@@ -370,9 +370,9 @@ export function openViewQRCodeModal() {
   const idEl = document.getElementById('view-qr-item-id');
   if (idEl) idEl.innerText = item.id;
 
-  // Compute target scan URL
-  const configuredBaseUrl = localStorage.getItem('orgBaseUrl') || window.location.origin;
-  const cleanBaseUrl = configuredBaseUrl.trim().replace(/\/$/, '');
+  // Compute target scan URL — getAppBaseUrl() resolves the org's custom scan
+  // domain or falls back to this origin's /app/ mount point.
+  const cleanBaseUrl = getAppBaseUrl();
   const scanTargetUrl = `${cleanBaseUrl}/#container=${item.id}`;
 
   // Set link text
@@ -394,8 +394,7 @@ export function copyQRCodeLink() {
   const item = db.items.find(i => i.id === activeItemId);
   if (!item) return;
 
-  const configuredBaseUrl = localStorage.getItem('orgBaseUrl') || window.location.origin;
-  const cleanBaseUrl = configuredBaseUrl.trim().replace(/\/$/, '');
+  const cleanBaseUrl = getAppBaseUrl();
   const link = `${cleanBaseUrl}/#container=${item.id}`;
 
   navigator.clipboard.writeText(link).then(() => {
@@ -2564,8 +2563,7 @@ export function executePrint(itemList, layoutKey, offset) {
       }
       // Explicitly set QR pixel dim: for smaller labels (height <= 1.25), use 80-90px max to prevent oversized canvases
       const qrPixelDim = labelHeight <= 1.25 ? 85 : 256;
-      const configuredBaseUrl = localStorage.getItem('orgBaseUrl') || window.location.origin;
-      const cleanBaseUrl = configuredBaseUrl.trim().replace(/\/$/, '');
+      const cleanBaseUrl = getAppBaseUrl();
       const scanTargetUrl = `${cleanBaseUrl}/#container=${displayId || item.id}`;
       
       try {

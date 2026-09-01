@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef, useId } from "react";
 import { supabase } from "@/lib/supabase";
 
-const APP_URL = "https://sierramycolab.com";
+const APP_URL = "https://sierramycolab.com/app/";
 
 interface AuthModalProps {
   isOpen: boolean;
