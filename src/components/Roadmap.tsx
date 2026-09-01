@@ -2,7 +2,7 @@
 
 import React from "react";
 import { motion } from "framer-motion";
-import { Users2, ArrowUpRight, Globe, Sparkles } from "lucide-react";
+import { ArrowUpRight, Globe, Sparkles } from "lucide-react";
 
 interface RoadmapProps {
   onOpenAuth?: (tab?: "signin" | "signup") => void;
@@ -74,6 +74,8 @@ export default function Roadmap({ onOpenAuth }: RoadmapProps) {
           </motion.p>
 
           <motion.button
+            type="button"
+            onClick={() => onOpenAuth?.("signup")}
             initial={{ opacity: 0, y: 15 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}

@@ -24,7 +24,6 @@
 }
 
 html {
-  scroll-behavior: smooth;
   color-scheme: dark;
   background-color: var(--color-bg-void);
 }
@@ -35,28 +34,37 @@ html {
   }
 }
 
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 body {
   color: #e2e8f0;
   background-color: var(--color-bg-void);
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-family: var(--font-geist-sans), "Geist", "Helvetica Neue", Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   overflow-x: hidden;
 }
 
-/* Smooth transitions for all interactive elements */
+/* Smooth transitions for interactive elements (specific properties only —
+   `transition: all` also animates layout properties and causes scroll jank). */
 button, a, [role="button"] {
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  transition-property: color, background-color, border-color, box-shadow, opacity, transform;
+  transition-duration: 0.2s;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 /* GPU acceleration for smoother animations */
 .will-change-transform {
   will-change: transform;
-}
-
-/* Prevent layout shifts during scroll */
-* {
-  -webkit-overflow-scrolling: touch;
 }
 
 /* Futuristic glow effects */

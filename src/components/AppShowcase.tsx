@@ -2,15 +2,13 @@
 
 import React from "react";
 import { motion } from "framer-motion";
-import { 
-  Beaker, 
-  Package, 
-  Users, 
+import {
+  Beaker,
+  Package,
   FlaskConical,
   Sparkles,
   ArrowRight,
   Check,
-  Zap,
   BarChart3,
   QrCode,
   Bot,
@@ -25,13 +23,11 @@ import {
   TrendingDown,
   Activity,
   Layers,
-  Settings,
   Bell,
   Plus,
   MoreHorizontal,
   CheckCircle2,
   Clock,
-  AlertTriangle
 } from "lucide-react";
 
 // Premium Inoculation Logging Screen
@@ -516,6 +512,20 @@ function BulkPrepScreen() {
   );
 }
 
+// These "screens" are non-interactive marketing mockups. Wrap them so keyboard
+// users don't tab into dead inputs/buttons and screen readers skip them.
+function InertMock({ children }: { children: React.ReactNode }) {
+  const ref = React.useRef<HTMLDivElement>(null);
+  React.useEffect(() => {
+    if (ref.current) ref.current.inert = true;
+  }, []);
+  return (
+    <div ref={ref} aria-hidden="true" className="select-none">
+      {children}
+    </div>
+  );
+}
+
 export default function AppShowcase() {
   return (
     <section className="py-24 sm:py-32 relative bg-[#030508] overflow-hidden">
@@ -536,16 +546,16 @@ export default function AppShowcase() {
         >
           <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-violet-500/10 border border-violet-500/20 text-sm text-violet-300 mb-6">
             <Sparkles className="w-4 h-4" />
-            <span>Powerful Features</span>
+            <span>A Look Inside</span>
           </div>
           <h2 className="text-3xl sm:text-5xl font-black text-white mb-4">
-            Everything You Need to{" "}
+            See the workflow,{" "}
             <span className="bg-gradient-to-r from-violet-400 via-fuchsia-400 to-cyan-400 bg-clip-text text-transparent">
-              Scale Your Operation
+              screen by screen
             </span>
           </h2>
           <p className="text-slate-400 text-lg max-w-2xl mx-auto">
-            From inoculation logging to harvest tracking, our platform handles every step of your cultivation workflow.
+            From inoculation logging to harvest tracking, every step of your cultivation workflow — visualized.
           </p>
         </motion.div>
 
@@ -582,7 +592,7 @@ export default function AppShowcase() {
             </div>
             <div className="relative">
               <div className="absolute -inset-4 bg-gradient-to-r from-emerald-500/20 to-cyan-500/20 rounded-3xl blur-2xl opacity-50" />
-              <InoculationScreen />
+              <InertMock><InoculationScreen /></InertMock>
             </div>
           </div>
         </motion.div>
@@ -598,7 +608,7 @@ export default function AppShowcase() {
           <div className="grid lg:grid-cols-2 gap-12 items-center">
             <div className="order-2 lg:order-1 relative">
               <div className="absolute -inset-4 bg-gradient-to-r from-violet-500/20 to-fuchsia-500/20 rounded-3xl blur-2xl opacity-50" />
-              <InventoryScreen />
+              <InertMock><InventoryScreen /></InertMock>
             </div>
             <div className="order-1 lg:order-2">
               <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-violet-500/10 border border-violet-500/20 text-xs text-violet-300 mb-4">
@@ -647,7 +657,7 @@ export default function AppShowcase() {
           </div>
           <div className="relative">
             <div className="absolute -inset-4 bg-gradient-to-r from-cyan-500/20 via-violet-500/10 to-fuchsia-500/20 rounded-3xl blur-2xl opacity-50" />
-            <DashboardStatsScreen />
+            <InertMock><DashboardStatsScreen /></InertMock>
           </div>
         </motion.div>
 
@@ -672,7 +682,7 @@ export default function AppShowcase() {
           </div>
           <div className="relative">
             <div className="absolute -inset-4 bg-gradient-to-r from-amber-500/20 to-emerald-500/20 rounded-3xl blur-2xl opacity-50" />
-            <BulkPrepScreen />
+            <InertMock><BulkPrepScreen /></InertMock>
           </div>
         </motion.div>
       </div>

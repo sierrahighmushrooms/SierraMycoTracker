@@ -8,6 +8,7 @@ export default function SiteFooter() {
     { label: "Features", href: "#features" },
     { label: "Pricing", href: "#pricing" },
     { label: "Roadmap", href: "#roadmap" },
+    { label: "Privacy", href: "https://sierramycolab.com/privacy.html" },
   ];
 
   return (
@@ -30,11 +31,11 @@ export default function SiteFooter() {
             </span>
           </motion.div>
 
-          <nav className="flex items-center gap-6 sm:gap-8 text-sm text-slate-500">
+          <nav aria-label="Footer" className="flex items-center gap-6 sm:gap-8 text-sm text-slate-500">
             {links.map((l) => (
-              <a 
-                key={l.href} 
-                href={l.href} 
+              <a
+                key={l.href}
+                href={l.href}
                 className="hover:text-violet-400 transition-colors duration-200"
               >
                 {l.label}

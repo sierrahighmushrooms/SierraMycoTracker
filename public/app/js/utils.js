@@ -4,6 +4,19 @@
 import { db, getCustomContainerPresets, getCustomMediumPresets, userOrganizations, currentOrganizationId } from './db.js';
 import { APP_CONFIG, MEDIUM_CATEGORIES, CONTAINER_CATEGORIES, DEFAULT_CONTAINER_WEIGHTS, getMediumCategory, getContainerCategory, getContainerCapacityMl, isUnconventionalPair } from './config.js';
 
+// Escape a value for safe interpolation into innerHTML. Use this for ANY
+// user-controlled text (strain names, labels, notes, customer/company names,
+// supply names, feedback) rendered via template-literal innerHTML — otherwise
+// a value like `<img src=x onerror=...>` becomes stored XSS across an org.
+export function escapeHtml(unsafe) {
+  return (unsafe === null || unsafe === undefined ? '' : String(unsafe))
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
 // Determine item category (Bulk Substrate vs Grain Spawn) by inspecting item.type/category
 // or inferring from medium, containerType, and label.
 export function getItemCategory(item) {

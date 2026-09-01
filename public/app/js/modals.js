@@ -42,7 +42,8 @@ import {
   getDrySubstrateWeightGrams,
   calculateBE,
   formatLocalDate,
-  extractDateFromLabel
+  extractDateFromLabel,
+  escapeHtml
 } from './utils.js';
 import {
   APP_CONFIG,
@@ -193,7 +194,7 @@ export function openModal(itemOrId) {
     lineageBadge.innerHTML = `
       <div class="text-xs bg-slate-800 border border-slate-700 rounded p-2 my-2 text-slate-300">
         <span class="text-amber-400 font-semibold">📜 Legacy Origin:</span>
-        <span class="text-slate-300">${item.legacy_source_description}</span>
+        <span class="text-slate-300">${escapeHtml(item.legacy_source_description)}</span>
       </div>
     `;
     lineageBadge.classList.remove('hidden');
@@ -217,7 +218,7 @@ export function openModal(itemOrId) {
   if (item.stage === 'Uninoculated') {
     inocBanner.classList.remove('hidden');
     document.getElementById('inoc-parent').innerHTML = `<option value="">Source: Spore / LC</option>` +
-      db.items.filter(i => i.id !== id && i.stage !== 'Uninoculated' && !isLockedStage(i.stage)).map(i => `<option value="${i.id}">${i.id} - ${i.label}</option>`).join('');
+      db.items.filter(i => i.id !== id && i.stage !== 'Uninoculated' && !isLockedStage(i.stage)).map(i => `<option value="${escapeHtml(i.id)}">${escapeHtml(i.id)} - ${escapeHtml(i.label)}</option>`).join('');
   } else {
     inocBanner.classList.add('hidden');
   }
@@ -308,7 +309,7 @@ export function openModal(itemOrId) {
       ${(h.temp !== undefined && h.temp !== null) || (h.humidity !== undefined && h.humidity !== null) ? `
         <div class="text-slate-500 mt-0.5">🌡️ ${h.temp !== undefined && h.temp !== null ? h.temp + '°F' : ''} ${h.humidity !== undefined && h.humidity !== null ? '| RH ' + h.humidity + '%' : ''}</div>
       ` : ''}
-      ${h.notes ? `<p class="text-slate-300 mt-1">${h.notes}</p>` : ''}
+      ${h.notes ? `<p class="text-slate-300 mt-1">${escapeHtml(h.notes)}</p>` : ''}
     </div>
   `;
   }).join('');
@@ -2072,7 +2073,7 @@ export function render4x5StandardHTML(item, options = {}) {
   ` : '';
 
   const innerContentHtml = `
-    <div class="label-4x5-standard-centered flex flex-col items-center justify-between w-full h-full text-center text-slate-900 font-sans px-2 py-1" style="font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+    <div class="label-4x5-standard-centered flex flex-col items-center justify-between w-full h-full text-center text-slate-900 font-sans px-2 py-1" style="font-family: 'Geist', 'Helvetica Neue', Arial, sans-serif;">
       
       <!-- Top Header - Logo / Branding Zone (Only if showLogo & logo exists) -->
       ${logoHtml}
@@ -2174,7 +2175,7 @@ export function render4x5HandwritingHTML(item, options = {}) {
   ];
 
   const fullWidthHandwritingHtml = `
-    <div class="label-4x5-handwriting-container w-full flex flex-col justify-start mt-3 pt-2 border-t-2 border-slate-900" style="font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+    <div class="label-4x5-handwriting-container w-full flex flex-col justify-start mt-3 pt-2 border-t-2 border-slate-900" style="font-family: 'Geist', 'Helvetica Neue', Arial, sans-serif;">
       
       <!-- Centered Spacious Ruled Handwriting Lines -->
       <div class="space-y-3.5 pt-1 w-full">
@@ -2201,7 +2202,7 @@ export function render4x5HandwritingHTML(item, options = {}) {
   `;
 
   const innerContentHtml = `
-    <div class="label-4x5-hw-header flex flex-col items-center justify-center w-full text-center font-sans px-2" style="font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+    <div class="label-4x5-hw-header flex flex-col items-center justify-center w-full text-center font-sans px-2" style="font-family: 'Geist', 'Helvetica Neue', Arial, sans-serif;">
       ${logoHtml}
 
       <div class="font-black text-slate-950 uppercase tracking-tight leading-tight truncate w-full" style="font-size: 18pt; line-height: 1.15;" title="${strainName || 'Blank Field'}">${strainName || '____________________'}</div>
@@ -3169,14 +3170,14 @@ export function renderRoadmap() {
       <div class="bg-slate-900 p-4 rounded-lg border border-slate-700 space-y-2">
         <div class="flex justify-between items-start gap-3">
           <div class="flex-1">
-            <h4 class="font-bold text-slate-100 text-sm">${fb.title}</h4>
-            <p class="text-xs text-slate-400 mt-1">${fb.description || 'No description provided.'}</p>
+            <h4 class="font-bold text-slate-100 text-sm">${escapeHtml(fb.title)}</h4>
+            <p class="text-xs text-slate-400 mt-1">${escapeHtml(fb.description || 'No description provided.')}</p>
             <div class="flex gap-2 mt-2">
-              <span class="text-[10px] px-2 py-0.5 rounded ${categoryClass}">${fb.category}</span>
-              <span class="text-[10px] px-2 py-0.5 rounded border ${statusClass}">${fb.status}</span>
+              <span class="text-[10px] px-2 py-0.5 rounded ${categoryClass}">${escapeHtml(fb.category)}</span>
+              <span class="text-[10px] px-2 py-0.5 rounded border ${statusClass}">${escapeHtml(fb.status)}</span>
             </div>
           </div>
-          <button onclick="handleUpvote('${fb.id}')" class="flex flex-col items-center gap-1 bg-slate-800 hover:bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 transition shrink-0">
+          <button onclick="handleUpvote('${escapeHtml(fb.id)}')" class="flex flex-col items-center gap-1 bg-slate-800 hover:bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 transition shrink-0">
             <span class="text-lg">👍</span>
             <span class="text-xs font-bold text-fuchsia-400">${fb.upvotes || 0}</span>
           </button>

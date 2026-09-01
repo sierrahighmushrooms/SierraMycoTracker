@@ -97,7 +97,8 @@ import {
   handleTargetVolumeChange,
   handleVolumeMlChange,
   resetRecipeCalculatorState,
-  findMatchingSupply
+  findMatchingSupply,
+  escapeHtml
 } from './utils.js';
 import {
   openModal,
@@ -1221,9 +1222,18 @@ function importJSON(e) {
 
 function exportCSV() {
   if (!db.items.length) return alert('No data to export.');
+  // Quote every field, escape embedded quotes, and neutralise spreadsheet
+  // formula injection (a leading =, +, -, @, tab or CR is treated as a formula
+  // by Excel/Sheets).
+  const cell = (value) => {
+    let s = value === null || value === undefined ? '' : String(value);
+    if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
+    return '"' + s.replace(/"/g, '""') + '"';
+  };
+  const cols = ['id', 'label', 'strain', 'medium', 'pcBatch', 'stage', 'contamType', 'contamVector', 'createdAt', 'totalYield', 'containerType', 'containerWeight'];
   let csv = 'ID,Label,Strain,Medium,Batch,Stage,ContamType,ContamVector,Created,TotalYield,ContainerType,ContainerWeight\n';
   db.items.forEach(i => {
-    csv += `${i.id},"${i.label}",${i.strain},${i.medium},${i.pcBatch},${i.stage},"${i.contamType || ''}","${i.contamVector || ''}",${i.createdAt},${i.totalYield || 0},"${i.containerType || ''}","${i.containerWeight || ''}"\n`;
+    csv += cols.map(c => cell(c === 'totalYield' ? (i[c] || 0) : i[c])).join(',') + '\n';
   });
   const dataStr = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
   const el = document.createElement('a');
@@ -1540,12 +1550,12 @@ function renderContainerCard(item) {
         <div class="flex items-start gap-2">
           <input type="checkbox" id="${displayId}" value="${item.id}" data-id="${item.id}" data-item-id="${item.id}" data-item-code="${itemCode}" onclick="event.stopPropagation()" onchange="updateSelectedCount()" class="item-checkbox container-card-checkbox rounded text-emerald-600 focus:ring-emerald-500 bg-slate-900 border-slate-700 mt-1">
           <div>
-            <span class="text-xs font-mono bg-slate-900 text-emerald-400 px-2 py-0.5 rounded border border-slate-700">${displayId}</span>
-            <h3 class="font-semibold text-slate-100 mt-1">${item.label}</h3>
+            <span class="text-xs font-mono bg-slate-900 text-emerald-400 px-2 py-0.5 rounded border border-slate-700">${escapeHtml(displayId)}</span>
+            <h3 class="font-semibold text-slate-100 mt-1">${escapeHtml(item.label)}</h3>
           </div>
         </div>
         <div class="flex items-center gap-2">
-          ${(item.containerType || item.container_type) ? `<span class="text-[9px] text-slate-400 bg-slate-900/60 border border-slate-700 px-1.5 py-0.5 rounded whitespace-nowrap">${item.containerType || item.container_type}</span>` : ''}
+          ${(item.containerType || item.container_type) ? `<span class="text-[9px] text-slate-400 bg-slate-900/60 border border-slate-700 px-1.5 py-0.5 rounded whitespace-nowrap">${escapeHtml(item.containerType || item.container_type)}</span>` : ''}
           <span class="text-[10px] uppercase font-bold px-2 py-1 rounded ${
             item.stage === 'Contaminated' ? 'bg-red-900/50 text-red-400' :
             item.stage === 'Uninoculated' ? 'bg-amber-500/20 text-amber-300' : 'bg-slate-700 text-emerald-300'
@@ -1554,8 +1564,8 @@ function renderContainerCard(item) {
         </div>
       </div>
       <div class="text-xs grid grid-cols-2 gap-1 text-slate-400">
-        <div><strong class="text-slate-300">Strain:</strong> ${item.strain}</div>
-        <div><strong class="text-slate-300">Batch:</strong> ${item.pcBatch}</div>
+        <div><strong class="text-slate-300">Strain:</strong> ${escapeHtml(item.strain)}</div>
+        <div><strong class="text-slate-300">Batch:</strong> ${escapeHtml(item.pcBatch)}</div>
         ${getContainerCreatedDateLabel(item) ? `<div class="col-span-2"><strong class="text-slate-300">Created:</strong> ${getContainerCreatedDateLabel(item)}</div>` : ''}
         ${item.medium === 'Media Bottle' ? `
           <div><strong class="text-slate-300">Volume:</strong> ${item.volumeMl ? item.volumeMl + ' mL' : 'N/A'}</div>
@@ -1795,10 +1805,10 @@ window.renderManagePresetsList = function() {
     listEl.innerHTML = customMediums.map(m => `
       <div class="flex items-center justify-between bg-slate-950 border border-slate-800 rounded-xl p-3">
         <div>
-          <div class="text-xs font-bold text-slate-200">${m.name}</div>
-          <div class="text-[10px] text-slate-400 font-mono">Category: ${m.category || 'GRAIN'}</div>
+          <div class="text-xs font-bold text-slate-200">${escapeHtml(m.name)}</div>
+          <div class="text-[10px] text-slate-400 font-mono">Category: ${escapeHtml(m.category || 'GRAIN')}</div>
         </div>
-        <button type="button" onclick="handleDeleteCustomPreset('medium', '${m.id}', '${m.name}')" class="text-red-400 hover:text-red-300 hover:bg-red-400/10 p-1.5 rounded-lg text-xs font-bold transition" title="Delete Custom Medium">
+        <button type="button" onclick="handleDeleteCustomPreset('medium', '${escapeHtml(m.id)}')" class="text-red-400 hover:text-red-300 hover:bg-red-400/10 p-1.5 rounded-lg text-xs font-bold transition" title="Delete Custom Medium">
           🗑️ Delete
         </button>
       </div>
@@ -1811,10 +1821,10 @@ window.renderManagePresetsList = function() {
     listEl.innerHTML = customContainers.map(c => `
       <div class="flex items-center justify-between bg-slate-950 border border-slate-800 rounded-xl p-3">
         <div>
-          <div class="text-xs font-bold text-slate-200">${c.name}</div>
-          <div class="text-[10px] text-slate-400 font-mono">${c.capacityValue || ''} ${c.capacityUnit || 'ml'} (${c.type || 'Other'})</div>
+          <div class="text-xs font-bold text-slate-200">${escapeHtml(c.name)}</div>
+          <div class="text-[10px] text-slate-400 font-mono">${escapeHtml(c.capacityValue || '')} ${escapeHtml(c.capacityUnit || 'ml')} (${escapeHtml(c.type || 'Other')})</div>
         </div>
-        <button type="button" onclick="handleDeleteCustomPreset('container', '${c.id}', '${c.name}')" class="text-red-400 hover:text-red-300 hover:bg-red-400/10 p-1.5 rounded-lg text-xs font-bold transition" title="Delete Custom Container">
+        <button type="button" onclick="handleDeleteCustomPreset('container', '${escapeHtml(c.id)}')" class="text-red-400 hover:text-red-300 hover:bg-red-400/10 p-1.5 rounded-lg text-xs font-bold transition" title="Delete Custom Container">
           🗑️ Delete
         </button>
       </div>
@@ -1823,6 +1833,14 @@ window.renderManagePresetsList = function() {
 };
 
 window.handleDeleteCustomPreset = function(type, id, name) {
+  // Resolve the display name from stored presets when the caller doesn't pass
+  // one (call sites pass only the generated id to avoid injecting user text
+  // into an inline handler).
+  if (name === undefined || name === null) {
+    const list = type === 'medium' ? getCustomMediumPresets() : getCustomContainerPresets();
+    const match = (list || []).find(p => p.id === id);
+    name = match ? match.name : '';
+  }
   if (!confirm(`Delete custom ${type} preset "${name}"?`)) return;
 
   if (type === 'medium') {
@@ -3120,7 +3138,7 @@ async function handleAddLocationSubmit(e) {
     if (select) {
       const { userLocations: refreshedLocations, currentLocationId: activeLocId } = await import('./db.js');
       select.innerHTML = '<option value="all" class="bg-slate-900">All Locations</option>' +
-        refreshedLocations.map(l => `<option value="${l.id}" class="bg-slate-900" ${activeLocId === l.id ? 'selected' : ''}>${l.name}</option>`).join('');
+        refreshedLocations.map(l => `<option value="${escapeHtml(l.id)}" class="bg-slate-900" ${activeLocId === l.id ? 'selected' : ''}>${escapeHtml(l.name)}</option>`).join('');
     }
 
     closeAddLocationModal();
@@ -3160,7 +3178,7 @@ async function addNewLocationDirectly(roomName) {
     if (select) {
       const { userLocations, currentLocationId } = await import('./db.js');
       select.innerHTML = '<option value="all" class="bg-slate-900">All Locations</option>' +
-        userLocations.map(l => `<option value="${l.id}" class="bg-slate-900" ${currentLocationId === l.id ? 'selected' : ''}>${l.name}</option>`).join('');
+        userLocations.map(l => `<option value="${escapeHtml(l.id)}" class="bg-slate-900" ${currentLocationId === l.id ? 'selected' : ''}>${escapeHtml(l.name)}</option>`).join('');
     }
     render();
   } catch (err) {
@@ -3190,7 +3208,7 @@ function openAddRackModal() {
     if (!userLocations || userLocations.length === 0) {
       locSelect.innerHTML = '<option value="">No locations available — add one first</option>';
     } else {
-      locSelect.innerHTML = userLocations.map(l => `<option value="${l.id}">${l.name}</option>`).join('');
+      locSelect.innerHTML = userLocations.map(l => `<option value="${escapeHtml(l.id)}">${escapeHtml(l.name)}</option>`).join('');
     }
   }
 
@@ -3992,8 +4010,8 @@ async function runMultiTenantInit() {
     const select = document.getElementById('header-location-select');
     if (select) {
       select.innerHTML = '<option value="all" class="bg-slate-900">All Locations</option>' +
-        userLocations.map(l => `<option value="${l.id}" class="bg-slate-900" ${currentLocationId === l.id ? 'selected' : ''}>${l.name}</option>`).join('');
-      
+        userLocations.map(l => `<option value="${escapeHtml(l.id)}" class="bg-slate-900" ${currentLocationId === l.id ? 'selected' : ''}>${escapeHtml(l.name)}</option>`).join('');
+
       const locContainer = document.getElementById('header-location-container');
       if (locContainer) locContainer.classList.remove('hidden');
     }

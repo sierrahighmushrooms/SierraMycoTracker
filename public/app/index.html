@@ -3,9 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Sierra Myco Lab</title>
-  <meta name="description" content="Explore Sierra Myco Lab - products, mushroom cultivation software, and features.">
-  <meta name="theme-color" content="#020617">
+  <title>Sierra Myco Lab — Modern Mushroom Cultivation &amp; Diagnostics</title>
+  <meta name="description" content="The complete mycology workflow platform — batch lineage tracking, sterilization logs, yield analytics, and AI diagnostics. Cloud-synced across all your devices.">
+  <meta name="theme-color" content="#030508">
 
   <!-- Favicon / App Icons -->
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA1MTIgNTEyIj48c3R5bGU+LnN0ZW17ZmlsbDojZTY5YzAwfS5jYXB7ZmlsbDojMTQ2YzRmfTwvc3R5bGU+PGcgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoMCw1MCkgc2NhbGUoMC44KSI+PHBhdGggY2xhc3M9InN0ZW0iIGQ9Ik0yNTYgMzUyYzQ4IDAgODgtMTYgODgtMzZzLTQwLTM2LTg4LTM2LTg4IDE2LTg4IDM2IDQwIDM2IDg4IDM2eiIvPjxwYXRoIGNsYXNzPSJjYXAiIGQ9Ik0zMjAgMTYwYzAtNTMtNjQtOTYtNjQtOTZzLTY0IDQzLTY0IDk2YzAgNTMgNjQgOTYgNjQgOTZzNjQtNDMgNjQtOTZ6Ii8+PC9nPjwvc3ZnPg==">
@@ -20,33 +20,23 @@
   <!-- OpenGraph Metadata -->
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="Sierra Myco Lab">
-  <meta property="og:title" content="Sierra Myco Lab">
-  <meta property="og:description" content="Explore Sierra Myco Lab - products, mushroom cultivation software, and features.">
-  <meta property="og:url" content="https://sierramycolab.com">
-  <meta property="og:image" content="https://cdn-icons-png.flaticon.com/512/628/628283.png">
+  <meta property="og:title" content="Sierra Myco Lab — Modern Mushroom Cultivation & Diagnostics">
+  <meta property="og:description" content="The complete mycology workflow platform — batch lineage tracking, sterilization logs, yield analytics, and AI diagnostics.">
+  <meta property="og:url" content="https://sierramycolab.com/">
 
   <!-- Twitter Card Metadata -->
-  <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="Sierra Myco Lab">
-  <meta name="twitter:description" content="Explore Sierra Myco Lab - products, mushroom cultivation software, and features.">
-  <meta name="twitter:image" content="https://cdn-icons-png.flaticon.com/512/628/628283.png">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="Sierra Myco Lab — Modern Mushroom Cultivation & Diagnostics">
+  <meta name="twitter:description" content="The complete mycology workflow platform — batch lineage tracking, sterilization logs, yield analytics, and AI diagnostics.">
   <link rel="stylesheet" href="./build.css">
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-  <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
-  <!-- Supabase JS v2 (UMD) — exposes the global `supabase` namespace used by js/db.js -->
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script>
-    // Fall back to unpkg (already used for html5-qrcode above) if jsdelivr
-    // didn't come through, so a single CDN outage doesn't leave
-    // window.supabase undefined - and every Supabase-backed feature broken -
-    // for the whole session. This still runs synchronously during initial
-    // HTML parsing, so document.write here lands in place and blocks the
-    // parser until the fallback script finishes, exactly like the original
-    // tag would have.
-    if (typeof window.supabase === 'undefined') {
-      document.write('<scr' + 'ipt src="https://unpkg.com/@supabase/supabase-js@2"></scr' + 'ipt>');
-    }
-  </script>
+  <!-- QR libraries are only needed once a scanner/label modal opens — defer them
+       so they never block first paint. Versions are pinned for reproducibility. -->
+  <script defer src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script defer src="https://unpkg.com/html5-qrcode@2.3.8" type="text/javascript"></script>
+  <!-- Supabase JS v2 (UMD) — exposes the global `supabase` namespace used by js/db.js.
+       Kept render-blocking (js/app.js depends on it at startup); pinned + CDN fallback. -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.109.0"
+          onerror="document.write('<scr'+'ipt src=&quot;https://unpkg.com/@supabase/supabase-js@2.109.0&quot;></scr'+'ipt>')"></script>
 
   <link rel="stylesheet" href="css/styles.css">
   <link rel="stylesheet" href="css/print.css">
@@ -2609,7 +2599,7 @@
               <div class="flex items-center gap-3">
                 <div class="w-12 h-12 rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center overflow-hidden shrink-0">
                   <span id="onboarding-logo-placeholder" class="text-xl text-slate-500">📷</span>
-                  <img id="onboarding-logo-preview" class="hidden w-full h-full object-cover">
+                  <img id="onboarding-logo-preview" alt="Organization logo preview" class="hidden w-full h-full object-cover">
                 </div>
                 <input type="file" id="onboarding-logo-file" accept="image/*" class="hidden">
                 <button type="button" id="onboarding-upload-btn" class="px-3 py-1.5 rounded bg-slate-850 hover:bg-slate-800 border border-slate-700 text-xs font-semibold text-slate-300 transition">
@@ -2849,7 +2839,7 @@
             <div class="flex items-center gap-3 bg-slate-950 p-3 rounded-xl border border-slate-800">
               <div class="w-12 h-12 rounded-lg bg-slate-900 border border-slate-700 flex items-center justify-center overflow-hidden shrink-0">
                 <span id="org-logo-preview-placeholder" class="text-xl text-slate-500">🏢</span>
-                <img id="org-logo-preview" class="hidden w-full h-full object-contain">
+                <img id="org-logo-preview" alt="Organization logo preview" class="hidden w-full h-full object-contain">
               </div>
               <div class="flex-1 min-w-0 space-y-1">
                 <input type="file" id="org-logo-upload" accept="image/*" class="text-xs text-slate-400 file:mr-2 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-slate-800 file:text-slate-200 hover:file:bg-slate-700 cursor-pointer">

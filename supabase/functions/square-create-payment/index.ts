@@ -51,6 +51,20 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Amount is in the currency's smallest unit (cents). Reject non-positive,
+    // non-integer, or implausibly large values before hitting Square.
+    const MAX_AMOUNT_CENTS = 5_000_000; // $50,000
+    if (
+      !Number.isInteger(amount_money.amount) ||
+      amount_money.amount <= 0 ||
+      amount_money.amount > MAX_AMOUNT_CENTS
+    ) {
+      return new Response(JSON.stringify({ error: "amount_money.amount must be a positive integer number of cents within allowed limits" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
+      });
+    }
+
     // Bind organization_id to the authenticated caller's verified membership
     // rather than trusting the client-supplied value directly.
     const authResult = await resolveAuthorizedOrg(req, supabaseUrl, supabaseServiceKey, organization_id);
@@ -82,8 +96,14 @@ Deno.serve(async (req) => {
     // Calculate 1% platform revenue fee split
     const appFeeCents = Math.round(orderTotalCents * 0.01);
 
+    // Prefer a deterministic idempotency key tied to the order + amount so a
+    // client retry after a dropped response never creates a second charge.
+    const resolvedIdempotencyKey =
+      idempotency_key ||
+      (order_id ? `order-${order_id}-${orderTotalCents}` : crypto.randomUUID());
+
     const paymentPayload: any = {
-      idempotency_key: idempotency_key || crypto.randomUUID(),
+      idempotency_key: resolvedIdempotencyKey,
       source_id: source_id || "EXTERNAL",
       amount_money: {
         amount: orderTotalCents,
@@ -125,14 +145,27 @@ Deno.serve(async (req) => {
     }
 
     // If order_id provided, update order payment status in database
-    // (scoped to the verified org so a caller can't touch another org's order)
+    // (scoped to the verified org so a caller can't touch another org's order).
+    // Append to any existing notes rather than clobbering them.
     if (order_id) {
+      const { data: existingOrder } = await supabase
+        .from("orders")
+        .select("notes")
+        .eq("id", order_id)
+        .eq("organization_id", verifiedOrgId)
+        .single();
+
+      const paymentNote = `Square Payment ID: ${paymentData.payment?.id || "Processed"}`;
+      const nextNotes = [existingOrder?.notes, note, paymentNote]
+        .filter((part) => part && String(part).trim())
+        .join(" | ");
+
       await supabase
         .from("orders")
         .update({
           payment_status: "paid",
           payment_method: "Square",
-          notes: (note ? note + " | " : "") + `Square Payment ID: ${paymentData.payment?.id || 'Processed'}`
+          notes: nextNotes
         })
         .eq("id", order_id)
         .eq("organization_id", verifiedOrgId);

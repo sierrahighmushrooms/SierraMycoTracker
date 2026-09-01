@@ -24,7 +24,7 @@ export default function Home() {
 
   return (
     <SmoothScroll>
-      <main className="min-h-screen bg-[#030508] text-slate-100 flex flex-col selection:bg-violet-400 selection:text-white relative">
+      <main id="top" className="min-h-screen bg-[#030508] text-slate-100 flex flex-col selection:bg-violet-400 selection:text-white relative">
         {/* Mushroom Background - all devices */}
         <MushroomBackground />
         

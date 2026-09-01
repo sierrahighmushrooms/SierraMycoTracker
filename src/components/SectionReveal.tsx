@@ -23,9 +23,16 @@ export default function SectionReveal({
   const contentRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!sectionRef.current || !contentRef.current) return;
+    const section = sectionRef.current;
+    const content = contentRef.current;
+    if (!section || !content) return;
 
-    const getInitialState = () => {
+    const prefersReducedMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+    if (prefersReducedMotion) return; // content is already visible by default
+
+    const fromState = (() => {
       switch (direction) {
         case "left":
           return { x: -60, opacity: 0 };
@@ -36,38 +43,42 @@ export default function SectionReveal({
         default:
           return { y: 40, opacity: 0 };
       }
-    };
+    })();
 
-    const getFinalState = () => {
-      switch (direction) {
-        case "left":
-        case "right":
-          return { x: 0, opacity: 1 };
-        case "scale":
-          return { scale: 1, opacity: 1 };
-        default:
-          return { y: 0, opacity: 1 };
-      }
-    };
-
-    gsap.set(contentRef.current, getInitialState());
+    const toState =
+      direction === "scale"
+        ? { scale: 1, opacity: 1 }
+        : { x: 0, y: 0, opacity: 1 };
 
     const ctx = gsap.context(() => {
-      gsap.to(contentRef.current, {
-        ...getFinalState(),
+      // `immediateRender: false` means the element stays in its natural, visible
+      // state until the ScrollTrigger fires. If ScrollTrigger never initializes
+      // (JS error, edge cases), the content is still visible instead of stuck at
+      // opacity: 0.
+      gsap.fromTo(content, fromState, {
+        ...toState,
         duration: 1.2,
         delay,
         ease: "power2.out",
+        immediateRender: false,
         scrollTrigger: {
-          trigger: sectionRef.current,
-          start: "top 85%",
-          end: "top 30%",
+          trigger: section,
+          start: "top 90%",
           toggleActions: "play none none none",
         },
       });
-    }, sectionRef);
+    }, section);
 
-    return () => ctx.revert();
+    // Safety net: if for any reason the reveal hasn't run shortly after load,
+    // ensure the content is visible.
+    const safety = window.setTimeout(() => {
+      gsap.set(content, { opacity: 1, x: 0, y: 0, scale: 1, clearProps: "transform" });
+    }, 4000);
+
+    return () => {
+      window.clearTimeout(safety);
+      ctx.revert();
+    };
   }, [direction, delay]);
 
   return (

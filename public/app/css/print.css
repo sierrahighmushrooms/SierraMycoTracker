@@ -308,7 +308,7 @@
   }
 
   .print-card[data-preset="2.625x1"] .print-id {
-    font-family: monospace !important;
+    font-family: 'Geist Mono', monospace !important;
     font-weight: 700 !important;
     color: #0f766e !important;
     font-size: 8.5px !important;
@@ -547,7 +547,7 @@
   }
 
   .print-id {
-    font-family: monospace !important;
+    font-family: 'Geist Mono', monospace !important;
     font-weight: 700 !important;
     white-space: nowrap !important;
     overflow: hidden !important;

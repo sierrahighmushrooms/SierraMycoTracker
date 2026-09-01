@@ -1,7 +1,7 @@
 {
   "short_name": "Sierra Myco Lab",
   "name": "Sierra Myco Lab",
-  "description": "Explore Sierra Myco Lab - products, mushroom cultivation software, and features.",
+  "description": "The complete mycology workflow platform — batch lineage tracking, sterilization logs, yield analytics, and AI diagnostics.",
   "icons": [
     {
       "src": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA1MTIgNTEyIj48c3R5bGU+LnN0ZW17ZmlsbDojZTY5YzAwfS5jYXB7ZmlsbDojMTQ2YzRmfTwvc3R5bGU+PGcgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoMCw1MCkgc2NhbGUoMC44KSI+PHBhdGggY2xhc3M9InN0ZW0iIGQ9Ik0yNTYgMzUyYzQ4IDAgODgtMTYgODgtMzZzLTQwLTM2LTg4LTM2LTg4IDE2LTg4IDM2IDQwIDM2IDg4IDM2eiIvPjxwYXRoIGNsYXNzPSJjYXAiIGQ9Ik0zMjAgMTYwYzAtNTMtNjQtOTYtNjQtOTZzLTY0IDQzLTY0IDk2YzAgNTMgNjQgOTYgNjQgOTZzNjQtNDMgNjQtOTZ6Ii8+PC9nPjwvc3ZnPg==",
@@ -15,8 +15,8 @@
     }
   ],
   "start_url": "./index.html",
-  "background_color": "#020617",
-  "theme_color": "#020617",
+  "background_color": "#030508",
+  "theme_color": "#030508",
   "display": "standalone",
   "orientation": "portrait"
 }

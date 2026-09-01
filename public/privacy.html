@@ -28,7 +28,28 @@
   <meta name="twitter:description" content="Official Privacy Policy for Sierra Myco Lab — mushroom cultivation software and products, operated by Sierra High Mushrooms LLC.">
   <meta name="twitter:image" content="https://cdn-icons-png.flaticon.com/512/628/628283.png">
 
-  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Compiled Tailwind stylesheet (shared with the app). The Tailwind Play CDN
+       must never be used in production — it ships ~300KB of JS and compiles CSS
+       in the browser on every load. -->
+  <link rel="stylesheet" href="build.css">
+  <style>
+    /* Geist — self-hosted locally from /fonts/geist. No Google Fonts / external font CDN. */
+    @font-face {
+      font-family: 'Geist';
+      src: url('fonts/geist/Geist-Variable.woff2') format('woff2');
+      font-weight: 100 900;
+      font-style: normal;
+      font-display: swap;
+    }
+    @font-face {
+      font-family: 'Geist Mono';
+      src: url('fonts/geist/GeistMono-Variable.woff2') format('woff2');
+      font-weight: 100 900;
+      font-style: normal;
+      font-display: swap;
+    }
+    body { font-family: 'Geist', 'Helvetica Neue', Arial, sans-serif; }
+  </style>
 </head>
 <body class="bg-slate-900 text-slate-300 min-h-screen font-sans">
 

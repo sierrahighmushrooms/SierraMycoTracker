@@ -14,9 +14,19 @@ export default function SiteNav({ onOpenAuth }: SiteNavProps) {
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 30);
-    window.addEventListener("scroll", onScroll);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open]);
 
   const links = [
     { label: "Features", href: "#features" },
@@ -33,15 +43,15 @@ export default function SiteNav({ onOpenAuth }: SiteNavProps) {
       }`}
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between">
-        <a href="#" className="flex items-center gap-3 group">
-          <span className="text-2xl transition-transform duration-300 group-hover:scale-110 group-hover:rotate-12">🍄</span>
+        <a href="#top" aria-label="Sierra Myco Lab home" className="flex items-center gap-3 group">
+          <span className="text-2xl transition-transform duration-300 group-hover:scale-110 group-hover:rotate-12" aria-hidden="true">🍄</span>
           <span className="text-base font-bold tracking-tight">
             <span className="text-white">Sierra </span>
             <span className="bg-gradient-to-r from-violet-400 via-fuchsia-400 to-cyan-400 bg-clip-text text-transparent">Myco Lab</span>
           </span>
         </a>
 
-        <nav className="hidden md:flex items-center gap-10 text-sm text-slate-400">
+        <nav aria-label="Primary" className="hidden md:flex items-center gap-10 text-sm text-slate-400">
           {links.map((l) => (
             <a
               key={l.href}
@@ -71,7 +81,9 @@ export default function SiteNav({ onOpenAuth }: SiteNavProps) {
         <button
           onClick={() => setOpen(!open)}
           className="md:hidden p-2.5 rounded-xl bg-white/[0.04] border border-white/[0.08] text-slate-300 hover:text-white transition-colors"
-          aria-label="Toggle menu"
+          aria-label={open ? "Close menu" : "Open menu"}
+          aria-expanded={open}
+          aria-controls="mobile-nav"
         >
           {open ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
         </button>
@@ -80,6 +92,7 @@ export default function SiteNav({ onOpenAuth }: SiteNavProps) {
       <AnimatePresence>
         {open && (
           <motion.div
+            id="mobile-nav"
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}
             exit={{ opacity: 0, height: 0 }}

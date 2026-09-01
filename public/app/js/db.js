@@ -2342,7 +2342,11 @@ export async function processSquarePayment(paymentOptions) {
       order_id: paymentOptions.orderId || null,
       customer_id: paymentOptions.customerId || null,
       note: paymentOptions.note || `Sierra Myco Lab Order Payment`,
-      idempotency_key: paymentOptions.idempotencyKey || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : ('SQ-' + Date.now()))
+      // Only send an explicit idempotency key when the caller provides one.
+      // Otherwise the edge function derives a deterministic key from the order
+      // so a retry after a dropped response can never double-charge.
+      idempotency_key: paymentOptions.idempotencyKey ||
+        (paymentOptions.orderId ? undefined : (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : ('SQ-' + Date.now())))
     })
   });
 

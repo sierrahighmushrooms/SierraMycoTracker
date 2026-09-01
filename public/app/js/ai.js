@@ -160,7 +160,11 @@ export async function callGeminiAPI(userPrompt, activeBatchContext) {
   }
 
   try {
-    const url = `${GEMINI.endpoint}/${GEMINI.model}:generateContent?key=${apiKey}`;
+    // Pass the key via header, not the query string: `?key=` ends up in browser
+    // history, Referer headers, and proxy/error logs. For a hosted deployment
+    // this call should be proxied through a backend so the key never reaches the
+    // browser at all (see supabase/functions for the Square proxy pattern).
+    const url = `${GEMINI.endpoint}/${GEMINI.model}:generateContent`;
 
     const requestBody = {
       contents: [
@@ -184,7 +188,8 @@ export async function callGeminiAPI(userPrompt, activeBatchContext) {
     const response = await fetch(url, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'x-goog-api-key': apiKey
       },
       body: JSON.stringify(requestBody)
     });

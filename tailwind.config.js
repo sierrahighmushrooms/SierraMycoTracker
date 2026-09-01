@@ -8,8 +8,8 @@ module.exports = {
   theme: {
     extend: {
       fontFamily: {
-        sans: ['var(--font-space-grotesk)', 'system-ui', 'sans-serif'],
-        mono: ['var(--font-jetbrains)', 'Menlo', 'monospace'],
+        sans: ['var(--font-geist-sans)', 'Geist', '"Helvetica Neue"', 'Arial', 'sans-serif'],
+        mono: ['var(--font-geist-mono)', '"Geist Mono"', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
       },
       colors: {
         background: "#080b11",
