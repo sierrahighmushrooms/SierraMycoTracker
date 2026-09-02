@@ -253,6 +253,55 @@ export const APP_CONFIG = {
   DRY_YIELD_RATIO: 0.1 // ~10% estimated dry weight from wet weight
 };
 
+// --- Harvest Forecast Timeline ---
+// Estimated total calendar days from inoculation to the first harvestable
+// flush, per strain. These are rough planning figures (colonization +
+// pinning + first fruiting) for a typical fruiting block / monotub at room
+// conditions — they are deliberately conservative so the Harvest Forecast
+// Calendar under-promises rather than over-promises for market planning.
+// Keys are matched case-insensitively, first by exact strain name and then
+// by substring, so "Blue Oyster (PO)" still resolves to the Blue Oyster row.
+export const HARVEST_TIMELINE_DAYS = {
+  'Blue Oyster': 21,
+  'Pearl Oyster': 21,
+  'Pink Oyster': 18,
+  'Golden Oyster': 20,
+  'King Oyster': 28,
+  "Lion's Mane": 28,
+  'Shiitake': 60,
+  'Chestnut': 35,
+  'Nameko': 45,
+  'Pioppino': 30,
+  'Reishi': 45,
+  'Turkey Tail': 45,
+  'Maitake': 60,
+  'Enoki': 40,
+  'Wine Cap': 40
+};
+
+// Fallback timeline (days) used for any strain not listed above.
+export const DEFAULT_HARVEST_TIMELINE_DAYS = 24;
+
+// Resolve the estimated inoculation-to-harvest day count for a strain name.
+// Falls back to DEFAULT_HARVEST_TIMELINE_DAYS for unknown / blank strains.
+export function harvestDaysForStrain(strain) {
+  if (!strain || typeof strain !== 'string') return DEFAULT_HARVEST_TIMELINE_DAYS;
+  const needle = strain.trim().toLowerCase();
+  if (!needle) return DEFAULT_HARVEST_TIMELINE_DAYS;
+
+  // 1) Exact (case-insensitive) match on the configured strain name.
+  for (const [name, days] of Object.entries(HARVEST_TIMELINE_DAYS)) {
+    if (name.toLowerCase() === needle) return days;
+  }
+  // 2) Substring match either direction, so decorated names
+  //    ("Blue Oyster (PO-spp)") and shorthand ("blue oyster block") both hit.
+  for (const [name, days] of Object.entries(HARVEST_TIMELINE_DAYS)) {
+    const key = name.toLowerCase();
+    if (needle.includes(key) || key.includes(needle)) return days;
+  }
+  return DEFAULT_HARVEST_TIMELINE_DAYS;
+}
+
 // --- Label Printing Hardware Configuration Matrix ---
 // Defines every supported "Printer Type" + "Label Model" combination with the
 // physical dimensions, margins, and grid layout needed to generate correct

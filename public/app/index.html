@@ -79,6 +79,9 @@
         <button id="btn-pc-log" onclick="openBatchModal()" class="h-9 bg-amber-600 hover:bg-amber-500 text-slate-950 px-3.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 whitespace-nowrap shrink-0">
           <span>📋</span> PC Batch Log
         </button>
+        <button id="btn-harvest-calendar" onclick="openHarvestCalendarModal()" class="h-9 bg-slate-800 hover:bg-slate-700 text-emerald-400 border border-slate-700 hover:border-slate-600 px-3.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 whitespace-nowrap shrink-0">
+          <span>📅</span> Harvest Calendar
+        </button>
         <button id="btn-scan-qr" onclick="startScanner()" class="h-9 bg-slate-800 hover:bg-slate-700 text-emerald-400 border border-slate-700 hover:border-slate-600 px-3.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 whitespace-nowrap shrink-0">
           <span>📷</span> Scan QR
         </button>
@@ -2211,6 +2214,54 @@
           Save Settings
         </button>
       </footer>
+    </div>
+  </div>
+
+  <!-- Harvest Forecast Calendar Modal -->
+  <div id="harvest-calendar-modal" class="fixed inset-0 bg-black/85 hidden items-center justify-center p-4 z-50 animate-fade-in overflow-y-auto">
+    <div class="bg-slate-900 border border-slate-700/80 rounded-2xl w-full max-w-4xl p-5 sm:p-6 space-y-5 shadow-2xl max-h-[90vh] flex flex-col my-auto">
+
+      <!-- Header -->
+      <div class="flex justify-between items-center border-b border-slate-800 pb-3">
+        <div class="flex items-center gap-2.5">
+          <div class="w-9 h-9 rounded-lg bg-emerald-950/80 border border-emerald-600/40 flex items-center justify-center text-emerald-400 text-xl shadow-inner">
+            📅
+          </div>
+          <div>
+            <h3 class="text-base font-bold text-white flex items-center gap-2">
+              Harvest Forecast Calendar
+              <span class="text-[10px] bg-emerald-500/20 text-emerald-300 font-mono px-2 py-0.5 rounded border border-emerald-500/30 font-semibold">4-Week Outlook</span>
+            </h3>
+            <p class="text-xs text-slate-400">Projected first-harvest dates for active containers — plan your weekend market inventory.</p>
+          </div>
+        </div>
+        <button onclick="closeHarvestCalendarModal()" class="text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-lg p-2 transition">✕</button>
+      </div>
+
+      <!-- Body -->
+      <div class="overflow-y-auto pr-1 space-y-4">
+        <!-- Empty state (toggled by renderHarvestCalendar) -->
+        <div id="harvest-calendar-empty" class="hidden bg-slate-950/70 border border-slate-800 rounded-xl p-6 text-center">
+          <div class="text-3xl mb-2">🌱</div>
+          <p class="text-sm font-semibold text-slate-200">No harvests forecast in the next 4 weeks</p>
+          <p class="text-xs text-slate-400 mt-1">Inoculate containers and set a strain to see their estimated harvest dates here. Market days are still highlighted below so you can plan around them.</p>
+        </div>
+
+        <p id="harvest-calendar-summary" class="hidden text-xs font-semibold text-emerald-300 bg-emerald-950/40 border border-emerald-800/50 rounded-lg px-3 py-2"></p>
+
+        <!-- Calendar grid (built by renderHarvestCalendar) -->
+        <div id="harvest-calendar-grid"></div>
+
+        <div class="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[11px] text-slate-400">
+          <span class="flex items-center gap-1.5"><span class="harvest-cal-legend-swatch harvest-cal-legend-weekend"></span> Market day (Sat/Sun)</span>
+          <span class="flex items-center gap-1.5"><span class="harvest-cal-legend-swatch harvest-cal-legend-today"></span> Today</span>
+          <span class="flex items-center gap-1.5"><span class="harvest-cal-legend-swatch harvest-cal-legend-overdue"></span> Estimate passed (still active)</span>
+        </div>
+      </div>
+
+      <p class="text-[11px] text-slate-500 border-t border-slate-800 pt-3 leading-relaxed shrink-0">
+        Estimates add a per-strain timeline (configurable in <span class="font-mono text-slate-400">js/config.js</span>) to each container's inoculation date. They are planning guidance only — actual fruiting depends on species, conditions, and flush number.
+      </p>
     </div>
   </div>
 

@@ -2,7 +2,7 @@
 // and dry-yield estimation.
 
 import { db, getCustomContainerPresets, getCustomMediumPresets, userOrganizations, currentOrganizationId } from './db.js';
-import { APP_CONFIG, MEDIUM_CATEGORIES, CONTAINER_CATEGORIES, DEFAULT_CONTAINER_WEIGHTS, getMediumCategory, getContainerCategory, getContainerCapacityMl, isUnconventionalPair } from './config.js';
+import { APP_CONFIG, MEDIUM_CATEGORIES, CONTAINER_CATEGORIES, DEFAULT_CONTAINER_WEIGHTS, getMediumCategory, getContainerCategory, getContainerCapacityMl, isUnconventionalPair, harvestDaysForStrain } from './config.js';
 
 // Escape a value for safe interpolation into innerHTML. Use this for ANY
 // user-controlled text (strain names, labels, notes, customer/company names,
@@ -210,6 +210,46 @@ export function getContainerCreatedDateLabel(item) {
   const mm = String(date.getMonth() + 1).padStart(2, '0');
   const dd = String(date.getDate()).padStart(2, '0');
   return `${mm}/${dd}/${date.getFullYear()}`;
+}
+
+// --- Harvest Forecast helpers ---
+
+// Resolve the Date a container was actually inoculated on, for harvest-date
+// forecasting. Prefers the timestamp of the earliest history entry whose
+// stage looks like an inoculation event ("Inoculation" / "Inoculated"),
+// since that is the true start of the colonization clock. Falls back to the
+// same created/prep date resolution used everywhere else (getContainerBucketDate)
+// so containers logged before the history entry existed still forecast.
+// Returns a Date, or null when nothing usable is available.
+export function getInoculationDate(item) {
+  if (!item || typeof item !== 'object') return null;
+
+  const history = Array.isArray(item.history) ? item.history : [];
+  let earliest = null;
+  for (const entry of history) {
+    if (!entry || typeof entry.stage !== 'string') continue;
+    if (!/^inocul/i.test(entry.stage.trim())) continue;
+    const d = new Date(entry.timestamp);
+    if (isNaN(d.getTime())) continue;
+    if (!earliest || d.getTime() < earliest.getTime()) earliest = d;
+  }
+  if (earliest) return earliest;
+
+  return getContainerBucketDate(item);
+}
+
+// Estimate the first-harvest Date for an inoculated container by adding the
+// strain's configured timeline (see harvestDaysForStrain) to its inoculation
+// date. Uses setDate() rather than millisecond math so the result lands on
+// the same wall-clock day regardless of any DST shift in the interval.
+// Returns a Date, or null when the inoculation date can't be resolved.
+export function estimateHarvestDate(item) {
+  const start = getInoculationDate(item);
+  if (!start) return null;
+  const days = harvestDaysForStrain(item && item.strain);
+  const harvest = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+  harvest.setDate(harvest.getDate() + days);
+  return harvest;
 }
 
 export function getDateBucketKey(date) {

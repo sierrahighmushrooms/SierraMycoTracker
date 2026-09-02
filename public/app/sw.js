@@ -5,7 +5,7 @@
 // Bump this version whenever app shell files change: the activate handler
 // deletes every cache with an older name, so stale JS (e.g. js/db.js with
 // outdated plan-badge logic) is never served from cache-first lookups.
-const CACHE_NAME = 'sierra-myco-lab-v10';
+const CACHE_NAME = 'sierra-myco-lab-v11';
 
 // Critical shell — the app is unusable offline without these, so a failure to
 // cache any one of them should fail the install and retry later.

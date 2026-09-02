@@ -37,6 +37,8 @@ import {
   calculateBE,
   formatLocalDate,
   extractDateFromLabel,
+  getInoculationDate,
+  estimateHarvestDate,
   escapeHtml
 } from './utils.js';
 import {
@@ -1426,6 +1428,170 @@ export function calculateCVG() {
   document.getElementById('cvg-gypsum').innerText = `${recipe.gypsumGrams} g`;
   document.getElementById('cvg-water').innerText = `${recipe.waterLiters} L`;
   document.getElementById('cvg-results').classList.remove('hidden');
+}
+
+// --- Harvest Forecast Calendar ---
+// A read-only rolling 4-week board that projects when currently active,
+// inoculated containers will be ready for their first harvest, so weekend
+// farmers-market inventory can be planned ahead. It never mutates db.items.
+
+const HARVEST_CAL_WEEKS = 4;
+const HARVEST_CAL_MAX_BADGES = 4; // shown per day before collapsing to "+N more"
+const HARVEST_CAL_WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+// Local midnight for the given Date (or now), with the time-of-day stripped.
+function harvestCalStartOfDay(date) {
+  const d = date ? new Date(date) : new Date();
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
+
+// The local Monday on or before `date` — the grid's very first cell. Weeks
+// run Monday–Sunday to match getDateBucketKey() elsewhere in the app, which
+// also keeps Sat/Sun adjacent as the last two columns.
+function harvestCalWeekStart(date) {
+  const d = harvestCalStartOfDay(date);
+  const daysSinceMonday = (d.getDay() + 6) % 7; // getDay(): 0=Sun..6=Sat
+  d.setDate(d.getDate() - daysSinceMonday);
+  return d;
+}
+
+function harvestCalDayKey(date) {
+  const mm = String(date.getMonth() + 1).padStart(2, '0');
+  const dd = String(date.getDate()).padStart(2, '0');
+  return `${date.getFullYear()}-${mm}-${dd}`;
+}
+
+// Group active, inoculated containers by the day their first harvest is
+// estimated to land, keyed by harvestCalDayKey. Estimates that already
+// passed (but whose container is still active) are folded onto today's cell
+// and flagged overdue so they still show up for planning. Estimates beyond
+// the visible window are dropped. Returns:
+//   { byDay: Map<dayKey, Map<strain, { strain, qty, overdue }>>, total, marketTotal }
+function buildHarvestForecast(gridEnd, today) {
+  const byDay = new Map();
+  let total = 0;
+  let marketTotal = 0;
+
+  (db.items || []).forEach(item => {
+    if (!item || typeof item !== 'object') return;
+    if (INACTIVE_STAGES.includes(item.stage)) return;          // Archived / Spent / Contaminated
+    const strain = (item.strain || '').trim();
+    if (!strain) return;                                        // not yet inoculated
+    if (item.stage === 'Uninoculated' || item.stage === 'Preparation') return;
+
+    const est = estimateHarvestDate(item);
+    if (!est) return;
+    if (est.getTime() >= gridEnd.getTime()) return;             // beyond the 4-week window
+
+    const overdue = est.getTime() < today.getTime();
+    const bucket = overdue ? today : est;
+    const key = harvestCalDayKey(bucket);
+
+    let strains = byDay.get(key);
+    if (!strains) { strains = new Map(); byDay.set(key, strains); }
+    const existing = strains.get(strain) || { strain, qty: 0, overdue: false };
+    existing.qty += 1;
+    if (overdue) existing.overdue = true;
+    strains.set(strain, existing);
+
+    total += 1;
+    const dow = bucket.getDay();
+    if (dow === 0 || dow === 6) marketTotal += 1; // landed on Sat/Sun
+  });
+
+  return { byDay, total, marketTotal };
+}
+
+// Render the rolling calendar grid into #harvest-calendar-grid and toggle the
+// #harvest-calendar-empty banner / #harvest-calendar-summary line. Safe to
+// call before the modal is shown; every element is null-checked.
+export function renderHarvestCalendar() {
+  const gridEl = document.getElementById('harvest-calendar-grid');
+  if (!gridEl) return;
+  const emptyEl = document.getElementById('harvest-calendar-empty');
+  const summaryEl = document.getElementById('harvest-calendar-summary');
+
+  const today = harvestCalStartOfDay();
+  const gridStart = harvestCalWeekStart(today);
+  const gridEnd = new Date(gridStart);
+  gridEnd.setDate(gridEnd.getDate() + HARVEST_CAL_WEEKS * 7);
+  const todayKey = harvestCalDayKey(today);
+
+  const { byDay, total, marketTotal } = buildHarvestForecast(gridEnd, today);
+
+  const header = HARVEST_CAL_WEEKDAYS.map((label, i) => {
+    const weekend = i >= 5;
+    return `<div class="harvest-cal-head${weekend ? ' harvest-cal-head--weekend' : ''}">${label}${weekend ? ' <span class="harvest-cal-market-tag">MARKET</span>' : ''}</div>`;
+  }).join('');
+
+  const cells = [];
+  for (let i = 0; i < HARVEST_CAL_WEEKS * 7; i++) {
+    const date = new Date(gridStart);
+    date.setDate(date.getDate() + i);
+    const key = harvestCalDayKey(date);
+    const dow = date.getDay();
+    const isWeekend = dow === 0 || dow === 6;
+    const isToday = key === todayKey;
+    const isPast = date.getTime() < today.getTime();
+
+    const classes = ['harvest-cal-cell'];
+    if (isWeekend) classes.push('harvest-cal-cell--weekend');
+    if (isToday) classes.push('harvest-cal-cell--today');
+    if (isPast) classes.push('harvest-cal-cell--past');
+
+    const strains = byDay.get(key);
+    let badgesHtml = '';
+    if (strains && strains.size) {
+      const groups = Array.from(strains.values()).sort((a, b) => b.qty - a.qty);
+      const shown = groups.slice(0, HARVEST_CAL_MAX_BADGES);
+      const hidden = groups.slice(HARVEST_CAL_MAX_BADGES);
+      badgesHtml = shown.map(g =>
+        `<div class="harvest-cal-badge${g.overdue ? ' harvest-cal-badge--overdue' : ''}" title="${escapeHtml(g.strain)} — ${g.qty} container${g.qty === 1 ? '' : 's'}${g.overdue ? ' (estimate passed)' : ''}">🍄 ${escapeHtml(g.strain)} · ${g.qty}</div>`
+      ).join('');
+      if (hidden.length) {
+        const hiddenQty = hidden.reduce((sum, g) => sum + g.qty, 0);
+        const hiddenTitle = escapeHtml(hidden.map(g => `${g.strain} ×${g.qty}`).join(', '));
+        badgesHtml += `<div class="harvest-cal-badge harvest-cal-badge--more" title="${hiddenTitle}">+${hiddenQty} more</div>`;
+      }
+    }
+
+    const monthLabel = date.getDate() === 1
+      ? `<span class="harvest-cal-month">${date.toLocaleString(undefined, { month: 'short' })}</span>`
+      : '';
+
+    cells.push(
+      `<div class="${classes.join(' ')}">
+        <div class="harvest-cal-daynum">${monthLabel}${date.getDate()}${isToday ? '<span class="harvest-cal-today-dot" aria-label="today"></span>' : ''}</div>
+        <div class="harvest-cal-badges">${badgesHtml}</div>
+      </div>`
+    );
+  }
+
+  gridEl.innerHTML =
+    `<div class="harvest-cal-grid harvest-cal-grid--head">${header}</div>` +
+    `<div class="harvest-cal-grid harvest-cal-grid--body">${cells.join('')}</div>`;
+
+  if (summaryEl) {
+    if (total > 0) {
+      summaryEl.textContent = marketTotal > 0
+        ? `${total} container${total === 1 ? '' : 's'} forecast over the next ${HARVEST_CAL_WEEKS} weeks — ${marketTotal} landing on a market day (Sat/Sun).`
+        : `${total} container${total === 1 ? '' : 's'} forecast over the next ${HARVEST_CAL_WEEKS} weeks — none on a weekend yet.`;
+      summaryEl.classList.remove('hidden');
+    } else {
+      summaryEl.classList.add('hidden');
+    }
+  }
+
+  if (emptyEl) emptyEl.classList.toggle('hidden', total > 0);
+}
+
+export function openHarvestCalendarModal() {
+  renderHarvestCalendar();
+  showModal(document.getElementById('harvest-calendar-modal'));
+}
+
+export function closeHarvestCalendarModal() {
+  hideModal(document.getElementById('harvest-calendar-modal'));
 }
 
 // --- Label Print Settings & Custom Layouts Logic ---
