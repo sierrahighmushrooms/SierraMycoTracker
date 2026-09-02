@@ -2,26 +2,8 @@
 // Imports all modules, wires up global event listeners, exposes the functions
 // referenced by inline onclick handlers, and initializes the UI.
 
-// Explicitly attach auth-related functions to window for inline HTML handlers
-window.openAuthModal = (tab = 'signin') => {
-  const modal = document.getElementById('auth-modal');
-  if (modal) {
-    modal.classList.remove('hidden');
-    modal.classList.add('flex');
-    if (tab) {
-      const tabEl = document.getElementById(`auth-tab-${tab}`);
-      if (tabEl) tabEl.click();
-    }
-  }
-};
-
-window.closeAuthModal = () => {
-  const modal = document.getElementById('auth-modal');
-  if (modal) {
-    modal.classList.add('hidden');
-    modal.classList.remove('flex');
-  }
-};
+// openAuthModal / closeAuthModal are attached to window further below, from the
+// modals.js implementations (see the Object.assign near the end of this file).
 
 // Global signOut handler accessible to HTML inline onclick="signOut()"
 window.signOut = async () => {
@@ -42,14 +24,11 @@ window.signOut = async () => {
     localStorage.removeItem('mycotrack_auth_token');
     localStorage.removeItem('sb-wsalxxsjnxptoeduwfqw-auth-token');
     sessionStorage.clear();
-    
-    if (typeof showLandingPage === 'function') {
-      showLandingPage();
-      const locContainer = document.getElementById('header-location-container');
-      if (locContainer) locContainer.classList.add('hidden');
-    } else {
-      window.location.reload();
-    }
+
+    // /app/ has no signed-out UI of its own — the marketing root owns all
+    // unauthenticated traffic. Bounce there (replace() so the back button
+    // can't return to a page that would immediately redirect again).
+    window.location.replace('/');
   }
 };
 
@@ -185,9 +164,6 @@ import {
   initFeedbackFormListener,
   openAuthModal,
   closeAuthModal,
-  switchAuthTab,
-  handleAuthSubmit,
-  handleAuthGoogle,
   handleAuthLogout,
   updateAuthModalUI,
   updateCloudSyncBadge,
@@ -3629,12 +3605,9 @@ Object.assign(window, {
   switchFeedbackTab,
   renderRoadmap,
   handleUpvote,
-  // Auth / Cloud Sync Modal
+  // Account Modal
   openAuthModal,
   closeAuthModal,
-  switchAuthTab,
-  handleAuthSubmit,
-  handleAuthGoogle,
   handleAuthLogout,
   // Subscription / Container Limits
   updateContainerUsageUI,
@@ -3747,20 +3720,6 @@ setRefreshCallback(() => {
 // --- Initialize stage form listener (modal) ---
 initStageFormListener();
 
-// --- Wire up the auth form submit handler ---
-// Prevents the browser's native form submission (which reloaded the homepage
-// before any Supabase auth request could fire) and routes the submit through
-// the modals.js handleAuthSubmit, which awaits signInWithPassword, verifies a
-// session exists, displays errors in the modal, and only then proceeds.
-// Use event delegation since the form might be dynamically rendered or replaced.
-document.addEventListener('submit', (e) => {
-  if (e.target && e.target.id === 'auth-form') {
-    e.preventDefault();
-    e.stopPropagation();
-    handleAuthSubmit();
-  }
-});
-
 // --- Initialize feedback form listener ---
 initFeedbackFormListener();
 
@@ -3795,23 +3754,27 @@ setSyncErrorCallback((error, context) => {
 checkAndClearStaleCache();
 clearLegacyStorage();
 
-// --- SaaS app shell routing (public landing vs. authenticated dashboard) ---
+// --- App shell routing ---
+// /app/ is authenticated-only. It swaps between the initial loading state and
+// the dashboard; anyone without a session is sent to the marketing root (/),
+// which owns the landing page and all sign-in / sign-up.
 function showAppDashboard() {
-  const landing = document.getElementById('landing-page');
+  const loading = document.getElementById('app-loading');
   const dashboard = document.getElementById('app-dashboard');
-  if (landing) landing.classList.add('hidden');
+  if (loading) { loading.classList.add('hidden'); loading.classList.remove('flex'); }
   if (dashboard) dashboard.classList.remove('hidden');
 }
 
-function showLandingPage() {
-  const landing = document.getElementById('landing-page');
-  const dashboard = document.getElementById('app-dashboard');
-  if (landing) landing.classList.remove('hidden');
-  if (dashboard) dashboard.classList.add('hidden');
+// No authenticated session here — bounce to the marketing root. replace() so
+// the back button can't land the user on a page that immediately redirects.
+function redirectToRoot() {
+  window.location.replace('/');
 }
 
 // Check Supabase auth state on page load and route accordingly. Without
-// configured Supabase credentials the classic local-first app is shown.
+// configured Supabase credentials (e.g. the CDN SDK failed to load) the
+// classic local-first app is shown instead of bouncing to a root that also
+// couldn't authenticate.
 async function initAppRouting() {
   if (!isSupabaseConfigured()) {
     showAppDashboard();
@@ -3822,7 +3785,8 @@ async function initAppRouting() {
     showAppDashboard();
     handleMultiTenantInit();
   } else {
-    showLandingPage();
+    redirectToRoot();
+    return;
   }
 
   // Post-login routing is handled by the single onAuthStateChange listener
@@ -3844,8 +3808,7 @@ async function initAppRouting() {
 // without waiting for the next data save.
 onAuthStateChange((event, session) => {
   if (event === 'SIGNED_IN' || (session && (event === 'INITIAL_SESSION' || event === 'TOKEN_REFRESHED'))) {
-    // A session is active: add `hidden` to the landing page container
-    // (hero, features, pricing) and remove `hidden` from #app-dashboard.
+    // A session is active: reveal the dashboard shell and load tenant context.
     showAppDashboard();
     updateContainerUsageUI();
     handleMultiTenantInit();
@@ -3854,11 +3817,9 @@ onAuthStateChange((event, session) => {
     updateContainerUsageUI();
     syncItemsWithCloud();
   } else if (event === 'SIGNED_OUT' || event === 'USER_DELETED' || (!session && event !== 'INITIAL_SESSION')) {
-    console.warn('Auth state changed to unauthenticated (event: ' + event + '). Clearing state and resetting UI.');
+    console.warn('Auth state changed to unauthenticated (event: ' + event + '). Clearing state and redirecting to root.');
     handleSignOutCleanup();
-    showLandingPage();
-    const locContainer = document.getElementById('header-location-container');
-    if (locContainer) locContainer.classList.add('hidden');
+    redirectToRoot();
   }
 });
 

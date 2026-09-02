@@ -8,13 +8,7 @@ import {
   upvoteFeature,
   isSupabaseConfigured,
   getCurrentUser,
-  getSession,
-  signInWithEmail,
-  signUpWithEmail,
-  signInWithGoogle,
   signOutUser,
-  syncItemsWithCloud,
-  pushLocalChangesToCloud,
   getSyncStatus,
   getContainerUsage,
   getProfilePlanInfo,
@@ -3212,12 +3206,14 @@ export function initFeedbackFormListener() {
   });
 }
 
-// --- Modern SaaS Auth Modal (Sign In / Sign Up + Google OAuth) ---
-let activeAuthTab = 'signin';
+// --- Account Modal ---
+// Sign-in / sign-up now lives entirely on the Next.js root (/). Unauthenticated
+// visitors to /app/ are redirected there by initAppRouting(), so this modal is
+// only ever opened (from the dashboard header menu) by a signed-in user, and
+// only shows their account summary plus a sign-out button.
 
-export function openAuthModal(tab = 'signin') {
+export function openAuthModal() {
   showModal(document.getElementById('auth-modal'));
-  switchAuthTab(tab);
   updateAuthModalUI();
 }
 
@@ -3225,185 +3221,15 @@ export function closeAuthModal() {
   hideModal(document.getElementById('auth-modal'));
 }
 
-
-// Toggle between the [ Sign In ] and [ Sign Up ] segments.
-export function switchAuthTab(tab) {
-  activeAuthTab = (tab === 'signup') ? 'signup' : 'signin';
-  const signinTab = document.getElementById('auth-tab-signin');
-  const signupTab = document.getElementById('auth-tab-signup');
-  const submitBtn = document.getElementById('auth-submit-btn');
-  const title = document.getElementById('auth-modal-title');
-
-  const apply = (el, isActive) => {
-    if (!el) return;
-    el.classList.toggle('border-amber-500', isActive);
-    el.classList.toggle('text-slate-300', isActive);
-    el.classList.toggle('border-slate-800', !isActive);
-    el.classList.toggle('text-slate-400', !isActive);
-  };
-  apply(signinTab, activeAuthTab === 'signin');
-  apply(signupTab, activeAuthTab === 'signup');
-
-  if (submitBtn) submitBtn.innerText = activeAuthTab === 'signup' ? 'Create Free Account' : 'Sign In';
-  if (title) title.innerText = activeAuthTab === 'signup' ? 'Create your account' : 'Welcome back';
-  hideAuthMessage();
-}
-
-function showAuthMessage(message, isError = true) {
-  const el = document.getElementById('auth-message');
-  if (!el) return;
-  el.innerText = message;
-  el.classList.remove('hidden', 'text-red-400', 'text-emerald-400');
-  el.classList.add(isError ? 'text-red-400' : 'text-emerald-400');
-}
-
-function hideAuthMessage() {
-  const el = document.getElementById('auth-message');
-  if (el) el.classList.add('hidden');
-}
-
-function restoreSubmitButton() {
-  const btn = document.getElementById('auth-submit-btn');
-  if (!btn) return;
-  btn.disabled = false;
-  btn.innerText = activeAuthTab === 'signup' ? 'Create Free Account' : 'Sign In';
-}
-
-// Refresh the auth modal contents to reflect the current session state.
+// Populate the account modal with the current user's email.
 export async function updateAuthModalUI() {
-  const setupNotice = document.getElementById('auth-setup-notice');
-  const formView = document.getElementById('auth-form');
-  const accountView = document.getElementById('auth-account-view');
-  const tabSwitcher = document.getElementById('auth-tabs');
-  const forgotPassword = document.getElementById('auth-forgot-password');
-
-  // Supabase not configured yet: show local-only setup notice.
-  if (!isSupabaseConfigured()) {
-    if (setupNotice) setupNotice.classList.remove('hidden');
-    if (formView) formView.classList.add('hidden');
-    if (accountView) accountView.classList.add('hidden');
-    if (tabSwitcher) tabSwitcher.classList.add('hidden');
-    if (forgotPassword) forgotPassword.classList.add('hidden');
-    return;
-  }
-  if (setupNotice) setupNotice.classList.add('hidden');
-
   let user = null;
   try {
     user = await getCurrentUser();
   } catch (e) { /* treat as signed out */ }
 
-  if (user) {
-    // Signed in: show account view with the green cloud-synced indicator.
-    if (formView) formView.classList.add('hidden');
-    if (tabSwitcher) tabSwitcher.classList.add('hidden');
-    if (forgotPassword) forgotPassword.classList.add('hidden');
-    if (accountView) accountView.classList.remove('hidden');
-    
-    const userEmailEl = document.getElementById('auth-user-email');
-    if (userEmailEl) {
-      userEmailEl.innerText = user.email || user.id;
-    }
-  } else {
-    // Signed out: show form and tabs
-    if (formView) formView.classList.remove('hidden');
-    if (tabSwitcher) tabSwitcher.classList.remove('hidden');
-    if (forgotPassword) forgotPassword.classList.remove('hidden');
-    if (accountView) accountView.classList.add('hidden');
-  }
-}
-
-// Google OAuth button — redirects to Google via Supabase.
-export async function handleAuthGoogle() {
-  hideAuthMessage();
-  const btn = document.getElementById('auth-google-btn');
-  if (btn) btn.disabled = true;
-  try {
-    await signInWithGoogle();
-    // Browser navigates to Google; nothing further to do here.
-  } catch (err) {
-    showAuthMessage(err.message || 'Google sign-in failed.');
-    if (btn) btn.disabled = false;
-  }
-}
-
-// Single submit action — routes to sign in or sign up based on active tab.
-export async function handleAuthSubmit() {
-  if (activeAuthTab === 'signup') return handleAuthSignUp();
-  return handleAuthSignIn();
-}
-
-async function handleAuthSignIn() {
-  const email = document.getElementById('auth-email').value.trim();
-  const password = document.getElementById('auth-password').value;
-  hideAuthMessage();
-  if (!email || !password) return showAuthMessage('Please enter both email and password.');
-
-  const btn = document.getElementById('auth-submit-btn');
-  if (btn) { btn.disabled = true; btn.innerText = 'Signing in…'; }
-  try {
-    // Await the Supabase auth request fully before doing anything else.
-    await signInWithEmail(email, password);
-    // Confirm an authenticated session actually exists before proceeding.
-    const session = await getSession();
-    if (!session) {
-      throw new Error('Sign in did not establish a session. Please try again.');
-    }
-    document.getElementById('auth-password').value = '';
-    // Push locally created/edited items FIRST (explicit user action, not a
-    // page-load auto-push) so offline guest work isn't wiped out when the
-    // fetch-only sync replaces local state with the cloud view.
-    await pushLocalChangesToCloud().catch(() => {});
-    await syncItemsWithCloud();
-    
-    // Update the modal UI to show the account view instead of closing it
-    await updateAuthModalUI();
-  } catch (err) {
-    showAuthMessage(err.message || 'Sign in failed.');
-  } finally {
-    restoreSubmitButton();
-  }
-}
-
-async function handleAuthSignUp() {
-  const email = document.getElementById('auth-email').value.trim();
-  const password = document.getElementById('auth-password').value;
-  hideAuthMessage();
-  if (!email || !password) return showAuthMessage('Please enter both email and password.');
-  if (password.length < 6) return showAuthMessage('Password must be at least 6 characters.');
-
-  const btn = document.getElementById('auth-submit-btn');
-  if (btn) { btn.disabled = true; btn.innerText = 'Creating account…'; }
-  try {
-    const data = await signUpWithEmail(email, password);
-    if (data.session) {
-      // Email confirmation disabled: session created, sync right away.
-      document.getElementById('auth-password').value = '';
-      
-      // Automatically create a default organization for the new user
-      try {
-        const { createOrganization } = await import('./db.js');
-        const defaultOrgName = email.split('@')[0] + "'s Organization";
-        const defaultSlug = email.split('@')[0].replace(/[^a-z0-9]+/g, '-') + '-' + Math.random().toString(36).substring(2, 7);
-        await createOrganization(defaultOrgName, defaultSlug, null);
-      } catch (orgErr) {
-        console.error('Failed to auto-create organization:', orgErr);
-      }
-
-      // Push guest items first (explicit action), then fetch-only sync.
-      await pushLocalChangesToCloud().catch(() => {});
-      await syncItemsWithCloud();
-      
-      // Update the modal UI to show the account view instead of closing it
-      await updateAuthModalUI();
-    } else {
-      showAuthMessage('Account created! Check your inbox to confirm your email, then sign in.', false);
-    }
-  } catch (err) {
-    showAuthMessage(err.message || 'Sign up failed.');
-  } finally {
-    restoreSubmitButton();
-  }
+  const userEmailEl = document.getElementById('auth-user-email');
+  if (userEmailEl) userEmailEl.innerText = user ? (user.email || user.id) : '';
 }
 
 export async function handleAuthLogout() {

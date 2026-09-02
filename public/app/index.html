@@ -43,156 +43,10 @@
 </head>
 <body class="bg-slate-900 text-slate-100 min-h-screen font-sans">
 
-  <!-- ==================== PUBLIC SAAS LANDING PAGE ==================== -->
-  <div id="landing-page">
-    <!-- Navigation Bar -->
-    <nav class="max-w-7xl mx-auto flex items-center justify-between py-5 px-4 md:px-6">
-      <a href="/" class="flex items-center gap-2">
-        <span class="text-2xl">🍄</span>
-        <span class="text-lg font-bold text-white">Sierra <span class="text-amber-400">Myco Lab</span></span>
-      </a>
-      <div class="hidden md:flex items-center gap-8 text-sm text-slate-400">
-        <a href="#features" class="hover:text-white transition">Features</a>
-        <a href="#pricing" class="hover:text-white transition">Pricing</a>
-        <a href="#" onclick="openFeedbackModal(); return false;" class="hover:text-white transition">Roadmap</a>
-      </div>
-      <div class="flex items-center gap-2">
-        <button onclick="openAuthModal()" class="px-4 py-2 rounded-lg text-sm font-semibold text-slate-200 border border-slate-700 hover:border-slate-500 hover:text-white transition">Sign In</button>
-        <button onclick="openAuthModal()" class="px-4 py-2 rounded-lg text-sm font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 transition shadow-lg shadow-amber-500/25">Get Started Free</button>
-      </div>
-    </nav>
-
-    <!-- Hero Section -->
-    <section class="max-w-7xl mx-auto text-center pt-14 md:pt-20 pb-16 px-4">
-      <div class="inline-flex items-center gap-2 text-[11px] font-bold text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-full px-3 py-1 mb-6">
-        🧫 Now with AI-powered contamination diagnostics
-      </div>
-      <h1 class="text-4xl md:text-6xl font-extrabold tracking-tight text-white leading-tight">
-        Master Your<br class="hidden md:block">
-        <span class="text-transparent bg-clip-text bg-gradient-to-r from-amber-400 via-amber-300 to-emerald-400">Mushroom Cultivation</span>
-      </h1>
-      <p class="mt-6 text-slate-400 max-w-2xl mx-auto text-sm md:text-base leading-relaxed">
-        Sierra Myco Lab is the complete mycology workflow platform — batch lineage tracking, sterilization logs,
-        yield analytics, and AI diagnostics. Cloud-synced across all of your devices.
-      </p>
-      <div class="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3">
-        <button onclick="openAuthModal('signup')" class="px-7 py-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold transition shadow-xl shadow-amber-500/30 text-sm">Get Started Free →</button>
-        <a href="#features" class="px-7 py-3 rounded-xl border border-slate-700 text-slate-200 hover:border-slate-500 font-semibold transition text-sm">Explore Features</a>
-      </div>
-
-      <!-- Dynamic product preview mock -->
-      <div class="mt-14 max-w-4xl mx-auto landing-glow rounded-2xl border border-slate-800 bg-slate-900/90 backdrop-blur p-4 md:p-5 text-left">
-        <div class="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
-          <div class="flex items-center gap-2">
-            <span class="w-2.5 h-2.5 rounded-full bg-red-500/70"></span>
-            <span class="w-2.5 h-2.5 rounded-full bg-amber-500/70"></span>
-            <span class="w-2.5 h-2.5 rounded-full bg-emerald-500/70"></span>
-          </div>
-          <span class="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Live Dashboard Preview</span>
-        </div>
-        <div class="grid grid-cols-3 gap-3 mb-4">
-          <div class="bg-slate-800/80 border border-slate-700/60 rounded-lg p-3">
-            <div class="text-[10px] text-slate-500">Total Containers</div>
-            <div class="text-xl font-bold text-white">128</div>
-          </div>
-          <div class="bg-slate-800/80 border border-slate-700/60 rounded-lg p-3">
-            <div class="text-[10px] text-slate-500">Contam Rate</div>
-            <div class="text-xl font-bold text-red-400">4%</div>
-          </div>
-          <div class="bg-slate-800/80 border border-slate-700/60 rounded-lg p-3">
-            <div class="text-[10px] text-slate-500">Total Yield</div>
-            <div class="text-xl font-bold text-blue-400">1,240g</div>
-          </div>
-        </div>
-        <div class="space-y-2">
-          <div class="flex items-center justify-between bg-slate-800/60 border border-slate-700/60 rounded-lg p-3">
-            <div class="flex items-center gap-3 min-w-0">
-              <span class="text-xs font-mono bg-slate-900 text-amber-400 px-2 py-0.5 rounded border border-slate-700 whitespace-nowrap">WO-ALC-0208-01</span>
-              <span class="text-xs text-slate-300 truncate">Whole Oats - ALC (#1/7)</span>
-            </div>
-            <span class="text-[10px] uppercase font-bold px-2 py-1 rounded bg-slate-700 text-emerald-300 shrink-0">Colonizing</span>
-          </div>
-          <div class="flex items-center justify-between bg-slate-800/60 border border-slate-700/60 rounded-lg p-3">
-            <div class="flex items-center gap-3 min-w-0">
-              <span class="text-xs font-mono bg-slate-900 text-amber-400 px-2 py-0.5 rounded border border-slate-700 whitespace-nowrap">CVG-GT-0125-03</span>
-              <span class="text-xs text-slate-300 truncate">CVG Bulk - GT (#3/6)</span>
-            </div>
-            <span class="text-[10px] uppercase font-bold px-2 py-1 rounded bg-emerald-900/50 text-emerald-300 shrink-0">Fruiting</span>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- Features Grid -->
-    <section id="features" class="max-w-7xl mx-auto px-4 py-16 scroll-mt-20">
-      <h2 class="text-2xl md:text-3xl font-bold text-white text-center">Everything you need to cultivate with confidence</h2>
-      <p class="text-center text-slate-500 text-sm mt-3 max-w-xl mx-auto">Purpose-built tools for hobbyists and commercial growers alike.</p>
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mt-10">
-        <div class="feature-card bg-slate-900 border border-slate-800 rounded-2xl p-6">
-          <div class="w-11 h-11 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-xl mb-4">📊</div>
-          <h3 class="text-white font-bold mb-2">Batch Tracking</h3>
-          <p class="text-sm text-slate-400 leading-relaxed">Full lineage from spore to harvest — G2G transfers, PC sterilization logs, stage history, and QR-labeled containers.</p>
-        </div>
-        <div class="feature-card bg-slate-900 border border-slate-800 rounded-2xl p-6">
-          <div class="w-11 h-11 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-xl mb-4">🤖</div>
-          <h3 class="text-white font-bold mb-2">AI Mycology Diagnostics</h3>
-          <p class="text-sm text-slate-400 leading-relaxed">The built-in MycoAI assistant identifies contamination vectors, recommends fixes, and answers cultivation questions in real time.</p>
-        </div>
-        <div class="feature-card bg-slate-900 border border-slate-800 rounded-2xl p-6">
-          <div class="w-11 h-11 rounded-xl bg-fuchsia-500/10 border border-fuchsia-500/30 flex items-center justify-center text-xl mb-4">💡</div>
-          <h3 class="text-white font-bold mb-2">Community-Driven Features</h3>
-          <p class="text-sm text-slate-400 leading-relaxed">Vote on the public roadmap and submit feature requests. The platform evolves with cultivators — not against them.</p>
-        </div>
-      </div>
-    </section>
-
-    <!-- Pricing Tier Cards -->
-    <section id="pricing" class="max-w-5xl mx-auto px-4 py-16 scroll-mt-20">
-      <h2 class="text-2xl md:text-3xl font-bold text-white text-center">Simple, transparent pricing</h2>
-      <p class="text-center text-slate-500 text-sm mt-3">Start free. Upgrade when your operation grows.</p>
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-10">
-        <!-- Free Tier -->
-        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 flex flex-col">
-          <h3 class="text-white font-bold">Free</h3>
-          <div class="mt-2 flex items-end gap-1">
-            <span class="text-3xl font-extrabold text-white">$0</span>
-            <span class="text-xs text-slate-500 mb-1">/ forever</span>
-          </div>
-          <ul class="mt-5 space-y-2 text-sm text-slate-400 flex-1">
-            <li class="flex gap-2"><span class="text-emerald-400">✓</span> Unlimited container tracking</li>
-            <li class="flex gap-2"><span class="text-emerald-400">✓</span> QR label printing</li>
-            <li class="flex gap-2"><span class="text-emerald-400">✓</span> Local-first data storage</li>
-            <li class="flex gap-2"><span class="text-emerald-400">✓</span> Community roadmap access</li>
-          </ul>
-          <button onclick="openAuthModal('signup')" class="mt-6 w-full py-2.5 rounded-lg border border-slate-700 text-slate-200 hover:border-slate-500 font-bold text-sm transition">Get Started Free</button>
-        </div>
-        <!-- Pro Tier -->
-        <div class="relative bg-slate-900 border border-amber-500/50 rounded-2xl p-6 flex flex-col pricing-glow">
-          <span class="absolute -top-3 left-1/2 -translate-x-1/2 text-[10px] font-bold bg-amber-500 text-slate-950 px-3 py-1 rounded-full uppercase tracking-wider whitespace-nowrap">Most Popular</span>
-          <h3 class="text-amber-400 font-bold">Pro</h3>
-          <div class="mt-2 flex items-end gap-1">
-            <span class="text-3xl font-extrabold text-white">$6</span>
-            <span class="text-xs text-slate-500 mb-1">/ month</span>
-          </div>
-          <ul class="mt-5 space-y-2 text-sm text-slate-400 flex-1">
-            <li class="flex gap-2"><span class="text-amber-400">✓</span> Everything in Free</li>
-            <li class="flex gap-2"><span class="text-amber-400">✓</span> ☁️ Real-time cloud sync</li>
-            <li class="flex gap-2"><span class="text-amber-400">✓</span> Multi-device access</li>
-            <li class="flex gap-2"><span class="text-amber-400">✓</span> AI diagnostics included</li>
-            <li class="flex gap-2"><span class="text-amber-400">✓</span> Priority support</li>
-          </ul>
-          <button onclick="openAuthModal('signup')" class="mt-6 w-full py-2.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-sm transition shadow-lg shadow-amber-500/25">Start Pro Trial</button>
-        </div>
-      </div>
-    </section>
-
-    <!-- Footer -->
-    <footer class="border-t border-slate-800 py-8 text-center text-xs text-slate-500">
-      <p>© 2026 Sierra Myco Lab — Built for cultivators, by cultivators. 🍄</p>
-      <p class="mt-2">
-        <a href="privacy.html" class="text-slate-400 hover:text-amber-400 underline transition">Privacy Policy</a>
-      </p>
-    </footer>
+  <!-- Initial load state - shown until app.js resolves the session, then either
+       reveals #app-dashboard or redirects unauthenticated visitors to the root (/). -->
+  <div id="app-loading" class="fixed inset-0 flex items-center justify-center bg-slate-950 z-40">
+    <div class="animate-spin w-8 h-8 border-2 border-amber-500 border-t-transparent rounded-full" role="status" aria-label="Loading Sierra Myco Lab"></div>
   </div>
 
 
@@ -282,7 +136,7 @@
               </button>
             </div>
             <div class="pt-1 space-y-1">
-              <button id="account-sync-button" type="button" onclick="openAuthModal('account'); this.closest('details').removeAttribute('open')" class="w-full text-left px-3 py-2 rounded-lg text-xs font-semibold text-slate-200 hover:bg-slate-800 hover:text-emerald-300 transition flex items-center gap-2">
+              <button id="account-sync-button" type="button" onclick="openAuthModal(); this.closest('details').removeAttribute('open')" class="w-full text-left px-3 py-2 rounded-lg text-xs font-semibold text-slate-200 hover:bg-slate-800 hover:text-emerald-300 transition flex items-center gap-2">
                 <span>👤</span> Account / Sync
               </button>
               <button id="btn-request-feature" onclick="openFeedbackModal(); this.closest('details').removeAttribute('open')" class="w-full text-left px-3 py-2 rounded-lg text-xs font-semibold text-slate-200 hover:bg-slate-800 hover:text-fuchsia-300 transition flex items-center gap-2">
@@ -3299,55 +3153,29 @@
     </div>
   </div>
 
-  <!-- Authentication Modal -->
+  <!-- Account Modal — opened from the dashboard header menu. All sign-in /
+       sign-up now lives on the Next.js root (/); unauthenticated visitors to
+       /app/ are redirected there, so this modal only ever shows the account
+       summary and a sign-out button. -->
   <div id="auth-modal" class="fixed inset-0 bg-black/70 backdrop-blur-sm hidden items-center justify-center z-50">
     <div class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-sm p-6 animate-fade-in">
       <div class="flex justify-between items-center mb-4">
-        <h2 class="text-xl font-bold text-white">Authentication</h2>
+        <h2 class="text-xl font-bold text-white">Account</h2>
         <button onclick="closeAuthModal()" class="text-slate-400 hover:text-white text-xl leading-none">✕</button>
       </div>
-      
-      <div class="mt-4">
-        <!-- Tabs for Sign In / Sign Up -->
-        <div id="auth-tabs" class="flex mb-4">
-          <button type="button" id="auth-tab-signin" onclick="switchAuthTab('signin')" class="flex-1 py-2 font-semibold text-center text-slate-300 border-b-2 border-amber-500">Sign In</button>
-          <button type="button" id="auth-tab-signup" onclick="switchAuthTab('signup')" class="flex-1 py-2 font-semibold text-center text-slate-400 border-b-2 border-slate-800">Sign Up</button>
-        </div>
-        
-        <!-- Authentication Form -->
-        <form id="auth-form">
-          <div class="space-y-4">
-            <div>
-              <label for="auth-email" class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Email</label>
-              <input type="email" id="auth-email" required autocomplete="username" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-sm text-slate-100">
-            </div>
-            <div>
-              <label for="auth-password" class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Password</label>
-              <input type="password" id="auth-password" required autocomplete="current-password" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-sm text-slate-100">
-            </div>
-            <div id="auth-message" class="hidden text-xs font-semibold"></div>
-            <button type="submit" id="auth-submit-btn" class="w-full bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold py-2.5 rounded-lg transition text-sm">Sign In</button>
-          </div>
-        </form>
-        
-        <div id="auth-forgot-password" class="mt-4 text-center">
-          <a href="#" class="text-xs text-amber-400 hover:text-amber-300 transition">Forgot password?</a>
-        </div>
 
-        <!-- Logged In Account View -->
-        <div id="auth-account-view" class="hidden space-y-4">
-          <div class="bg-slate-950 border border-slate-800 rounded-lg p-4 text-center">
-            <div class="text-3xl mb-2">👤</div>
-            <div class="text-sm text-slate-400 mb-1">Logged in as</div>
-            <div id="auth-user-email" class="text-lg font-bold text-white break-all"></div>
-            <div class="mt-3 inline-flex items-center gap-1.5 text-xs font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-700/60 px-2.5 py-1 rounded-full">
-              ☁️ Cloud Sync Active
-            </div>
+      <div id="auth-account-view" class="mt-4 space-y-4">
+        <div class="bg-slate-950 border border-slate-800 rounded-lg p-4 text-center">
+          <div class="text-3xl mb-2">👤</div>
+          <div class="text-sm text-slate-400 mb-1">Logged in as</div>
+          <div id="auth-user-email" class="text-lg font-bold text-white break-all"></div>
+          <div class="mt-3 inline-flex items-center gap-1.5 text-xs font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-700/60 px-2.5 py-1 rounded-full">
+            ☁️ Cloud Sync Active
           </div>
-          <button type="button" onclick="signOut()" class="w-full bg-slate-800 hover:bg-slate-700 border border-slate-700 text-white font-bold py-2.5 rounded-lg transition text-sm">
-            Sign Out
-          </button>
         </div>
+        <button type="button" onclick="signOut()" class="w-full bg-slate-800 hover:bg-slate-700 border border-slate-700 text-white font-bold py-2.5 rounded-lg transition text-sm">
+          Sign Out
+        </button>
       </div>
     </div>
   </div>
